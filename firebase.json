@@ -1,1 +1,39 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"fairtix-database","appId":"1:27076233376:android:0f1206e9720bdf623c21c5","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"fairtix-database","configurations":{"android":"1:27076233376:android:0f1206e9720bdf623c21c5","ios":"1:27076233376:ios:addff9d2221cef9e3c21c5","macos":"1:27076233376:ios:addff9d2221cef9e3c21c5","web":"1:27076233376:web:ef067b50b5608db23c21c5","windows":"1:27076233376:web:34b23c63627916c83c21c5"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "fairtix-database",
+          "appId": "1:27076233376:android:0f1206e9720bdf623c21c5",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "fairtix-database",
+          "configurations": {
+            "android": "1:27076233376:android:0f1206e9720bdf623c21c5",
+            "ios": "1:27076233376:ios:addff9d2221cef9e3c21c5",
+            "macos": "1:27076233376:ios:addff9d2221cef9e3c21c5",
+            "web": "1:27076233376:web:ef067b50b5608db23c21c5",
+            "windows": "1:27076233376:web:34b23c63627916c83c21c5"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
+    }
+  ]
+}

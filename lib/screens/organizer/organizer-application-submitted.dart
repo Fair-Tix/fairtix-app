@@ -29,14 +29,14 @@ class OrganizerApplicationSubmittedScreen extends StatelessWidget {
                         width: 170,
                         height: 170,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.12),
+                          color: Colors.white.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(24),
                         ),
                         alignment: Alignment.center,
                         child: Icon(
                           Icons.description_outlined,
                           size: 64,
-                          color: Colors.white.withOpacity(0.85),
+                          color: Colors.white.withValues(alpha: 0.85),
                         ),
                       ),
                     ),
@@ -55,7 +55,7 @@ class OrganizerApplicationSubmittedScreen extends StatelessWidget {
                       'within 2-3 business days.',
                       style: TextStyle(
                         fontSize: 14,
-                        color: Colors.white.withOpacity(0.85),
+                        color: Colors.white.withValues(alpha: 0.85),
                         height: 1.5,
                       ),
                     ),

@@ -94,7 +94,7 @@ class _OrganizerLoginScreenState extends State<OrganizerLoginScreen> {
                           'Your Complete Event Management Platform',
                           style: TextStyle(
                             fontSize: 15,
-                            color: Colors.white.withOpacity(0.85),
+                            color: Colors.white.withValues(alpha: 0.85),
                           ),
                         ),
                         const SizedBox(height: 24),
@@ -131,7 +131,7 @@ class _OrganizerLoginScreenState extends State<OrganizerLoginScreen> {
                       border: Border.all(color: AppColors.borderLight),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.04),
+                          color: Colors.black.withValues(alpha: 0.04),
                           blurRadius: 24,
                           offset: const Offset(0, 8),
                         ),
@@ -385,7 +385,7 @@ class _OrganizerLoginScreenState extends State<OrganizerLoginScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.12),
+        color: Colors.white.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(

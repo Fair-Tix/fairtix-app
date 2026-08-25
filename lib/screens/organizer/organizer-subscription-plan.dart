@@ -47,7 +47,7 @@ class OrganizerSubscriptionPlanScreen extends StatelessWidget {
                   'Scale your events with the right tools',
                   style: TextStyle(
                     fontSize: 15,
-                    color: Colors.white.withOpacity(0.85),
+                    color: Colors.white.withValues(alpha: 0.85),
                   ),
                 ),
                 const SizedBox(height: 40),
@@ -84,7 +84,7 @@ class OrganizerSubscriptionPlanScreen extends StatelessWidget {
                   'Cancel anytime · Instant activation · No hidden fees',
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.white.withOpacity(0.7),
+                    color: Colors.white.withValues(alpha: 0.7),
                   ),
                 ),
               ],
@@ -142,7 +142,7 @@ class OrganizerSubscriptionPlanScreen extends StatelessWidget {
         color: highlighted ? AppColors.primaryPurpleDarker : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: highlighted
-            ? Border.all(color: Colors.white.withOpacity(0.3))
+            ? Border.all(color: Colors.white.withValues(alpha: 0.3))
             : null,
       ),
       child: Column(
@@ -195,7 +195,7 @@ class OrganizerSubscriptionPlanScreen extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 14,
                     color: highlighted
-                        ? Colors.white.withOpacity(0.8)
+                        ? Colors.white.withValues(alpha: 0.8)
                         : AppColors.textGray,
                   ),
                 ),

@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
 import 'organizer-login.dart';
 import 'organizer-register.dart';
+import '../admin/admin-login.dart';
 
 class OrganizerSplashScreen extends StatelessWidget {
   const OrganizerSplashScreen({super.key});
@@ -25,22 +27,25 @@ class OrganizerSplashScreen extends StatelessWidget {
             Positioned(
               top: -60,
               left: -60,
-              child: _blob(220, Colors.white.withOpacity(0.06)),
+              child: _blob(220, Colors.white.withValues(alpha: 0.06)),
             ),
             Positioned(
               top: 100,
               right: -80,
-              child: _blob(260, Colors.white.withOpacity(0.08)),
+              child: _blob(260, Colors.white.withValues(alpha: 0.08)),
             ),
             Positioned(
               bottom: -100,
               left: -40,
-              child: _blob(240, Colors.white.withOpacity(0.06)),
+              child: _blob(240, Colors.white.withValues(alpha: 0.06)),
             ),
 
             SafeArea(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 24,
+                ),
                 child: Column(
                   children: [
                     // Top bar
@@ -48,6 +53,23 @@ class OrganizerSplashScreen extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const FairTixLogo(showBadge: true, fontSize: 20),
+                        if (kIsWeb)
+                          TextButton(
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const AdminLoginScreen(),
+                              ),
+                            ),
+                            child: const Text(
+                              'Admin Portal',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
                         OutlinedButton(
                           onPressed: () => _goToLogin(context),
                           style: OutlinedButton.styleFrom(
@@ -56,7 +78,9 @@ class OrganizerSplashScreen extends StatelessWidget {
                               borderRadius: BorderRadius.circular(999),
                             ),
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 20, vertical: 12),
+                              horizontal: 20,
+                              vertical: 12,
+                            ),
                           ),
                           child: const Text(
                             'Organizer Log In',
@@ -82,7 +106,7 @@ class OrganizerSplashScreen extends StatelessWidget {
                                 width: 84,
                                 height: 84,
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.16),
+                                  color: Colors.white.withValues(alpha: 0.16),
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 alignment: Alignment.center,
@@ -111,7 +135,7 @@ class OrganizerSplashScreen extends StatelessWidget {
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontSize: 15,
-                                  color: Colors.white.withOpacity(0.85),
+                                  color: Colors.white.withValues(alpha: 0.85),
                                   height: 1.5,
                                 ),
                               ),
@@ -129,8 +153,9 @@ class OrganizerSplashScreen extends StatelessWidget {
                                           foregroundColor:
                                               AppColors.primaryPurple,
                                           shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(999),
+                                            borderRadius: BorderRadius.circular(
+                                              999,
+                                            ),
                                           ),
                                         ),
                                         child: const Text(
@@ -150,10 +175,12 @@ class OrganizerSplashScreen extends StatelessWidget {
                                         onPressed: () => _goToRegister(context),
                                         style: OutlinedButton.styleFrom(
                                           side: const BorderSide(
-                                              color: Colors.white),
+                                            color: Colors.white,
+                                          ),
                                           shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(999),
+                                            borderRadius: BorderRadius.circular(
+                                              999,
+                                            ),
                                           ),
                                         ),
                                         child: const Text(
@@ -174,12 +201,18 @@ class OrganizerSplashScreen extends StatelessWidget {
                                 runSpacing: 12,
                                 alignment: WrapAlignment.center,
                                 children: [
-                                  _statPill(Icons.people_alt_outlined,
-                                      '500+ Promoters'),
-                                  _statPill(Icons.credit_card,
-                                      '\u20B1900M+ Processed'),
-                                  _statPill(Icons.shield_outlined,
-                                      'No Hidden Fees'),
+                                  _statPill(
+                                    Icons.people_alt_outlined,
+                                    '500+ Promoters',
+                                  ),
+                                  _statPill(
+                                    Icons.credit_card,
+                                    '\u20B1900M+ Processed',
+                                  ),
+                                  _statPill(
+                                    Icons.shield_outlined,
+                                    'No Hidden Fees',
+                                  ),
                                 ],
                               ),
                             ],
@@ -202,12 +235,12 @@ class OrganizerSplashScreen extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 12),
-                        Divider(color: Colors.white.withOpacity(0.15)),
+                        Divider(color: Colors.white.withValues(alpha: 0.15)),
                         const SizedBox(height: 12),
                         Text(
                           '\u00A9 2026 FairTix',
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.6),
+                            color: Colors.white.withValues(alpha: 0.6),
                             fontSize: 12,
                           ),
                         ),
@@ -249,7 +282,7 @@ class OrganizerSplashScreen extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.12),
+        color: Colors.white.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
@@ -273,10 +306,7 @@ class OrganizerSplashScreen extends StatelessWidget {
   Widget _footerLink(String label) {
     return Text(
       label,
-      style: TextStyle(
-        color: Colors.white.withOpacity(0.7),
-        fontSize: 12,
-      ),
+      style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12),
     );
   }
 }

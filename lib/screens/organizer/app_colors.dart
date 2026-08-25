@@ -281,22 +281,22 @@ class AuthSidePanel extends StatelessWidget {
           Positioned(
             top: -60,
             left: -40,
-            child: _circle(180, Colors.white.withOpacity(0.08)),
+            child: _circle(180, Colors.white.withValues(alpha: 0.08)),
           ),
           Positioned(
             top: 40,
             right: -60,
-            child: _circle(220, Colors.white.withOpacity(0.10)),
+            child: _circle(220, Colors.white.withValues(alpha: 0.10)),
           ),
           Positioned(
             bottom: -80,
             left: -60,
-            child: _circle(240, Colors.white.withOpacity(0.08)),
+            child: _circle(240, Colors.white.withValues(alpha: 0.08)),
           ),
           Positioned(
             bottom: 60,
             right: -40,
-            child: _circle(200, Colors.white.withOpacity(0.10)),
+            child: _circle(200, Colors.white.withValues(alpha: 0.10)),
           ),
           Padding(
             padding: const EdgeInsets.all(40),
@@ -349,7 +349,7 @@ class FairTixLogo extends StatelessWidget {
           width: 32,
           height: 32,
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.18),
+            color: Colors.white.withValues(alpha: 0.18),
             borderRadius: BorderRadius.circular(8),
           ),
           alignment: Alignment.center,

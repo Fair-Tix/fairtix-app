@@ -50,7 +50,7 @@ class OrganizerMyEventsScreen extends StatelessWidget {
                   ),
                   child: DataTable(
                     headingRowColor:
-                        MaterialStateProperty.all(const Color(0xFFF9FAFB)),
+                        WidgetStateProperty.all(const Color(0xFFF9FAFB)),
                     columns: const [
                       DataColumn(label: Text('EVENT NAME')),
                       DataColumn(label: Text('DATE')),
@@ -124,7 +124,7 @@ class OrganizerMyEventsScreen extends StatelessWidget {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: AppColors.primaryPurple.withOpacity(0.1),
+                color: AppColors.primaryPurple.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(6),
               ),
               alignment: Alignment.center,

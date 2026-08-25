@@ -35,14 +35,14 @@ class OrganizerAccountApprovedScreen extends StatelessWidget {
                           width: 130,
                           height: 130,
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.12),
+                            color: Colors.white.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           alignment: Alignment.center,
                           child: Icon(
                             Icons.emoji_events_outlined,
                             size: 56,
-                            color: Colors.white.withOpacity(0.85),
+                            color: Colors.white.withValues(alpha: 0.85),
                           ),
                         ),
                       ),
@@ -64,7 +64,7 @@ class OrganizerAccountApprovedScreen extends StatelessWidget {
                         'Your organizer journey starts now.',
                         style: TextStyle(
                           fontSize: 14,
-                          color: Colors.white.withOpacity(0.85),
+                          color: Colors.white.withValues(alpha: 0.85),
                         ),
                       ),
                     ],

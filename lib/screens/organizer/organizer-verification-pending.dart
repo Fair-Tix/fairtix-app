@@ -32,7 +32,7 @@ class OrganizerVerificationPendingScreen extends StatelessWidget {
                         width: 160,
                         height: 160,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.14),
+                          color: Colors.white.withValues(alpha: 0.14),
                           borderRadius: BorderRadius.circular(20),
                         ),
                       ),
@@ -52,7 +52,7 @@ class OrganizerVerificationPendingScreen extends StatelessWidget {
                       'buyers and sellers.',
                       style: TextStyle(
                         fontSize: 14,
-                        color: Colors.white.withOpacity(0.85),
+                        color: Colors.white.withValues(alpha: 0.85),
                         height: 1.5,
                       ),
                     ),

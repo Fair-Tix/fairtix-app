@@ -427,7 +427,7 @@ class _OrganizerCreateEventScreenState
                 color: const Color(0xFFF5F3FF),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color: AppColors.primaryPurple.withOpacity(0.4),
+                  color: AppColors.primaryPurple.withValues(alpha: 0.4),
                   width: 1.4,
                 ),
               ),
@@ -537,7 +537,7 @@ class _OrganizerCreateEventScreenState
                 title,
                 style: AppTextStyles.h3.copyWith(color: AppColors.primaryPurple),
               ),
-              if (headerTrailing != null) headerTrailing,
+              ?headerTrailing,
             ],
           ),
           const SizedBox(height: 18),

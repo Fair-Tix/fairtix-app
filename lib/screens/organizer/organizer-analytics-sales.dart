@@ -125,7 +125,7 @@ class OrganizerAnalyticsSalesScreen extends StatelessWidget {
                         height: maxBarHeight * entry.value,
                         decoration: BoxDecoration(
                           color: AppColors.primaryPurple
-                              .withOpacity(0.6 + (entry.value * 0.4)),
+                              .withValues(alpha: 0.6 + (entry.value * 0.4)),
                           borderRadius: const BorderRadius.vertical(
                               top: Radius.circular(6)),
                         ),
@@ -198,8 +198,7 @@ class _StatCard extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.value,
-    this.valueColor,
-  });
+  }) : valueColor = null;
 
   @override
   Widget build(BuildContext context) {
@@ -216,7 +215,7 @@ class _StatCard extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: AppColors.primaryPurple.withOpacity(0.1),
+              color: AppColors.primaryPurple.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             alignment: Alignment.center,

@@ -251,7 +251,7 @@ class _Sidebar extends StatelessWidget {
     Navigator.pushReplacement(
       context,
       PageRouteBuilder(
-        pageBuilder: (_, __, ___) => target,
+        pageBuilder: (_, _, _) => target,
         transitionDuration: Duration.zero,
         reverseTransitionDuration: Duration.zero,
       ),
@@ -281,7 +281,7 @@ class _NavTile extends StatelessWidget {
       child: Material(
         color: isActive
             ? AppColors.sidebarActive
-            : (filled ? Colors.white.withOpacity(0.08) : Colors.transparent),
+            : (filled ? Colors.white.withValues(alpha: 0.08) : Colors.transparent),
         borderRadius: BorderRadius.circular(10),
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
@@ -295,7 +295,7 @@ class _NavTile extends StatelessWidget {
                 Text(
                   label,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(isActive ? 1 : 0.85),
+                    color: Colors.white.withValues(alpha: isActive ? 1 : 0.85),
                     fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                     fontSize: 14,
                   ),

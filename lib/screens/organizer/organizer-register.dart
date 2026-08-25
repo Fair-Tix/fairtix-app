@@ -76,7 +76,7 @@ class _OrganizerRegisterScreenState extends State<OrganizerRegisterScreen> {
                       'Start selling tickets in minutes',
                       style: TextStyle(
                         fontSize: 14,
-                        color: Colors.white.withOpacity(0.8),
+                        color: Colors.white.withValues(alpha: 0.8),
                       ),
                     ),
                     const Spacer(),
@@ -323,7 +323,7 @@ class _OrganizerRegisterScreenState extends State<OrganizerRegisterScreen> {
           color: const Color(0xFFF5F3FF),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: AppColors.primaryPurple.withOpacity(0.4),
+            color: AppColors.primaryPurple.withValues(alpha: 0.4),
             width: 1.4,
             style: BorderStyle.solid,
           ),

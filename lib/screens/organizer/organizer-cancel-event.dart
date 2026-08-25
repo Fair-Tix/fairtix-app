@@ -85,7 +85,7 @@ class OrganizerCancelEventScreen extends StatelessWidget {
                   'notified and refunds will be processed automatically.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: AppColors.primaryPurple.withOpacity(0.9),
+                    color: AppColors.primaryPurple.withValues(alpha: 0.9),
                     fontSize: 14,
                     height: 1.5,
                   ),

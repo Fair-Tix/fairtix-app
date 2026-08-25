@@ -1,15 +1,19 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
+import 'screens/admin/admin-login.dart';
 import 'screens/organizer/organizer-splash.dart';
 import 'screens/organizer/app_colors.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
   runApp(const MyApp());
+  unawaited(
+    Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -23,10 +27,9 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: AppColors.primaryPurple),
         useMaterial3: true,
+        scaffoldBackgroundColor: const Color(0xFFF9F9FC),
       ),
-      // Organizer flow entry point. Eventgoer/staff/admin entry points will
-      // be added here once those flows are built.
-      home: const OrganizerSplashScreen(),
+      home: kIsWeb ? const AdminLoginScreen() : const OrganizerSplashScreen(),
     );
   }
 }

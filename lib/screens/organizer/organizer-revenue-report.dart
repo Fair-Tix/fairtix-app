@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
-import '../../models/organizer_event.dart';
 import '../../services/event_repository.dart';
 import '../../services/organizer_session.dart';
 import 'organizer-scaffold.dart';
@@ -69,21 +68,25 @@ class OrganizerRevenueReportScreen extends StatelessWidget {
               if (!isWide) {
                 return Column(
                   children: cards
-                      .map((c) => Padding(
-                            padding: const EdgeInsets.only(bottom: 16),
-                            child: c,
-                          ))
+                      .map(
+                        (c) => Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: c,
+                        ),
+                      )
                       .toList(),
                 );
               }
               return Row(
                 children: cards
-                    .map((c) => Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.only(right: 16),
-                            child: c,
-                          ),
-                        ))
+                    .map(
+                      (c) => Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 16),
+                          child: c,
+                        ),
+                      ),
+                    )
                     .toList(),
               );
             },
@@ -107,8 +110,11 @@ class OrganizerRevenueReportScreen extends StatelessWidget {
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
                     child: Column(
                       children: [
-                        const Icon(Icons.receipt_long_outlined,
-                            size: 40, color: AppColors.textGray),
+                        const Icon(
+                          Icons.receipt_long_outlined,
+                          size: 40,
+                          color: AppColors.textGray,
+                        ),
                         const SizedBox(height: 12),
                         Text(
                           'No revenue yet. Figures will appear here once '
@@ -123,8 +129,9 @@ class OrganizerRevenueReportScreen extends StatelessWidget {
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: DataTable(
-                      headingRowColor:
-                          MaterialStateProperty.all(const Color(0xFFF9FAFB)),
+                      headingRowColor: WidgetStateProperty.all(
+                        const Color(0xFFF9FAFB),
+                      ),
                       columns: const [
                         DataColumn(label: Text('EVENT')),
                         DataColumn(label: Text('STATUS')),
@@ -137,22 +144,43 @@ class OrganizerRevenueReportScreen extends StatelessWidget {
                         final eventGross = e.grossRevenue;
                         final eventFee = eventGross * feeRate;
                         final eventNet = eventGross - eventFee;
-                        return DataRow(cells: [
-                          DataCell(Text(e.name, style: AppTextStyles.label)),
-                          DataCell(Text(e.status.label, style: AppTextStyles.body)),
-                          DataCell(Text('${e.ticketsSold}', style: AppTextStyles.body)),
-                          DataCell(Text('\u20B1${eventGross.toStringAsFixed(0)}',
-                              style: AppTextStyles.body)),
-                          DataCell(Text('\u20B1${eventFee.toStringAsFixed(0)}',
-                              style: const TextStyle(color: AppColors.dangerRed))),
-                          DataCell(Text(
-                            '\u20B1${eventNet.toStringAsFixed(0)}',
-                            style: const TextStyle(
-                              color: AppColors.successGreen,
-                              fontWeight: FontWeight.w700,
+                        return DataRow(
+                          cells: [
+                            DataCell(Text(e.name, style: AppTextStyles.label)),
+                            DataCell(
+                              Text(e.status.label, style: AppTextStyles.body),
                             ),
-                          )),
-                        ]);
+                            DataCell(
+                              Text(
+                                '${e.ticketsSold}',
+                                style: AppTextStyles.body,
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                '\u20B1${eventGross.toStringAsFixed(0)}',
+                                style: AppTextStyles.body,
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                '\u20B1${eventFee.toStringAsFixed(0)}',
+                                style: const TextStyle(
+                                  color: AppColors.dangerRed,
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                '\u20B1${eventNet.toStringAsFixed(0)}',
+                                style: const TextStyle(
+                                  color: AppColors.successGreen,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
                       }).toList(),
                     ),
                   ),
@@ -193,7 +221,7 @@ class _StatCard extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: AppColors.primaryPurple.withOpacity(0.1),
+              color: AppColors.primaryPurple.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             alignment: Alignment.center,
@@ -206,7 +234,10 @@ class _StatCard extends StatelessWidget {
               children: [
                 Text(label, style: AppTextStyles.bodyGray, maxLines: 2),
                 const SizedBox(height: 2),
-                Text(value, style: AppTextStyles.h2.copyWith(color: valueColor)),
+                Text(
+                  value,
+                  style: AppTextStyles.h2.copyWith(color: valueColor),
+                ),
               ],
             ),
           ),

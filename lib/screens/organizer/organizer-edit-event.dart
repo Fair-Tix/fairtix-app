@@ -436,7 +436,7 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
                 child: Container(
                   height: 150,
                   width: double.infinity,
-                  color: AppColors.primaryPurple.withOpacity(0.15),
+                  color: AppColors.primaryPurple.withValues(alpha: 0.15),
                   alignment: Alignment.center,
                   child: const Icon(Icons.image, size: 48, color: Colors.white70),
                 ),
@@ -456,7 +456,7 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
                     },
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.35),
+                        color: Colors.black.withValues(alpha: 0.35),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       alignment: Alignment.center,
@@ -508,7 +508,7 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
                 title,
                 style: AppTextStyles.h3.copyWith(color: AppColors.primaryPurple),
               ),
-              if (headerTrailing != null) headerTrailing,
+              ?headerTrailing,
             ],
           ),
           const SizedBox(height: 18),

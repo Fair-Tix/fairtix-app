@@ -4,9 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
-import 'screens/admin/admin-login.dart';
 import 'screens/organizer/organizer-splash.dart';
 import 'screens/organizer/app_colors.dart';
+import 'screens/user/splash_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,7 +29,11 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
         scaffoldBackgroundColor: const Color(0xFFF9F9FC),
       ),
-      home: kIsWeb ? const AdminLoginScreen() : const OrganizerSplashScreen(),
+      // Web build = organizer/admin portal (OrganizerSplashScreen has
+      // buttons for both "Organizer Log In" and "Admin Portal", so both
+      // roles are reachable for testing from this one entry point).
+      // Mobile build = the attendee-facing app.
+      home: kIsWeb ? const OrganizerSplashScreen() : const SplashScreen(),
     );
   }
 }

@@ -45,6 +45,14 @@ create table public.users (
   id_number             text unique,
   selfie_photo_url      text,
   face_embedding_hash   text,
+  -- Not part of the original Data Dictionary (Table 6) — added because
+  -- organizer-register.dart's UI collects two separate proof-of-
+  -- organization documents ("Proof of Venue Booking" and "Valid Event
+  -- Permit") rather than the single generic id_document_url the schema
+  -- originally modeled. Both live in the same private `organizer_docs`
+  -- Storage bucket as the organizer's other verification files.
+  venue_proof_url       text,
+  event_permit_url      text,
   role                  user_role not null default 'buyer',
   profile_photo_url     text,
   account_status        account_status not null default 'active',

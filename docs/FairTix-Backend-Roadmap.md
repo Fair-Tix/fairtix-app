@@ -75,9 +75,42 @@
   haven't been created yet; if they already exist, `alter table
   public.users add column username text unique, add column birth_date
   date;` instead
-- ⬜ Identity/selfie upload (`identity_verification_screen.dart`,
-  `selfie_verification_screen.dart`) still store nothing — next step per
-  the plan below is wiring those to `supabase.storage.from('identity_docs')`
+- ✅ ID upload (`identity_verification_screen.dart`): wired to a real
+  Camera/Gallery picker (`image_picker`) and
+  `supabase.storage.from('identity_docs').uploadBinary(...)`, storing the
+  resulting path + chosen ID type on `public.users`
+  (`id_document_url`/`id_type`) and resetting
+  `id_verification_status` to `'pending'` via the new
+  `UserAuthService.uploadIdentityDocument()`. Reads/writes bytes (not
+  `dart:io File`) so the same code path works on mobile and web.
+  `pubspec.yaml`, `ios/Runner/Info.plist` (camera/photo-library usage
+  strings), and `android/app/src/main/AndroidManifest.xml`
+  (CAMERA/READ_MEDIA_IMAGES) were updated to support this.
+- ✅ Selfie capture (`selfie_verification_screen.dart`): "Take Selfie"
+  now opens the **front camera directly** (no gallery option, since this
+  step is meant to be a live capture) via `image_picker`, shows a
+  preview with a Retake option, then "Use This Selfie" uploads it to
+  the same private `identity_docs` bucket as the ID photo via the new
+  `UserAuthService.uploadSelfie()`, recording the path on
+  `public.users.selfie_photo_url`.
+  - ⚠️ **Not implemented**: any actual face match between the selfie
+    and the ID photo, or computing `face_embedding_hash` for duplicate-
+    account detection. Both require a server-side model (e.g. a
+    third-party face-compare API called from a Supabase Edge Function)
+    and are out of scope for a client-only change — this was already
+    flagged as later Edge Function work above. Until that exists,
+    `id_verification_status` simply stays `'pending'` (set when the ID
+    was uploaded) and an admin reviews both photos manually, the same
+    pattern already used for organizer applications
+    (`admin-organizer-applications.dart`). A buyer-facing equivalent of
+    that admin review screen doesn't exist yet either — next backend
+    step once this is prioritized.
+- ⚠️ Deliberately did NOT add an on-device face-detection package (e.g.
+  `google_mlkit_face_detection`) for a "face present in frame" sanity
+  check: those plugins don't support Flutter Web, and this pubspec is
+  shared with the organizer/admin web build (`flutter run -d chrome`) —
+  adding one would break that build entirely, not just degrade
+  gracefully.
 - ⬜ `login_screen.dart` / `login()` still checks the hardcoded test
   account, not real Supabase Auth (see Phase 1 below)
 
@@ -118,9 +151,40 @@
   `role = 'organizer'` and `id_verification_status = 'verified'`, used on
   `events_insert_own_organizer` / `ticket_tiers` policies) belongs to
   Phase 2/6 once the admin approval screen is wired up.
-- ⬜ Document uploads (`organizer-register.dart`'s "Proof of Venue
-  Booking" / "Valid Event Permit" boxes) still only simulate a file pick
-  locally — not wired to `supabase.storage.from('organizer_docs')` yet.
+- ✅ Document uploads (`organizer-register.dart`'s "Proof of Venue
+  Booking" / "Valid Event Permit" boxes, session 3): real file picking
+  via `file_picker` (`type: FileType.custom`, restricted to
+  pdf/jpg/jpeg/png, `withData: true` so bytes load on every platform
+  incl. web) replaces the old tap-to-simulate placeholder. On submit,
+  `OrganizerAuthService.uploadOrganizerDocument()` uploads each file to
+  the private `organizer_docs` bucket and records the path on two new
+  `public.users` columns, `venue_proof_url` / `event_permit_url`
+  (added to `schema.sql` — these weren't in the original Data
+  Dictionary, which only modeled one generic `id_document_url`).
+  - ⚠️ **Known gap, same root cause as the buyer OTP requirement**:
+    `Supabase.instance.client.auth.signUp()` only returns an active
+    session immediately if "Confirm email" is disabled project-wide.
+    With confirmations enabled (true here, since the buyer flow relies
+    on a confirmation email carrying an OTP token), there's no session
+    right after `register()`, and Storage RLS requires one — so the
+    documents genuinely **cannot** be uploaded at this point in the
+    flow yet. The new `OrganizerAuthService.hasActiveSession` getter
+    guards the upload call so this fails safe (registration still
+    succeeds; upload is skipped, not silently broken) and will start
+    working the moment a session exists at submit time. The real fix is
+    a Phase-1/6 follow-up: once organizer login is wired to real
+    Supabase Auth, prompt for any still-missing documents right after
+    the organizer's first successful login (their `public.users` row
+    already tells you whether `venue_proof_url`/`event_permit_url` are
+    null) rather than only at registration time — this app doesn't do
+    that yet.
+  - `schema.sql` changed again — same re-run note as before: if
+    `schema.sql` already ran, apply the diff instead:
+    ```sql
+    alter table public.users
+      add column venue_proof_url text,
+      add column event_permit_url text;
+    ```
 
 ## Phase 1 — Real Login/Register for all three portals (Supabase Auth)
 

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/app_user.dart';
@@ -131,6 +133,100 @@ class UserAuthService {
     } on AuthException catch (e) {
       throw UserAuthException(e.message);
     }
+  }
+
+  /// Uploads the buyer's government/school ID photo to the private
+  /// `identity_docs` Storage bucket (see supabase/policies.sql) and
+  /// records the storage path + chosen [idType] on their `public.users`
+  /// row, resetting `id_verification_status` back to `pending` so an
+  /// admin re-reviews it (covers first-time submissions as well as
+  /// re-submissions after a rejection).
+  ///
+  /// Requires an active Supabase Auth session, which exists once
+  /// [verifyRegistrationOtp] has completed earlier in the registration
+  /// flow. Returns the storage path the file was saved under.
+  Future<String> uploadIdentityDocument({
+    required String idType,
+    required Uint8List bytes,
+    required String fileExtension,
+  }) async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) {
+      throw const UserAuthException(
+        'Your session has expired. Please verify your email again before uploading an ID.',
+      );
+    }
+
+    final ext = fileExtension.replaceFirst('.', '').toLowerCase();
+    final safeExt = ext.isEmpty ? 'jpg' : ext;
+    final path = '$userId/id_${DateTime.now().millisecondsSinceEpoch}.$safeExt';
+    final contentType = 'image/${safeExt == 'jpg' ? 'jpeg' : safeExt}';
+
+    try {
+      await Supabase.instance.client.storage.from('identity_docs').uploadBinary(
+            path,
+            bytes,
+            fileOptions: FileOptions(upsert: true, contentType: contentType),
+          );
+
+      await Supabase.instance.client.from('users').update({
+        'id_document_url': path,
+        'id_type': idType,
+        'id_verification_status': 'pending',
+      }).eq('id', userId);
+    } on StorageException catch (e) {
+      throw UserAuthException('Could not upload your ID: ${e.message}');
+    } on PostgrestException catch (e) {
+      throw UserAuthException('Could not save your ID details: ${e.message}');
+    }
+
+    return path;
+  }
+
+  /// Uploads the buyer's live verification selfie to the same private
+  /// `identity_docs` Storage bucket used for the ID photo (owner-only —
+  /// see supabase/policies.sql) and records the resulting path on
+  /// `public.users.selfie_photo_url`.
+  ///
+  /// This does NOT perform an automated face match against the ID photo
+  /// or compute `face_embedding_hash` — both need a server-side model
+  /// and are tracked as a follow-up Supabase Edge Function in
+  /// docs/FairTix-Backend-Roadmap.md. Until that exists, the account
+  /// stays `id_verification_status = 'pending'` (set when the ID was
+  /// uploaded) so an admin can review both photos manually.
+  Future<String> uploadSelfie({
+    required Uint8List bytes,
+    required String fileExtension,
+  }) async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) {
+      throw const UserAuthException(
+        'Your session has expired. Please verify your email again before taking a selfie.',
+      );
+    }
+
+    final ext = fileExtension.replaceFirst('.', '').toLowerCase();
+    final safeExt = ext.isEmpty ? 'jpg' : ext;
+    final path = '$userId/selfie_${DateTime.now().millisecondsSinceEpoch}.$safeExt';
+    final contentType = 'image/${safeExt == 'jpg' ? 'jpeg' : safeExt}';
+
+    try {
+      await Supabase.instance.client.storage.from('identity_docs').uploadBinary(
+            path,
+            bytes,
+            fileOptions: FileOptions(upsert: true, contentType: contentType),
+          );
+
+      await Supabase.instance.client.from('users').update({
+        'selfie_photo_url': path,
+      }).eq('id', userId);
+    } on StorageException catch (e) {
+      throw UserAuthException('Could not upload your selfie: ${e.message}');
+    } on PostgrestException catch (e) {
+      throw UserAuthException('Could not save your selfie details: ${e.message}');
+    }
+
+    return path;
   }
 
   void logout() {

@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'dart:typed_data';
+
 import '../models/organizer.dart';
 import 'organizer_session.dart';
 
@@ -69,10 +71,9 @@ class OrganizerAuthService {
   /// but stays unable to do organizer-only actions until an admin reviews
   /// it (Phase 6).
   ///
-  /// Document uploads (proof of venue booking / event permit) are not yet
-  /// wired to Supabase Storage — [organizer-register.dart] still only
-  /// simulates the file picker locally. Wiring real uploads to the
-  /// `organizer_docs` bucket (see supabase/policies.sql) is a follow-up.
+  /// Does not itself upload the proof-of-organization documents — see
+  /// [uploadOrganizerDocument], which the caller (organizer-register.dart)
+  /// invokes right after this succeeds, if [hasActiveSession] is true.
   Future<void> register({
     required String fullName,
     required String organizationName,
@@ -102,5 +103,63 @@ class OrganizerAuthService {
 
   void logout() {
     OrganizerSession.instance.signOut();
+  }
+
+  /// Whether the Supabase client currently holds an authenticated
+  /// session for the organizer. `register()` only establishes one
+  /// immediately if "Confirm email" is disabled for this Supabase
+  /// project; with confirmations enabled (the current setup — see
+  /// docs/FairTix-Backend-Roadmap.md), signUp() returns `session: null`
+  /// and this stays false until the organizer confirms their email and
+  /// logs in. Storage uploads require a session, so callers should check
+  /// this before calling [uploadOrganizerDocument].
+  bool get hasActiveSession => Supabase.instance.client.auth.currentUser != null;
+
+  /// Uploads a proof-of-organization document ("venue_proof" or
+  /// "event_permit") to the private `organizer_docs` Storage bucket (see
+  /// supabase/policies.sql) and records the resulting path on the
+  /// matching `public.users` column (`venue_proof_url` /
+  /// `event_permit_url` — see supabase/schema.sql).
+  ///
+  /// Requires an active session (see [hasActiveSession]); throws
+  /// [OrganizerAuthException] if there isn't one, or if the upload/save
+  /// fails.
+  Future<String> uploadOrganizerDocument({
+    required String docKind,
+    required Uint8List bytes,
+    required String fileExtension,
+  }) async {
+    assert(docKind == 'venue_proof' || docKind == 'event_permit');
+
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) {
+      throw const OrganizerAuthException(
+        'You need to be signed in to upload documents.',
+      );
+    }
+
+    final ext = fileExtension.replaceFirst('.', '').toLowerCase();
+    final safeExt = ext.isEmpty ? 'pdf' : ext;
+    final path = '$userId/${docKind}_${DateTime.now().millisecondsSinceEpoch}.$safeExt';
+    final contentType = safeExt == 'pdf'
+        ? 'application/pdf'
+        : 'image/${safeExt == 'jpg' ? 'jpeg' : safeExt}';
+    final column = docKind == 'venue_proof' ? 'venue_proof_url' : 'event_permit_url';
+
+    try {
+      await Supabase.instance.client.storage.from('organizer_docs').uploadBinary(
+            path,
+            bytes,
+            fileOptions: FileOptions(upsert: true, contentType: contentType),
+          );
+
+      await Supabase.instance.client.from('users').update({column: path}).eq('id', userId);
+    } on StorageException catch (e) {
+      throw OrganizerAuthException('Could not upload your document: ${e.message}');
+    } on PostgrestException catch (e) {
+      throw OrganizerAuthException('Could not save your document details: ${e.message}');
+    }
+
+    return path;
   }
 }

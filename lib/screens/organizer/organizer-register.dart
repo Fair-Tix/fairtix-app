@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 import 'app_colors.dart';
 import '../../services/organizer_auth_service.dart';
 import 'organizer-application-submitted.dart';
@@ -24,11 +26,13 @@ class _OrganizerRegisterScreenState extends State<OrganizerRegisterScreen> {
   bool _isSubmitting = false;
   String? _errorText;
 
-  // TODO(backend): Replace this tap-to-simulate flow with a real file
-  // picker (e.g. the `file_picker` package) and upload to
-  // supabase.storage.from('organizer_docs').
+  Uint8List? _venueProofBytes;
   String? _venueProofFileName;
+  String? _venueProofExt;
+
+  Uint8List? _permitBytes;
   String? _permitFileName;
+  String? _permitExt;
 
   @override
   void dispose() {
@@ -40,11 +44,44 @@ class _OrganizerRegisterScreenState extends State<OrganizerRegisterScreen> {
     super.dispose();
   }
 
+  Future<void> _pickDocument({required bool isVenueProof}) async {
+    final FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png'],
+      withData: true, // forces bytes to load into memory on every platform, incl. web
+    );
+    if (result == null || result.files.isEmpty) return;
+
+    final file = result.files.single;
+    final bytes = file.bytes;
+    if (bytes == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not read that file. Please try another one.')),
+      );
+      return;
+    }
+
+    final ext = (file.extension ?? 'pdf').toLowerCase();
+
+    setState(() {
+      if (isVenueProof) {
+        _venueProofBytes = bytes;
+        _venueProofFileName = file.name;
+        _venueProofExt = ext;
+      } else {
+        _permitBytes = bytes;
+        _permitFileName = file.name;
+        _permitExt = ext;
+      }
+    });
+  }
+
   Future<void> _handleSubmit() async {
     final isValid = _formKey.currentState?.validate() ?? false;
     if (!isValid) return;
 
-    if (_venueProofFileName == null || _permitFileName == null) {
+    if (_venueProofBytes == null || _permitBytes == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -72,6 +109,35 @@ class _OrganizerRegisterScreenState extends State<OrganizerRegisterScreen> {
       return;
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
+    }
+
+    // Supabase only hands back an active session immediately on signUp()
+    // when "Confirm email" is disabled for the project. With
+    // confirmations enabled (the current setup — see
+    // docs/FairTix-Backend-Roadmap.md), there's no session yet at this
+    // point, and Storage RLS requires one, so the documents can't be
+    // uploaded until the organizer confirms their email and logs in
+    // (not built yet — tracked as a known gap in the roadmap). Uploading
+    // opportunistically here means this keeps working the moment that
+    // changes, without another code change.
+    if (OrganizerAuthService.instance.hasActiveSession) {
+      try {
+        await OrganizerAuthService.instance.uploadOrganizerDocument(
+          docKind: 'venue_proof',
+          bytes: _venueProofBytes!,
+          fileExtension: _venueProofExt ?? 'pdf',
+        );
+        await OrganizerAuthService.instance.uploadOrganizerDocument(
+          docKind: 'event_permit',
+          bytes: _permitBytes!,
+          fileExtension: _permitExt ?? 'pdf',
+        );
+      } on OrganizerAuthException catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Your account was created, but document upload failed: ${e.message}')),
+        );
+      }
     }
 
     if (!mounted) return;
@@ -232,26 +298,16 @@ class _OrganizerRegisterScreenState extends State<OrganizerRegisterScreen> {
                             child: _uploadBox(
                               label: _venueProofFileName ??
                                   'Proof of Venue Booking',
-                              uploaded: _venueProofFileName != null,
-                              onTap: () {
-                                // TODO(backend): open a real file picker and
-                                // upload the selected document to Storage.
-                                setState(() {
-                                  _venueProofFileName = 'Document selected';
-                                });
-                              },
+                              uploaded: _venueProofBytes != null,
+                              onTap: () => _pickDocument(isVenueProof: true),
                             ),
                           ),
                           const SizedBox(width: 16),
                           Expanded(
                             child: _uploadBox(
                               label: _permitFileName ?? 'Valid Event Permit',
-                              uploaded: _permitFileName != null,
-                              onTap: () {
-                                setState(() {
-                                  _permitFileName = 'Document selected';
-                                });
-                              },
+                              uploaded: _permitBytes != null,
+                              onTap: () => _pickDocument(isVenueProof: false),
                             ),
                           ),
                         ],
@@ -402,6 +458,8 @@ class _OrganizerRegisterScreenState extends State<OrganizerRegisterScreen> {
             Text(
               label,
               textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: AppColors.primaryPurple,
                 fontWeight: FontWeight.w600,

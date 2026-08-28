@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>FairTix needs camera access to let you take a photo of your ID and a verification selfie.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>FairTix needs photo library access so you can choose an existing photo of your ID.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

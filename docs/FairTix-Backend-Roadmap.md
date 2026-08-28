@@ -81,6 +81,47 @@
 - ⬜ `login_screen.dart` / `login()` still checks the hardcoded test
   account, not real Supabase Auth (see Phase 1 below)
 
+## Progress update (session 2 — organizer registration)
+
+- ✅ `organizer-register.dart`: added an "Organization Name" field, wired
+  "Submit Application" to `OrganizerAuthService.register()`, added a
+  loading state and inline error text (matching `organizer-login.dart`'s
+  style). Only navigates to `OrganizerApplicationSubmittedScreen` on
+  success.
+- ✅ `organizer_auth_service.dart`: added `register()` →
+  `supabase.auth.signUp` with `full_name`/`organization_name`/`role:
+  'organizer'` in the metadata `data` map. No OTP step for organizers (no
+  such screen exists in this flow) — they confirm via the emailed link
+  instead of a code.
+- ✅ `schema.sql`: added `organization_name` column to `public.users`;
+  `handle_new_auth_user()` trigger now also reads a `role` key from
+  `raw_user_meta_data`, but only ever sets `'buyer'` or `'organizer'` —
+  never `'admin'` — no matter what a client sends, preserving the
+  no-self-promotion guarantee in `policies.sql`.
+- ⚠️ Same SQL re-run note as above applies — if `schema.sql` was already
+  run before this session, apply just the diff instead:
+  ```sql
+  alter table public.users add column organization_name text;
+  -- then re-run the full `create or replace function
+  -- public.handle_new_auth_user()` block from schema.sql
+  ```
+- ⚠️ Because the "Confirm signup" email template was changed to show
+  `{{ .Token }}` for the eventgoer OTP screen, make sure the template also
+  still includes `{{ .ConfirmationURL }}` somewhere — organizers have no
+  OTP-entry screen and rely on clicking that link to confirm their email.
+- ⚠️ Known gap, not fixed in this pass: setting `role = 'organizer'` at
+  signup does **not** by itself gate access to organizer-only actions like
+  creating events — `is_organizer()` in `policies.sql` only checks `role`,
+  not `id_verification_status`. An organizer whose documents haven't been
+  approved yet can currently still pass `is_organizer()` checks. Tightening
+  this (e.g. a separate `is_approved_organizer()` helper checking both
+  `role = 'organizer'` and `id_verification_status = 'verified'`, used on
+  `events_insert_own_organizer` / `ticket_tiers` policies) belongs to
+  Phase 2/6 once the admin approval screen is wired up.
+- ⬜ Document uploads (`organizer-register.dart`'s "Proof of Venue
+  Booking" / "Valid Event Permit" boxes) still only simulate a file pick
+  locally — not wired to `supabase.storage.from('organizer_docs')` yet.
+
 ## Phase 1 — Real Login/Register for all three portals (Supabase Auth)
 
 This replaces the three hardcoded test-account services

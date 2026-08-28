@@ -35,6 +35,7 @@ create table public.users (
   id                    uuid primary key references auth.users(id) on delete cascade,
   full_name             text not null,
   username              text unique,
+  organization_name     text,
   email                 text not null unique,
   phone                 text,
   birth_date            date,
@@ -53,23 +54,44 @@ create table public.users (
 
 -- Auto-create a public.users row on signup (role defaults to 'buyer';
 -- promote to organizer/admin via an admin-only RPC, never client-side).
--- full_name/username/phone/birth_date come from the `data` map passed to
--- supabase.auth.signUp() on the client (see registration_screen.dart /
--- user_auth_service.dart) — Supabase stores that as auth.users.raw_user_meta_data.
+-- full_name/username/phone/birth_date/organization_name come from the
+-- `data` map passed to supabase.auth.signUp() on the client (see
+-- registration_screen.dart / organizer-register.dart and
+-- user_auth_service.dart / organizer_auth_service.dart) — Supabase stores
+-- that as auth.users.raw_user_meta_data.
+--
+-- `role` is also read from that same metadata, but deliberately
+-- constrained here (server-side, inside a SECURITY DEFINER trigger) to
+-- only ever become 'buyer' or 'organizer' — never 'admin' — no matter
+-- what a client sends. This lets the "Register as Organizer" flow work
+-- without an Edge Function, while preserving the guarantee in
+-- policies.sql that nobody can self-promote to admin.
+--
+-- NOTE: setting role = 'organizer' here only marks account *type*, not
+-- approval. `id_verification_status` stays 'pending' until an admin
+-- reviews the submitted documents (see organizer-verification-pending.dart
+-- / Phase 6). Policies that gate organizer *actions* (creating events,
+-- etc.) currently only check role via is_organizer() and do not yet check
+-- id_verification_status — tightening that is tracked as a Phase 2/6 TODO,
+-- not done in this pass.
 create function public.handle_new_auth_user()
 returns trigger
 language plpgsql
 security definer set search_path = public
 as $$
+declare
+  requested_role text := new.raw_user_meta_data->>'role';
 begin
-  insert into public.users (id, full_name, username, email, phone, birth_date)
+  insert into public.users (id, full_name, username, organization_name, email, phone, birth_date, role)
   values (
     new.id,
     coalesce(new.raw_user_meta_data->>'full_name', ''),
     nullif(new.raw_user_meta_data->>'username', ''),
+    nullif(new.raw_user_meta_data->>'organization_name', ''),
     new.email,
     nullif(new.raw_user_meta_data->>'phone', ''),
-    nullif(new.raw_user_meta_data->>'birth_date', '')::date
+    nullif(new.raw_user_meta_data->>'birth_date', '')::date,
+    case when requested_role = 'organizer' then 'organizer'::user_role else 'buyer'::user_role end
   );
   return new;
 end;

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
+import '../../services/organizer_auth_service.dart';
 import 'organizer-application-submitted.dart';
 
 class OrganizerRegisterScreen extends StatefulWidget {
@@ -12,27 +13,34 @@ class OrganizerRegisterScreen extends StatefulWidget {
 
 class _OrganizerRegisterScreenState extends State<OrganizerRegisterScreen> {
   final TextEditingController _fullNameController = TextEditingController();
+  final TextEditingController _organizationNameController =
+      TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController =
       TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
+  bool _isSubmitting = false;
+  String? _errorText;
+
   // TODO(backend): Replace this tap-to-simulate flow with a real file
-  // picker (e.g. the `file_picker` package) and upload to Firebase Storage.
+  // picker (e.g. the `file_picker` package) and upload to
+  // supabase.storage.from('organizer_docs').
   String? _venueProofFileName;
   String? _permitFileName;
 
   @override
   void dispose() {
     _fullNameController.dispose();
+    _organizationNameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  void _handleSubmit() {
+  Future<void> _handleSubmit() async {
     final isValid = _formKey.currentState?.validate() ?? false;
     if (!isValid) return;
 
@@ -46,6 +54,27 @@ class _OrganizerRegisterScreenState extends State<OrganizerRegisterScreen> {
       return;
     }
 
+    setState(() {
+      _isSubmitting = true;
+      _errorText = null;
+    });
+
+    try {
+      await OrganizerAuthService.instance.register(
+        fullName: _fullNameController.text,
+        organizationName: _organizationNameController.text,
+        email: _emailController.text,
+        password: _passwordController.text,
+      );
+    } on OrganizerAuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _errorText = e.message);
+      return;
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+
+    if (!mounted) return;
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -108,6 +137,15 @@ class _OrganizerRegisterScreenState extends State<OrganizerRegisterScreen> {
                         style: AppTextStyles.h1,
                       ),
                       const SizedBox(height: 28),
+                      _validatedField(
+                        label: 'Organization Name',
+                        hint: 'e.g. UC Main Student Council',
+                        controller: _organizationNameController,
+                        validator: (v) => (v == null || v.trim().isEmpty)
+                            ? 'Organization name is required'
+                            : null,
+                      ),
+                      const SizedBox(height: 18),
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -219,11 +257,33 @@ class _OrganizerRegisterScreenState extends State<OrganizerRegisterScreen> {
                         ],
                       ),
                       const SizedBox(height: 28),
-                      PrimaryButton(
-                        label: 'Submit Application',
-                        color: AppColors.primaryPurpleDarker,
-                        onPressed: _handleSubmit,
-                      ),
+                      if (_errorText != null) ...[
+                        Text(
+                          _errorText!,
+                          style: const TextStyle(
+                            color: AppColors.dangerRed,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      _isSubmitting
+                          ? const SizedBox(
+                              height: 52,
+                              child: Center(
+                                child: SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(strokeWidth: 2.5),
+                                ),
+                              ),
+                            )
+                          : PrimaryButton(
+                              label: 'Submit Application',
+                              color: AppColors.primaryPurpleDarker,
+                              onPressed: _handleSubmit,
+                            ),
                       const SizedBox(height: 16),
                     ],
                     ),

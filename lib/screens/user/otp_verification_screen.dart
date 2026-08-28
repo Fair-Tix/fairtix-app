@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../services/user_auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_background.dart';
 import '../../widgets/otp_box_input.dart';
@@ -18,16 +19,47 @@ class OtpVerificationScreen extends StatefulWidget {
 class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   String _code = '';
   bool _isVerifying = false;
+  bool _isResending = false;
 
   Future<void> _handleVerify() async {
     setState(() => _isVerifying = true);
-    // TODO: verify the 6-digit code against Firebase Authentication / OTP service.
-    await Future.delayed(const Duration(milliseconds: 800));
+    try {
+      await UserAuthService.instance.verifyRegistrationOtp(
+        email: widget.email,
+        token: _code,
+      );
+    } on UserAuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _isVerifying = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+      return;
+    }
     if (!mounted) return;
     setState(() => _isVerifying = false);
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const IdentityVerificationScreen()),
     );
+  }
+
+  Future<void> _handleResend() async {
+    if (_isResending) return;
+    setState(() => _isResending = true);
+    try {
+      await UserAuthService.instance.resendRegistrationOtp(email: widget.email);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('A new code has been sent to your email.')),
+      );
+    } on UserAuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } finally {
+      if (mounted) setState(() => _isResending = false);
+    }
   }
 
   @override
@@ -67,17 +99,15 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
               ),
               const SizedBox(height: 18),
               GestureDetector(
-                onTap: () {
-                  // TODO: trigger resend OTP request.
-                },
+                onTap: _isResending ? null : _handleResend,
                 child: RichText(
                   text: TextSpan(
                     style: AppTextStyles.tagline,
-                    children: const [
-                      TextSpan(text: "Didn't receive a code? "),
+                    children: [
+                      const TextSpan(text: "Didn't receive a code? "),
                       TextSpan(
-                        text: 'Resend',
-                        style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.white),
+                        text: _isResending ? 'Sending...' : 'Resend',
+                        style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.white),
                       ),
                     ],
                   ),

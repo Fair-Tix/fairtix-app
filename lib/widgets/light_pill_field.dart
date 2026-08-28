@@ -11,6 +11,10 @@ class LightPillField extends StatelessWidget {
     this.hintText,
     this.keyboardType,
     this.prefixWidget,
+    this.suffixWidget,
+    this.obscureText = false,
+    this.errorText,
+    this.textInputAction,
   });
 
   final String? label;
@@ -18,6 +22,11 @@ class LightPillField extends StatelessWidget {
   final String? hintText;
   final TextInputType? keyboardType;
   final Widget? prefixWidget;
+  final Widget? suffixWidget;
+  final bool obscureText;
+  /// Optional validation message shown in red beneath the field.
+  final String? errorText;
+  final TextInputAction? textInputAction;
 
   @override
   Widget build(BuildContext context) {
@@ -32,22 +41,38 @@ class LightPillField extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppColors.inputFillLight,
             borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: AppColors.inputBorderLight, width: 1),
+            border: Border.all(
+              color: errorText != null ? AppColors.error : AppColors.inputBorderLight,
+              width: 1,
+            ),
           ),
           child: TextField(
             controller: controller,
             keyboardType: keyboardType,
+            obscureText: obscureText,
+            textInputAction: textInputAction,
             style: AppTextStyles.fieldInputLight,
             cursorColor: AppColors.accentPurple,
             decoration: InputDecoration(
               hintText: hintText,
               hintStyle: AppTextStyles.fieldInputLight.copyWith(color: AppColors.textMuted),
               prefixIcon: prefixWidget,
+              suffixIcon: suffixWidget,
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
             ),
           ),
         ),
+        if (errorText != null) ...[
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.only(left: 12),
+            child: Text(
+              errorText!,
+              style: const TextStyle(fontSize: 12, color: AppColors.error, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
       ],
     );
   }

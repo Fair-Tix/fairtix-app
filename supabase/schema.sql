@@ -34,8 +34,10 @@ create type fee_status as enum ('pending', 'paid', 'withheld');
 create table public.users (
   id                    uuid primary key references auth.users(id) on delete cascade,
   full_name             text not null,
+  username              text unique,
   email                 text not null unique,
   phone                 text,
+  birth_date            date,
   id_document_url       text,
   id_type               text,
   id_verification_status id_verification_status not null default 'pending',
@@ -51,14 +53,24 @@ create table public.users (
 
 -- Auto-create a public.users row on signup (role defaults to 'buyer';
 -- promote to organizer/admin via an admin-only RPC, never client-side).
+-- full_name/username/phone/birth_date come from the `data` map passed to
+-- supabase.auth.signUp() on the client (see registration_screen.dart /
+-- user_auth_service.dart) — Supabase stores that as auth.users.raw_user_meta_data.
 create function public.handle_new_auth_user()
 returns trigger
 language plpgsql
 security definer set search_path = public
 as $$
 begin
-  insert into public.users (id, full_name, email)
-  values (new.id, coalesce(new.raw_user_meta_data->>'full_name', ''), new.email);
+  insert into public.users (id, full_name, username, email, phone, birth_date)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'full_name', ''),
+    nullif(new.raw_user_meta_data->>'username', ''),
+    new.email,
+    nullif(new.raw_user_meta_data->>'phone', ''),
+    nullif(new.raw_user_meta_data->>'birth_date', '')::date
+  );
   return new;
 end;
 $$;

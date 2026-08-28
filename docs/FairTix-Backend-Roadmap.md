@@ -48,6 +48,39 @@
 5. Confirm `flutter run -d chrome` (or your emulator) still builds with no
    Firebase references left.
 
+## Progress update (this session)
+
+- ✅ `registration_screen.dart`: real form validation (name, email format,
+  username, PH mobile number, 13+ age check, password strength/match) +
+  calls `UserAuthService.register()`
+- ✅ `user_auth_service.dart`: added `register()` (→
+  `supabase.auth.signUp` with `full_name`/`username`/`phone`/`birth_date`
+  in the metadata `data` map), `verifyRegistrationOtp()` (→
+  `supabase.auth.verifyOTP(type: OtpType.signup)`), and
+  `resendRegistrationOtp()` (→ `supabase.auth.resend(type: OtpType.signup)`)
+- ✅ `otp_verification_screen.dart`: "Verify" calls `verifyRegistrationOtp`,
+  "Resend" calls `resendRegistrationOtp`
+- ✅ `schema.sql`: added `username` (unique) and `birth_date` columns to
+  `public.users`; `handle_new_auth_user()` trigger now populates them (plus
+  `phone`) from `auth.users.raw_user_meta_data`
+- ✅ `light_pill_field.dart`: added `obscureText`, `suffixWidget`, and
+  `errorText` support (used for the new password fields + inline
+  validation messages)
+- ⚠️ **Action needed in the Supabase Dashboard** for the OTP screen to
+  actually receive a 6-digit code instead of a magic link: Authentication →
+  Email Templates → "Confirm signup" → change the template to use
+  `{{ .Token }}` instead of `{{ .ConfirmationURL }}`
+- ⚠️ Since `schema.sql` changed, re-run it (and `policies.sql`) in the
+  Supabase SQL Editor — safe to re-run on a project where Phase 1 tables
+  haven't been created yet; if they already exist, `alter table
+  public.users add column username text unique, add column birth_date
+  date;` instead
+- ⬜ Identity/selfie upload (`identity_verification_screen.dart`,
+  `selfie_verification_screen.dart`) still store nothing — next step per
+  the plan below is wiring those to `supabase.storage.from('identity_docs')`
+- ⬜ `login_screen.dart` / `login()` still checks the hardcoded test
+  account, not real Supabase Auth (see Phase 1 below)
+
 ## Phase 1 — Real Login/Register for all three portals (Supabase Auth)
 
 This replaces the three hardcoded test-account services

@@ -31,6 +31,7 @@ class _AdminPlatformSettingsScreenState
   bool _twoFactorRequired = true;
   bool _emailAlerts = true;
   bool _weeklyDigest = true;
+  DateTime? _lastSavedAt;
 
   static const _items = [
     (Icons.grid_view_rounded, 'Dashboard'),
@@ -70,9 +71,20 @@ class _AdminPlatformSettingsScreenState
   }
 
   void _saveChanges(String section) {
+    setState(() => _lastSavedAt = DateTime.now());
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text('$section settings saved.')));
+  }
+
+  String _formatLastSaved(DateTime dt) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    final hour12 = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final period = dt.hour >= 12 ? 'PM' : 'AM';
+    return 'Last saved: ${months[dt.month - 1]} ${dt.day}, ${dt.year} - $hour12:$minute $period';
   }
 
   Future<void> _confirmLogout() async {
@@ -296,10 +308,10 @@ class _AdminPlatformSettingsScreenState
             const Expanded(
               child: Text('Platform Settings', style: AppTextStyles.h2),
             ),
-            if (isWide)
-              const Text(
-                'Last saved: Jun 26, 2026 - 3:42 PM',
-                style: TextStyle(color: AppColors.textGray, fontSize: 10),
+            if (isWide && _lastSavedAt != null)
+              Text(
+                _formatLastSaved(_lastSavedAt!),
+                style: const TextStyle(color: AppColors.textGray, fontSize: 10),
               ),
           ],
         ),

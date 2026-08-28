@@ -314,7 +314,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
             const SizedBox(width: 8),
             TextButton.icon(
-              onPressed: () {},
+              onPressed: () {
+                setState(() {});
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Dashboard data refreshed.')),
+                );
+              },
               icon: const Icon(Icons.refresh, size: 14),
               label: const Text('Refresh Data', style: TextStyle(fontSize: 10)),
               style: TextButton.styleFrom(
@@ -638,7 +643,11 @@ class _ActivityPanel extends StatelessWidget {
                 child: Text('Recent Activity Log', style: AppTextStyles.label),
               ),
               IconButton(
-                onPressed: () {},
+                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('There is no activity to export yet.'),
+                  ),
+                ),
                 icon: const Icon(Icons.download_outlined, size: 16),
                 tooltip: 'Export activity log',
               ),

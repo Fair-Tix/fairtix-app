@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/event.dart';
 import '../../models/ticket.dart';
 import '../../navigation/app_nav.dart';
+import '../../services/user_session.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_background.dart';
 import '../../widgets/pill_button.dart';
@@ -13,13 +14,16 @@ class CheckoutConfirmationScreen extends StatelessWidget {
     super.key,
     required this.event,
     required this.tier,
-    this.buyerEmail = 'herondave@gmail.com',
+    this.buyerEmail,
     this.purchasedTicket,
   });
 
   final EventSummary event;
   final TicketTier tier;
-  final String buyerEmail;
+
+  /// Defaults to the signed-in user's email (see [UserSession]) when not
+  /// explicitly passed in.
+  final String? buyerEmail;
 
   /// The ticket record created for this purchase, if the caller made one.
   /// When present, "View My Ticket" jumps straight to it instead of just
@@ -38,6 +42,7 @@ class CheckoutConfirmationScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final resolvedEmail = buyerEmail ?? UserSession.instance.account?.email ?? 'your email';
     return Scaffold(
       body: GradientBackground(
         gradient: AppGradients.confirmation,
@@ -67,7 +72,7 @@ class CheckoutConfirmationScreen extends StatelessWidget {
               Text('Ticket Confirmed!', style: AppTextStyles.heading, textAlign: TextAlign.center),
               const SizedBox(height: 10),
               Text(
-                'Your ticket has been added to your wallet. A confirmation has been sent to\n$buyerEmail.',
+                'Your ticket has been added to your wallet. A confirmation has been sent to\n$resolvedEmail.',
                 textAlign: TextAlign.center,
                 style: AppTextStyles.tagline,
               ),

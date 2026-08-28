@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/sample_events.dart';
 import '../../data/sample_notifications.dart';
 import '../../models/event.dart';
+import '../../services/user_session.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/featured_event_card.dart';
 import '../../widgets/upcoming_event_tile.dart';
@@ -11,9 +12,7 @@ import 'event_details_screen.dart';
 import 'notifications_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key, this.userFirstName = 'Heron Dave'});
-
-  final String userFirstName;
+  const DashboardScreen({super.key});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -21,6 +20,14 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   String _searchQuery = '';
+
+  /// Falls back to "Eventgoer" if no session is signed in yet (shouldn't
+  /// normally happen, since the Dashboard is only reachable after login).
+  String get _userFirstName {
+    final fullName = UserSession.instance.account?.fullName;
+    if (fullName == null || fullName.trim().isEmpty) return 'Eventgoer';
+    return fullName.trim().split(RegExp(r'\s+')).first;
+  }
 
   List<EventSummary> get _events {
     if (_searchQuery.isEmpty) return sampleEvents;
@@ -111,7 +118,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
               ),
               const SizedBox(height: 20),
-              Text('Welcome, ${widget.userFirstName}!', style: AppTextStyles.sectionHeading),
+              Text('Welcome, $_userFirstName!', style: AppTextStyles.sectionHeading),
               const SizedBox(height: 4),
               const Text('Ready for your next event?', style: AppTextStyles.bodyMuted),
               const SizedBox(height: 18),
@@ -150,7 +157,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 30),
                   child: Center(
-                    child: Text('No events match your search.', style: AppTextStyles.bodyMuted),
+                    child: Text(
+                      _searchQuery.isEmpty
+                          ? 'No events available yet. Check back soon!'
+                          : 'No events match your search.',
+                      style: AppTextStyles.bodyMuted,
+                    ),
                   ),
                 )
               else
@@ -168,7 +180,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 26),
               const Text('Upcoming Events', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: AppColors.textDark)),
               const SizedBox(height: 6),
-              ..._events.map((e) => UpcomingEventTile(event: e, onTap: () => _openEvent(e))),
+              if (_events.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text(
+                    _searchQuery.isEmpty
+                        ? 'No upcoming events yet.'
+                        : 'No upcoming events match your search.',
+                    style: AppTextStyles.bodyMuted,
+                  ),
+                )
+              else
+                ..._events.map((e) => UpcomingEventTile(event: e, onTap: () => _openEvent(e))),
             ],
           ),
         ),

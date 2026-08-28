@@ -25,9 +25,9 @@ class ResaleConfirmationScreen extends StatelessWidget {
   }
 
   void _handleViewListing(BuildContext context) {
-    // TODO: navigate to the real listing detail screen once the Resale
-    // marketplace module is built; for now the Resale tab is a
-    // placeholder (see ComingSoonScreen).
+    // Jumps to the Resale Market tab within the persistent bottom-nav
+    // shell, where the newly created listing now appears alongside
+    // other active resale listings.
     navigateToTab(context, 2);
   }
 

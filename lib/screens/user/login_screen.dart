@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../navigation/main_shell.dart';
+import '../../services/user_auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_background.dart';
 import '../../widgets/pill_button.dart';
@@ -28,9 +29,22 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _handleLogin() async {
     setState(() => _isLoading = true);
-    // TODO: wire up Firebase Authentication here, then route based on the
-    // account's real verification status instead of always going Home.
-    await Future.delayed(const Duration(milliseconds: 800));
+    // TODO(backend): replace UserAuthService's hardcoded test-account check
+    // with real Firebase Authentication, then route based on the account's
+    // real verification status instead of always going Home.
+    try {
+      await UserAuthService.instance.login(
+        email: _usernameController.text,
+        password: _passwordController.text,
+      );
+    } on UserAuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+      return;
+    }
     if (!mounted) return;
     setState(() => _isLoading = false);
     Navigator.of(context).pushAndRemoveUntil(
@@ -55,11 +69,27 @@ class _LoginScreenState extends State<LoginScreen> {
                 alignment: Alignment.centerLeft,
                 child: Text('Welcome back!', style: AppTextStyles.heading),
               ),
+              if (UserAuthService.debugCredentialsHint.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.fieldFill,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.fieldBorder),
+                  ),
+                  child: Text(
+                    'Test account: ${UserAuthService.debugCredentialsHint}',
+                    style: AppTextStyles.footerText.copyWith(fontSize: 12),
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
               PillTextField(
                 label: 'Username',
                 controller: _usernameController,
-                hintText: 'herondave@gmail.com',
+                hintText: 'eventgoer@fairtix.test',
                 keyboardType: TextInputType.emailAddress,
                 textInputAction: TextInputAction.next,
               ),

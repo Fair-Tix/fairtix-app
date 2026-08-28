@@ -1,12 +1,6 @@
-import '../models/app_user.dart';
-
-/// Placeholder "logged in user" for UI scaffolding.
-/// TODO: replace with the real signed-in user from Firebase Auth once
-/// the backend is wired up.
-const AppUser currentUser = AppUser(
-  fullName: 'Heron Dave Mahilum',
-  username: '@herondave',
-  email: 'herondave@gmail.com',
-  idType: 'Philippine National ID (PhilSys)',
-  isVerified: true,
-);
+// Deprecated: the hardcoded `currentUser` placeholder that used to live
+// here has been replaced by `UserSession.instance.account`, backed by
+// `UserAuthService`'s single seeded test account (see
+// lib/services/user_session.dart and lib/services/user_auth_service.dart).
+//
+// This file is no longer imported anywhere and is safe to delete.

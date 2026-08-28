@@ -4,13 +4,33 @@ import '../../theme/app_theme.dart';
 import '../../widgets/gradient_background.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/timeline_step.dart';
-import 'account_activated_screen.dart';
+import 'login_screen.dart';
 
 class RegistrationPendingScreen extends StatelessWidget {
-  const RegistrationPendingScreen({super.key});
+  const RegistrationPendingScreen({
+    super.key,
+    this.idType = '',
+    this.submittedAt,
+  });
+
+  final String idType;
+  final DateTime? submittedAt;
+
+  static const _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  String _formatSubmittedAt(DateTime dt) {
+    final hour12 = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final period = dt.hour >= 12 ? 'PM' : 'AM';
+    return '${_months[dt.month - 1]} ${dt.day}, ${dt.year} \u2022 $hour12:$minute $period';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final displayIdType = idType.isNotEmpty ? idType : 'Not specified';
+    final displaySubmittedAt = submittedAt != null ? _formatSubmittedAt(submittedAt!) : 'Just now';
     return Scaffold(
       body: GradientBackground(
         child: LayoutBuilder(
@@ -76,9 +96,9 @@ class RegistrationPendingScreen extends StatelessWidget {
                   children: [
                     Text('SUBMITTED ID DETAILS', style: AppTextStyles.cardLabel),
                     const SizedBox(height: 14),
-                    _detailRow('ID Type', 'Philippine National ID (PhilSys)'),
+                    _detailRow('ID Type', displayIdType),
                     const SizedBox(height: 10),
-                    _detailRow('Submitted', 'June 27, 2026 • 9:41 AM'),
+                    _detailRow('Submitted', displaySubmittedAt),
                     const SizedBox(height: 10),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -125,14 +145,15 @@ class RegistrationPendingScreen extends StatelessWidget {
               PillButton(
                 label: 'Back to Home',
                 onPressed: () {
-                  // TODO: this button currently simulates admin approval by
-                  // jumping to Account Activated, for UI preview purposes only.
-                  // Once backend review status is wired up, this should just
-                  // go back Home, and Account Activated should instead be
-                  // reached via a push notification / in-app alert once the
-                  // account is actually approved.
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (_) => const AccountActivatedScreen()),
+                  // TODO(backend): once account review status is wired up,
+                  // AccountActivatedScreen should be reached via a push
+                  // notification / in-app alert when the account is
+                  // actually approved by an admin — not from this button.
+                  // This button genuinely just returns to the login screen,
+                  // matching its label.
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                    (route) => false,
                   );
                 },
               ),

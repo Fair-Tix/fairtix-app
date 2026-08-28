@@ -121,6 +121,21 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
               ),
             ),
             const SizedBox(height: 28),
+            if (AdminAuthService.debugCredentialsHint.isNotEmpty) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF3F0FF),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'Test account: ${AdminAuthService.debugCredentialsHint}',
+                  style: AppTextStyles.bodyGray.copyWith(fontSize: 12),
+                ),
+              ),
+              const SizedBox(height: 18),
+            ],
             _field(
               label: 'Email Address',
               hint: 'Email Adress',

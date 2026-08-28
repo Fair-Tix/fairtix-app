@@ -8,8 +8,9 @@ class AdminAuthException implements Exception {
 
 /// handles admin authentication for the portal.
 ///
-/// this local account keeps the portal flow testable until Firebase
-/// Authentication and admin custom claims are connected
+/// this local account keeps the portal flow testable until Supabase Auth
+/// and an admin `role` check (see supabase/policies.sql) are connected.
+/// See docs/FairTix-Backend-Roadmap.md, Phase 1.
 class AdminAuthService {
   AdminAuthService._();
   static final AdminAuthService instance = AdminAuthService._();

@@ -2,12 +2,14 @@ import '../models/organizer_event.dart';
 
 /// In-memory store of the signed-in organizer's events.
 ///
-/// TODO(backend): Replace the storage in this class with Cloud Firestore
-/// reads/writes scoped to the signed-in organizer's `organizer_id` (see
-/// Chapter III Data Dictionary: Events / Ticket Tiers). Screens only call
-/// the public methods below (`events`, `addEvent`, `updateEvent`,
+/// TODO(backend): Replace the storage in this class with Postgres
+/// reads/writes (the `events` / `ticket_tiers` tables — see
+/// supabase/schema.sql) scoped to the signed-in organizer's `organizer_id`
+/// (see Chapter III Data Dictionary: Events / Ticket Tiers). Screens only
+/// call the public methods below (`events`, `addEvent`, `updateEvent`,
 /// `cancelEvent`, `deleteEvent`, `getById`), so swapping the storage layer
-/// should not require any UI changes.
+/// should not require any UI changes. See docs/FairTix-Backend-Roadmap.md,
+/// Phase 2.
 ///
 /// Starts empty on every app run - no sample/dummy events are seeded here.
 class EventRepository {

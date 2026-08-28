@@ -1,6 +1,7 @@
 /// Placeholder "current user" model for UI scaffolding.
-/// TODO: replace with the real user profile pulled from Firebase Auth +
-/// the USERS Firestore document once the backend is wired up.
+/// TODO: replace with the real user profile pulled from Supabase Auth +
+/// the `users` Postgres table (see supabase/schema.sql) once the backend
+/// is wired up.
 class AppUser {
   const AppUser({
     required this.fullName,

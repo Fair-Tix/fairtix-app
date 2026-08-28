@@ -1,35 +1,14 @@
-import '../models/event.dart';
 import '../models/ticket.dart';
-import 'sample_events.dart';
 
-/// Placeholder "tickets the current user owns" for UI scaffolding.
-/// TODO: replace with a real query against the TICKETS Firestore
-/// collection filtered by owner_id == current user once wired up.
-final List<Ticket> sampleMyTickets = [
-  Ticket(
-    id: 'tkt_0001',
-    event: sampleEvents[0], // A1 – Love in the Philippines Tour 2026
-    tier: sampleEvents[0].tiers[0], // VIP
-    ownerName: 'Heron Dave Mahilum',
-    qrToken: 'FTX-A1-VIP-0001-8F3D',
-    status: TicketStatus.listed,
-    resalePrice: 5000,
-  ),
-  Ticket(
-    id: 'tkt_0002',
-    event: sampleEvents[0], // A1 – Love in the Philippines Tour 2026
-    tier: const TicketTier(name: 'General Access', seatingLabel: 'Free Seating', price: 1000),
-    ownerName: 'Heron Dave Mahilum',
-    qrToken: 'FTX-A1-GA-0002-2C7B',
-  ),
-  Ticket(
-    id: 'tkt_0003',
-    event: sampleEvents[1], // BINI Signals World Tour
-    tier: sampleEvents[1].tiers[1], // General Admission
-    ownerName: 'Heron Dave Mahilum',
-    qrToken: 'FTX-BINI-GA-0003-5A19',
-  ),
-];
+/// Tickets the current user owns.
+/// TODO(backend): replace with a real query against the TICKETS
+/// Firestore collection filtered by owner_id == current user once wired
+/// up.
+///
+/// Starts empty on every app run — no sample/dummy tickets are seeded
+/// here. Screens that read this already render an empty state when the
+/// list has no entries.
+final List<Ticket> sampleMyTickets = [];
 
 /// Event ids for which the current user has already resold their ticket.
 /// Per the study's purchase-limit rule, once a user resells their ticket
@@ -37,8 +16,9 @@ final List<Ticket> sampleMyTickets = [
 /// another ticket for the same event. Populated when a "your ticket has
 /// been bought" notification is opened (see NotificationsScreen), which
 /// simulates the resale completing and the ticket leaving `sampleMyTickets`.
-/// TODO: replace with a real query against TRANSACTIONS (transaction_type
-/// == resale, seller_id == current user) once the backend is wired up.
+/// TODO(backend): replace with a real query against TRANSACTIONS
+/// (transaction_type == resale, seller_id == current user) once the
+/// backend is wired up.
 final Set<String> soldTicketEventIds = {};
 
 /// True if the current user currently owns a valid or listed ticket for

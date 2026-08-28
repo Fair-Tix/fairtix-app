@@ -513,7 +513,7 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
   Widget _buildMonthlyBreakdown(bool hasData) {
     return _panel(
       title: 'Monthly Breakdown',
-      trailing: '2026',
+      trailing: '${DateTime.now().year}',
       child: Column(
         children: [
           const Divider(height: 1),

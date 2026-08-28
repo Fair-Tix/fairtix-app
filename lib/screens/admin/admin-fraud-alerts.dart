@@ -425,7 +425,7 @@ class _AdminFraudAlertsScreenState extends State<AdminFraudAlertsScreen> {
           style: TextStyle(color: AppColors.textGray, fontSize: 10),
         ),
         Spacer(),
-        Icon(Icons.chevron_left, size: 17, color: AppColors.textGray),
+        Icon(Icons.chevron_left, size: 17, color: Color(0xFFD9D7E4)),
         SizedBox(width: 12),
         Text(
           '1',
@@ -436,9 +436,7 @@ class _AdminFraudAlertsScreenState extends State<AdminFraudAlertsScreen> {
           ),
         ),
         SizedBox(width: 12),
-        Text('2', style: TextStyle(color: AppColors.textGray, fontSize: 11)),
-        SizedBox(width: 12),
-        Icon(Icons.chevron_right, size: 17, color: AppColors.textGray),
+        Icon(Icons.chevron_right, size: 17, color: Color(0xFFD9D7E4)),
       ],
     ),
   );

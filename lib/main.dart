@@ -1,20 +1,23 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'supabase_config.dart';
 import 'screens/organizer/organizer-splash.dart';
 import 'screens/organizer/app_colors.dart';
 import 'screens/user/splash_screen.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const MyApp());
-  unawaited(
-    Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform),
+  await Supabase.initialize(
+    url: SupabaseConfig.url,
+    anonKey: SupabaseConfig.anonKey,
   );
+  runApp(const MyApp());
 }
+
+/// Convenience accessor used throughout the app's service layer, e.g.
+/// `supabase.from('users')...` or `supabase.auth.signInWithPassword(...)`.
+final SupabaseClient supabase = Supabase.instance.client;
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});

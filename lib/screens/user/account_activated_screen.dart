@@ -5,25 +5,37 @@ import '../../theme/app_theme.dart';
 import '../../widgets/gradient_background.dart';
 import '../../widgets/pill_button.dart';
 
+/// Shown once an eventgoer's account has been reviewed and approved.
+/// TODO(backend): this should be reached via a push notification / in-app
+/// alert triggered when an admin actually approves the account (see
+/// RegistrationPendingScreen), with [fullName]/[idType]/[email] populated
+/// from the real Firestore user record and [memberSince] set to the
+/// account's real creation date — not left to the defaults below.
 class AccountActivatedScreen extends StatelessWidget {
   const AccountActivatedScreen({
     super.key,
-    this.fullName = 'Heron Dave Mahilum',
-    this.idType = 'Philippine National ID (PhilSys)',
-    this.email = 'herondave@gmail.com',
+    required this.fullName,
+    required this.idType,
+    required this.email,
+    required this.memberSince,
     this.accountType = 'Buyer',
-    this.memberSince = 'June 27, 2026',
   });
 
   final String fullName;
   final String idType;
   final String email;
   final String accountType;
-  final String memberSince;
+  final DateTime memberSince;
+
+  static const _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  String _formatMemberSince(DateTime dt) => '${_months[dt.month - 1]} ${dt.day}, ${dt.year}';
 
   @override
   Widget build(BuildContext context) {
-    final firstName = fullName.split(' ').first;
+    final firstName = fullName.trim().isEmpty ? 'there' : fullName.trim().split(RegExp(r'\s+')).first;
     return Scaffold(
       body: GradientBackground(
         gradient: AppGradients.confirmation,
@@ -102,7 +114,7 @@ class AccountActivatedScreen extends StatelessWidget {
                     const SizedBox(height: 12),
                     _row('Account Type', accountType, valueColor: AppColors.white),
                     const SizedBox(height: 12),
-                    _row('Member Since', memberSince),
+                    _row('Member Since', _formatMemberSince(memberSince)),
                   ],
                 ),
               ),

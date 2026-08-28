@@ -43,6 +43,12 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _newPasswordController.addListener(() => setState(() {}));
+  }
+
+  @override
   void dispose() {
     _currentPasswordController.dispose();
     _newPasswordController.dispose();
@@ -501,7 +507,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
                   children: [
                     const Expanded(
                       child: Text(
-                        'Last changed: 30 days ago',
+                        'Password changes are not saved to a backend yet.',
                         style: TextStyle(color: Color(0xFFA6A9B7), fontSize: 8),
                       ),
                     ),
@@ -580,50 +586,81 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
     ),
   );
 
-  Widget _strengthIndicator() => SizedBox(
-    width: 310,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Container(
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.dangerRed,
-                  borderRadius: BorderRadius.circular(3),
+  Widget _strengthIndicator() {
+    final password = _newPasswordController.text;
+    int score = 0;
+    if (password.length >= 8) score++;
+    if (password.length >= 12) score++;
+    if (RegExp(r'[A-Z]').hasMatch(password) && RegExp(r'[a-z]').hasMatch(password)) score++;
+    if (RegExp(r'[0-9]').hasMatch(password)) score++;
+    if (RegExp(r'[^A-Za-z0-9]').hasMatch(password)) score++;
+
+    final String label;
+    final Color color;
+    if (password.isEmpty) {
+      label = 'Enter a new password';
+      color = const Color(0xFFA6A9B7);
+    } else if (score <= 1) {
+      label = 'Password strength: Weak';
+      color = AppColors.dangerRed;
+    } else if (score <= 3) {
+      label = 'Password strength: Medium';
+      color = AppColors.warningOrange;
+    } else {
+      label = 'Password strength: Strong';
+      color = AppColors.successGreen;
+    }
+
+    Color barColor(int index) {
+      final filled = password.isEmpty ? 0 : (score.clamp(0, 5) / 5 * 3).ceil();
+      return index < filled ? color : const Color(0xFFE5E7EB);
+    }
+
+    return SizedBox(
+      width: 310,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: barColor(0),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 4),
-            Expanded(
-              child: Container(height: 4, color: AppColors.warningOrange),
-            ),
-            const SizedBox(width: 4),
-            Expanded(
-              child: Container(
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.successGreen,
-                  borderRadius: BorderRadius.circular(3),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Container(height: 4, color: barColor(1)),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Container(
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: barColor(2),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 5),
-        const Text(
-          'Password strength: Strong',
-          style: TextStyle(
-            color: AppColors.successGreen,
-            fontSize: 8,
-            fontWeight: FontWeight.w700,
+            ],
           ),
-        ),
-      ],
-    ),
-  );
+          const SizedBox(height: 5),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 8,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildActivityCard(bool isWide) => _Panel(
     child: Column(

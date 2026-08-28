@@ -40,7 +40,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   }
 
   void _handleContinue() {
-    // TODO: validate fields and create the Firebase Auth account here.
+    // TODO(backend): validate fields and create the Firebase Auth account here.
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => OtpVerificationScreen(email: _emailController.text)),
     );

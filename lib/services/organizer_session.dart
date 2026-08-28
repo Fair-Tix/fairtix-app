@@ -6,7 +6,7 @@ import '../models/organizer.dart';
 /// read the active account (name, avatar, subscription, etc.) without
 /// threading it through constructors. When real authentication is added,
 /// [signIn] / [signOut] should be driven by the auth service (e.g. in
-/// response to a `FirebaseAuth` auth-state-changed event) instead of being
+/// response to a Supabase `onAuthStateChange` event) instead of being
 /// called directly from UI code.
 class OrganizerSession {
   OrganizerSession._();

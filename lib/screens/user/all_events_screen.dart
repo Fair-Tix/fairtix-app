@@ -69,7 +69,12 @@ class _AllEventsScreenState extends State<AllEventsScreen> {
             Expanded(
               child: events.isEmpty
                   ? Center(
-                      child: Text('No events match your search.', style: AppTextStyles.bodyMuted),
+                      child: Text(
+                        _searchQuery.isEmpty
+                            ? 'No events available yet. Check back soon!'
+                            : 'No events match your search.',
+                        style: AppTextStyles.bodyMuted,
+                      ),
                     )
                   : ListView.separated(
                       padding: const EdgeInsets.only(bottom: 20),

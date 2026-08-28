@@ -322,7 +322,10 @@ class AdminAccountsScreen extends StatelessWidget {
               ),
               _filterMenu('All'),
               ElevatedButton(
-                onPressed: () {},
+                onPressed: () => _showMessage(
+                  context,
+                  'Filters applied. No accounts match yet.',
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryPurple,
                   foregroundColor: Colors.white,

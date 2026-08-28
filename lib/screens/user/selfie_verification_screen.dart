@@ -7,7 +7,9 @@ import '../../widgets/step_dots.dart';
 import 'registration_pending_screen.dart';
 
 class SelfieVerificationScreen extends StatefulWidget {
-  const SelfieVerificationScreen({super.key});
+  const SelfieVerificationScreen({super.key, this.idType = ''});
+
+  final String idType;
 
   @override
   State<SelfieVerificationScreen> createState() => _SelfieVerificationScreenState();
@@ -23,7 +25,12 @@ class _SelfieVerificationScreenState extends State<SelfieVerificationScreen> {
     if (!mounted) return;
     setState(() => _isSubmitting = false);
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const RegistrationPendingScreen()),
+      MaterialPageRoute(
+        builder: (_) => RegistrationPendingScreen(
+          idType: widget.idType,
+          submittedAt: DateTime.now(),
+        ),
+      ),
     );
   }
 

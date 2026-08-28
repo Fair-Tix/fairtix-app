@@ -5,6 +5,7 @@ import '../../data/sample_transactions.dart';
 import '../../models/event.dart';
 import '../../models/ticket.dart';
 import '../../models/transaction.dart';
+import '../../services/user_session.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_pill_button.dart';
 import '../../widgets/purple_header_bar.dart';
@@ -34,7 +35,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       id: 'tkt_${DateTime.now().millisecondsSinceEpoch}',
       event: widget.event,
       tier: widget.tier,
-      ownerName: 'Heron Dave Mahilum',
+      ownerName: UserSession.instance.account?.fullName ?? 'FairTix User',
       qrToken: 'FTX-${DateTime.now().millisecondsSinceEpoch}',
     );
     sampleMyTickets.add(newTicket);

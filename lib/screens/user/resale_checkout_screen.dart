@@ -4,6 +4,7 @@ import '../../data/sample_resale_listings.dart';
 import '../../data/sample_tickets.dart';
 import '../../models/event.dart';
 import '../../models/ticket.dart';
+import '../../services/user_session.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_pill_button.dart';
 import '../../widgets/purple_header_bar.dart';
@@ -39,7 +40,7 @@ class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> {
       id: 'tkt_${DateTime.now().millisecondsSinceEpoch}',
       event: listing.event,
       tier: listing.tier,
-      ownerName: 'Heron Dave Mahilum',
+      ownerName: UserSession.instance.account?.fullName ?? 'FairTix User',
       qrToken: 'FTX-RS-${listing.id}-${DateTime.now().millisecondsSinceEpoch}',
     );
     sampleMyTickets.add(newTicket);

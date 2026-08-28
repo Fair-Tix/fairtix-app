@@ -57,12 +57,12 @@ class TicketTier {
 /// A single organizer-owned event.
 ///
 /// TODO(backend): This currently lives only in memory via
-/// [EventRepository]. Once Cloud Firestore is wired in, this model should
-/// mirror the `events` / `ticket_tiers` collections (see Chapter III Data
-/// Dictionary) and be read/written through Firestore instead of the
-/// in-memory list. Screens depend only on this model and on
+/// [EventRepository]. Once Postgres is wired in, this model should mirror
+/// the `events` / `ticket_tiers` tables (see Chapter III Data Dictionary
+/// and supabase/schema.sql) and be read/written through Supabase instead
+/// of the in-memory list. Screens depend only on this model and on
 /// `EventRepository`'s method signatures, so that swap should not require
-/// UI changes.
+/// UI changes. See docs/FairTix-Backend-Roadmap.md, Phase 2.
 class OrganizerEvent {
   final String id;
   final String name;

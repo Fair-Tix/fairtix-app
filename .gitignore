@@ -1,6 +1,5 @@
 # Miscellaneous
 *.class
-*.lock
 *.log
 *.pyc
 *.swp
@@ -118,9 +117,7 @@ app.*.symbols
 !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
 !/dev/ci/**/Gemfile.lock
 
-# Firebase - don't commit config/secrets
-**/android/app/google-services.json
-**/ios/Runner/GoogleServiceInfo.plist
-**/lib/firebase_options.dart
+# Deprecated Firebase config (project migrated to Supabase — see docs/FairTix-Backend-Roadmap.md)
+_deprecated_firebase/
 .env
 .idea/

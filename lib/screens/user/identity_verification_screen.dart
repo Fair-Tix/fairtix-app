@@ -34,7 +34,9 @@ class _IdentityVerificationScreenState extends State<IdentityVerificationScreen>
 
   void _handleSubmit() {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const SelfieVerificationScreen()),
+      MaterialPageRoute(
+        builder: (_) => SelfieVerificationScreen(idType: _idType),
+      ),
     );
   }
 

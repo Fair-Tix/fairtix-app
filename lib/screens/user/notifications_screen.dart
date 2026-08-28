@@ -49,7 +49,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       MaterialPageRoute(
         builder: (_) => TicketSoldScreen(
           ticket: ticket!,
-          buyerName: 'Justine Manalo',
+          // TODO(backend): resolve the real buyer from the resale
+          // TRANSACTIONS record's buyer_id once the resale backend is
+          // wired up. TicketSoldScreen doesn't currently display this
+          // name (it just shows a "Confirmed" badge), so this is a safe
+          // non-identifying placeholder in the meantime.
+          buyerName: 'A verified buyer',
           salePrice: ticket.resalePrice ?? ticket.tier.price,
         ),
       ),

@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../../services/admin_session.dart';
 import '../organizer/app_colors.dart';
+import 'admin-accounts.dart';
+import 'admin-events-tickets.dart';
 import 'admin-fraud-alerts.dart';
 import 'admin-login.dart';
+import 'admin-organizer-applications.dart';
+import 'admin-resale-monitoring.dart';
 import 'admin-route.dart';
 import 'admin-revenue-reports.dart';
 import 'admin-platform-settings.dart';
@@ -107,22 +111,34 @@ class _AdminAnnouncementScreenState extends State<AdminAnnouncementScreen> {
             _SidebarItem(
               icon: Icons.business_outlined,
               label: 'Organizer Applications',
-              onTap: () {},
+              onTap: () => Navigator.pushReplacement(
+                context,
+                adminPageRoute(const AdminOrganizerApplicationsScreen()),
+              ),
             ),
             _SidebarItem(
               icon: Icons.people_outline,
               label: 'Accounts',
-              onTap: () {},
+              onTap: () => Navigator.pushReplacement(
+                context,
+                adminPageRoute(const AdminAccountsScreen()),
+              ),
             ),
             _SidebarItem(
               icon: Icons.calendar_today_outlined,
               label: 'Events & Tickets',
-              onTap: () {},
+              onTap: () => Navigator.pushReplacement(
+                context,
+                adminPageRoute(const AdminEventsTicketsScreen()),
+              ),
             ),
             _SidebarItem(
               icon: Icons.swap_vert_rounded,
               label: 'Resale Monitoring',
-              onTap: () {},
+              onTap: () => Navigator.pushReplacement(
+                context,
+                adminPageRoute(const AdminResaleMonitoringScreen()),
+              ),
             ),
             _SidebarItem(
               icon: Icons.shield_outlined,
@@ -533,7 +549,6 @@ class _SidebarItem extends StatelessWidget {
     this.selected = false,
     required this.onTap,
   });
-  @override
   @override
   Widget build(BuildContext context) {
     return Padding(

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../data/sample_user.dart';
+import '../../models/app_user.dart';
+import '../../services/user_auth_service.dart';
+import '../../services/user_session.dart';
 import '../../theme/app_theme.dart';
 import 'help_support_screen.dart';
 import 'login_screen.dart';
@@ -10,13 +12,14 @@ import 'transactions_screen.dart';
 
 /// "My Profile" tab — account details, ID verification status, app
 /// settings, and log out.
-/// TODO: replace `currentUser` with the real signed-in user from
-/// Firebase Auth once the backend is wired up.
+/// TODO(backend): [UserSession.instance.account] is populated by
+/// [UserAuthService]'s hardcoded test-account login. Replace with the
+/// real signed-in user from Firebase Auth once the backend is wired up.
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
   void _handleLogOut(BuildContext context) {
-    // TODO: sign out of Firebase Auth here once wired up.
+    UserAuthService.instance.logout();
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginScreen()),
       (route) => false,
@@ -31,7 +34,14 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final user = currentUser;
+    final user = UserSession.instance.account ??
+        const AppUser(
+          fullName: 'Guest',
+          username: '',
+          email: '',
+          idType: 'Not verified',
+          isVerified: false,
+        );
     return Scaffold(
       backgroundColor: AppColors.pageBackground,
       body: SafeArea(

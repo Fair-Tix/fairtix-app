@@ -111,8 +111,34 @@
   shared with the organizer/admin web build (`flutter run -d chrome`) —
   adding one would break that build entirely, not just degrade
   gracefully.
-- ⬜ `login_screen.dart` / `login()` still checks the hardcoded test
-  account, not real Supabase Auth (see Phase 1 below)
+- ✅ `login_screen.dart` / `user_auth_service.dart`'s `login()`: now calls
+  `supabase.auth.signInWithPassword(...)`, then loads the matching
+  `public.users` row into `UserSession` via the new `AppUser.fromRow()`
+  factory. `AppUser` gained `idVerificationStatus` (`pending` /
+  `verified` / `rejected`) and `idDocumentUrl` so the login screen can
+  route correctly instead of always going Home:
+  - `verified` → `MainShell` (straight into the app)
+  - no `id_document_url` yet, or `rejected` → `IdentityVerificationScreen`
+    (resume/redo the ID upload step)
+  - `pending` with an ID already on file → `RegistrationPendingScreen`
+    ("under admin review")
+  `logout()` is now `Future<void>` and also calls
+  `supabase.auth.signOut()` (was local-session-only before); its one
+  call site (`profile_screen.dart`) was updated to `await` it.
+  `debugCredentialsHint` is now `''` (was the shared test-account
+  string), so the login screen's "Test account: ..." hint box no longer
+  renders.
+  - ⚠️ Not done in this pass: gating on `role = 'buyer'` (an organizer
+    or admin account could technically log in here too, since this only
+    checks `auth.signInWithPassword` + loads the `public.users` row
+    without checking `role`). Low-priority since the organizer/admin
+    portals have their own separate login screens and nothing currently
+    links a buyer session to organizer/admin-only actions.
+  - ⚠️ Not done: "Forgot Password?" is still a no-op TODO; would map to
+    `supabase.auth.resetPasswordForEmail(...)`.
+  - ⬜ Organizer/Admin (`organizer_auth_service.dart` /
+    `admin_auth_service.dart`) still check hardcoded test accounts —
+    same pattern as above applies when those are picked up.
 
 ## Progress update (session 2 — organizer registration)
 
@@ -185,6 +211,51 @@
       add column venue_proof_url text,
       add column event_permit_url text;
     ```
+
+## Progress update (session 4 — organizer login)
+
+- ✅ `organizer-login.dart` / `organizer_auth_service.dart`'s `login()`:
+  now calls `supabase.auth.signInWithPassword(...)`, verifies
+  `public.users.role == 'organizer'` (signs back out and rejects
+  otherwise — e.g. a buyer account trying this portal), loads the
+  organizer's latest **active** `public.organizer_subscriptions` row (if
+  any), and populates `OrganizerSession` via a new `OrganizerAccount`
+  built from both. `OrganizerAccount` gained `idVerificationStatus`
+  ('pending' / 'verified' / 'rejected') so the login screen can route
+  correctly instead of always going to the Dashboard:
+  - not `verified` → `OrganizerVerificationPendingScreen` (covers both
+    `pending` and `rejected` — there's no separate
+    resubmit-documents screen for organizers yet, unlike the eventgoer
+    flow's `IdentityVerificationScreen`)
+  - `verified` with no active subscription →
+    `OrganizerSubscriptionPlanScreen`
+  - `verified` with an active subscription → `OrganizerDashboardScreen`
+  `logout()` now also calls `supabase.auth.signOut()` (was
+  local-session-only before); kept as a synchronous fire-and-forget call
+  (not `await`ed) since its one call site, `organizer-profile.dart`'s
+  logout confirmation dialog, is a synchronous `onPressed` and
+  `unawaited_futures` isn't in this project's lint set, so this doesn't
+  need the `async`/`await` treatment the eventgoer version got.
+  `debugCredentialsHint` is now `''`, so the login screen's "Test
+  account: ..." hint box no longer renders.
+  - ⚠️ **Schema gap worked around, not fixed**: `organizer_subscriptions`
+    (Table 7) has no plan-name column, only `monthly_fee`. `login()`
+    derives the plan name by matching the fee against the Chapter III
+    price list (₱299 → Basic, ₱699 → Standard, ₱1,499 → Premium) via a
+    new private `_planNameFromMonthlyFee()` helper. This breaks if
+    pricing ever changes without a matching code update — a real fix
+    would add a `plan_name` (or `plan` enum) column to
+    `organizer_subscriptions` in a future schema migration.
+  - ⚠️ Not done: nothing yet *writes* to `organizer_subscriptions` for a
+    real organizer — `organizer-subscription-plan.dart`'s "Select
+    {plan}" button still only calls
+    `OrganizerSession.instance.updateAccount(...)` in memory (see that
+    screen's `_selectPlan`), so a chosen plan doesn't survive logout
+    yet. Wiring that insert is Phase 2 work.
+  - ⚠️ Not done: "Forgot Password?" still just shows a snackbar; would
+    map to `supabase.auth.resetPasswordForEmail(...)`.
+  - ⬜ Admin (`admin_auth_service.dart`) still checks a hardcoded test
+    account — same pattern applies when that's picked up.
 
 ## Phase 1 — Real Login/Register for all three portals (Supabase Auth)
 

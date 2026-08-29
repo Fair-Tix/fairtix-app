@@ -13,35 +13,38 @@ class OrganizerAuthException implements Exception {
 
 /// Handles organizer authentication.
 ///
-/// [register] is wired to real Supabase Auth. [login] still checks the
-/// hardcoded [_testAccount] pending Phase 1's login work (see
-/// docs/FairTix-Backend-Roadmap.md) — replace it the same way, with
-/// `supabase.auth.signInWithPassword(...)` followed by loading the
-/// matching row (joined with the latest `organizer_subscriptions` row)
-/// from Postgres into [OrganizerSession].
-///
-/// Exactly one seeded test account exists so the login -> dashboard ->
-/// navigation flow can be exercised end-to-end before real login is wired
-/// up. No other sample accounts are created anywhere in the app.
+/// [register] and [login] are both wired to real Supabase Auth. [login]
+/// calls `supabase.auth.signInWithPassword(...)`, confirms the account's
+/// `public.users.role` is 'organizer', loads its latest active
+/// `public.organizer_subscriptions` row (if any), and populates
+/// [OrganizerSession].
 class OrganizerAuthService {
   OrganizerAuthService._();
   static final OrganizerAuthService instance = OrganizerAuthService._();
 
-  static const String _testEmail = 'organizer@fairtix.test';
-  static const String _testPassword = 'FairTix123!';
+  /// Shown on the login screen so testers know what to type. Left empty
+  /// now that [login] hits real Supabase Auth — there's no single shared
+  /// test account anymore, each organizer registers their own.
+  static const String debugCredentialsHint = '';
 
-  static final OrganizerAccount _testAccount = OrganizerAccount(
-    id: 'test-organizer-001',
-    fullName: 'Test Organizer',
-    email: _testEmail,
-    organizationName: 'FairTix Test Organization',
-    subscriptionPlan: 'Basic',
-    subscriptionRenewsAt: DateTime.now().add(const Duration(days: 30)),
-  );
-
-  /// Shown on the login screen so testers know what to type. Set this to an
-  /// empty string once real authentication is wired in.
-  static const String debugCredentialsHint = '$_testEmail / $_testPassword';
+  /// Maps `organizer_subscriptions.monthly_fee` back to a plan name.
+  /// The table only stores the fee actually charged (see schema.sql,
+  /// Table 7), not a separate plan-name column, so this mirrors the
+  /// pricing from Chapter III: ₱299 = Basic, ₱699 = Standard,
+  /// ₱1,499 = Premium. Falls back to null (unrecognized amount) rather
+  /// than guessing.
+  static String? _planNameFromMonthlyFee(num? fee) {
+    switch (fee) {
+      case 299:
+        return 'Basic';
+      case 699:
+        return 'Standard';
+      case 1499:
+        return 'Premium';
+      default:
+        return null;
+    }
+  }
 
   Future<OrganizerAccount> login({
     required String email,
@@ -49,19 +52,79 @@ class OrganizerAuthService {
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
 
-    // Simulate network latency so the loading state is visible, matching
-    // how a real backend call would behave.
-    await Future.delayed(const Duration(milliseconds: 400));
+    AuthResponse response;
+    try {
+      response = await Supabase.instance.client.auth.signInWithPassword(
+        email: normalizedEmail,
+        password: password,
+      );
+    } on AuthException catch (e) {
+      throw OrganizerAuthException(e.message);
+    }
 
-    if (normalizedEmail != _testEmail.toLowerCase() ||
-        password != _testPassword) {
+    final authUser = response.user;
+    if (authUser == null) {
       throw const OrganizerAuthException(
         'Invalid email or password. Please try again.',
       );
     }
 
-    OrganizerSession.instance.signIn(_testAccount);
-    return _testAccount;
+    final Map<String, dynamic> row;
+    try {
+      row = await Supabase.instance.client
+          .from('users')
+          .select()
+          .eq('id', authUser.id)
+          .single();
+    } on PostgrestException catch (e) {
+      await Supabase.instance.client.auth.signOut();
+      throw OrganizerAuthException('Could not load your account details: ${e.message}');
+    }
+
+    if (row['role'] != 'organizer') {
+      await Supabase.instance.client.auth.signOut();
+      throw const OrganizerAuthException(
+        'This account is not registered as an organizer. Use the eventgoer '
+        'app to sign in instead, or apply for an organizer account below.',
+      );
+    }
+
+    String? subscriptionPlan;
+    DateTime? subscriptionRenewsAt;
+    try {
+      final subRow = await Supabase.instance.client
+          .from('organizer_subscriptions')
+          .select()
+          .eq('user_id', authUser.id)
+          .eq('status', 'active')
+          .order('start_date', ascending: false)
+          .limit(1)
+          .maybeSingle();
+      if (subRow != null) {
+        subscriptionPlan = _planNameFromMonthlyFee(subRow['monthly_fee'] as num?);
+        final endDate = subRow['end_date'] as String?;
+        subscriptionRenewsAt = endDate != null ? DateTime.tryParse(endDate) : null;
+      }
+    } on PostgrestException {
+      // Non-fatal: the organizer just hasn't picked (or synced) a plan yet;
+      // subscriptionPlan stays null and the login flow will send them to
+      // OrganizerSubscriptionPlanScreen.
+    }
+
+    final fullName = (row['full_name'] as String?)?.trim() ?? '';
+    final organizationName = (row['organization_name'] as String?)?.trim() ?? '';
+    final account = OrganizerAccount(
+      id: authUser.id,
+      fullName: fullName.isNotEmpty ? fullName : 'Organizer',
+      email: (row['email'] as String?) ?? normalizedEmail,
+      organizationName: organizationName.isNotEmpty ? organizationName : 'Your Organization',
+      subscriptionPlan: subscriptionPlan,
+      subscriptionRenewsAt: subscriptionRenewsAt,
+      idVerificationStatus: (row['id_verification_status'] as String?) ?? 'pending',
+    );
+
+    OrganizerSession.instance.signIn(account);
+    return account;
   }
 
   /// Creates a new organizer account in Supabase Auth. A `public.users`
@@ -103,6 +166,7 @@ class OrganizerAuthService {
 
   void logout() {
     OrganizerSession.instance.signOut();
+    Supabase.instance.client.auth.signOut();
   }
 
   /// Whether the Supabase client currently holds an authenticated

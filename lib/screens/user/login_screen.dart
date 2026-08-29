@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../../models/app_user.dart';
 import '../../navigation/main_shell.dart';
 import '../../services/user_auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_background.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
+import 'identity_verification_screen.dart';
+import 'registration_pending_screen.dart';
 import 'registration_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -29,11 +32,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _handleLogin() async {
     setState(() => _isLoading = true);
-    // TODO(backend): replace UserAuthService's hardcoded test-account check
-    // with real Firebase Authentication, then route based on the account's
-    // real verification status instead of always going Home.
+    AppUser account;
     try {
-      await UserAuthService.instance.login(
+      account = await UserAuthService.instance.login(
         email: _usernameController.text,
         password: _passwordController.text,
       );
@@ -47,10 +48,31 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     if (!mounted) return;
     setState(() => _isLoading = false);
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const MainShell()),
-      (route) => false,
-    );
+
+    // Route based on the account's real id_verification_status rather
+    // than always going Home:
+    //  - verified            -> straight into the app
+    //  - pending, no ID yet  -> still mid-registration; resume ID upload
+    //  - pending, ID on file -> "Verification Pending" (under admin review)
+    //  - rejected            -> treat like "no ID yet" so they can resubmit
+    if (account.idVerificationStatus == 'verified') {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const MainShell()),
+        (route) => false,
+      );
+    } else if (account.idDocumentUrl == null || account.idVerificationStatus == 'rejected') {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const IdentityVerificationScreen()),
+        (route) => false,
+      );
+    } else {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => RegistrationPendingScreen(idType: account.idType),
+        ),
+        (route) => false,
+      );
+    }
   }
 
   @override
@@ -89,7 +111,7 @@ class _LoginScreenState extends State<LoginScreen> {
               PillTextField(
                 label: 'Username',
                 controller: _usernameController,
-                hintText: 'eventgoer@fairtix.test',
+                hintText: 'you@email.com',
                 keyboardType: TextInputType.emailAddress,
                 textInputAction: TextInputAction.next,
               ),

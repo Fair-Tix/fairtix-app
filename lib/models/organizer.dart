@@ -1,11 +1,7 @@
-/// Represents a signed-in FairTix event organizer account.
-///
-/// This is a lightweight, backend-agnostic model. When real authentication
-/// (Firebase Auth) and a real data source (Cloud Firestore `users`
-/// collection) are wired in, this model's fields should map onto the
-/// corresponding remote fields (see Chapter III Data Dictionary: Users)
-/// rather than changing shape, so screens that already read from
-/// [OrganizerAccount] keep working unchanged.
+/// Represents a signed-in FairTix event organizer account, loaded from
+/// Supabase Auth + the `public.users` / `public.organizer_subscriptions`
+/// Postgres tables (see supabase/schema.sql) by
+/// `OrganizerAuthService.login()`.
 class OrganizerAccount {
   final String id;
   final String fullName;
@@ -20,6 +16,12 @@ class OrganizerAccount {
   /// active subscription.
   final DateTime? subscriptionRenewsAt;
 
+  /// Raw `public.users.id_verification_status` value: 'pending',
+  /// 'verified', or 'rejected'. Used by the login flow to decide whether
+  /// to route into the dashboard, to the "verification pending" screen,
+  /// or to block the sign-in.
+  final String idVerificationStatus;
+
   const OrganizerAccount({
     required this.id,
     required this.fullName,
@@ -27,6 +29,7 @@ class OrganizerAccount {
     required this.organizationName,
     this.subscriptionPlan,
     this.subscriptionRenewsAt,
+    this.idVerificationStatus = 'pending',
   });
 
   /// Single-letter avatar shown in the sidebar/top bar/profile screen.
@@ -45,6 +48,7 @@ class OrganizerAccount {
       subscriptionPlan: subscriptionPlan ?? this.subscriptionPlan,
       subscriptionRenewsAt:
           subscriptionRenewsAt ?? this.subscriptionRenewsAt,
+      idVerificationStatus: idVerificationStatus,
     );
   }
 }

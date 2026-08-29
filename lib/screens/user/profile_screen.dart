@@ -12,14 +12,14 @@ import 'transactions_screen.dart';
 
 /// "My Profile" tab — account details, ID verification status, app
 /// settings, and log out.
-/// TODO(backend): [UserSession.instance.account] is populated by
-/// [UserAuthService]'s hardcoded test-account login. Replace with the
-/// real signed-in user from Firebase Auth once the backend is wired up.
+/// [UserSession.instance.account] is populated by [UserAuthService.login]
+/// from the real signed-in Supabase user + their `public.users` row.
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
-  void _handleLogOut(BuildContext context) {
-    UserAuthService.instance.logout();
+  Future<void> _handleLogOut(BuildContext context) async {
+    await UserAuthService.instance.logout();
+    if (!context.mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginScreen()),
       (route) => false,

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
+import '../../models/organizer.dart';
 import '../../services/organizer_auth_service.dart';
 import 'organizer-register.dart';
 import 'organizer-dashboard.dart';
+import 'organizer-subscription-plan.dart';
+import 'organizer-verification-pending.dart';
 
 class OrganizerLoginScreen extends StatefulWidget {
   const OrganizerLoginScreen({super.key});
@@ -35,27 +38,55 @@ class _OrganizerLoginScreenState extends State<OrganizerLoginScreen> {
       _errorText = null;
     });
 
+    OrganizerAccount account;
     try {
-      await OrganizerAuthService.instance.login(
+      account = await OrganizerAuthService.instance.login(
         email: _emailController.text,
         password: _passwordController.text,
       );
+    } on OrganizerAuthException catch (e) {
       if (!mounted) return;
+      setState(() => _errorText = e.message);
+      return;
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+    if (!mounted) return;
+
+    // Route based on the account's real id_verification_status rather
+    // than always going to the Dashboard:
+    //  - not verified yet  -> "Verification Pending" (admin hasn't
+    //    approved the application; covers both 'pending' and 'rejected',
+    //    since there's no separate resubmission screen for organizers yet)
+    //  - verified, no plan -> pick a subscription plan first
+    //  - verified, has plan -> straight into the Dashboard
+    if (account.idVerificationStatus != 'verified') {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Welcome back! Login successful.'),
-        ),
+        const SnackBar(content: Text('Welcome back! Your application is still under review.')),
       );
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const OrganizerVerificationPendingScreen()),
+        (route) => false,
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Welcome back! Login successful.')),
+    );
+    if (account.subscriptionPlan == null) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const OrganizerSubscriptionPlanScreen()),
+        (route) => false,
+      );
+    } else {
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const OrganizerDashboardScreen()),
         (route) => false,
       );
-    } on OrganizerAuthException catch (e) {
-      if (!mounted) return;
-      setState(() => _errorText = e.message);
-    } finally {
-      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 

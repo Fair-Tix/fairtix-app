@@ -13,34 +13,18 @@ class UserAuthException implements Exception {
 
 /// Handles eventgoer (buyer) authentication.
 ///
-/// [register], [verifyRegistrationOtp], and [resendRegistrationOtp] are
-/// wired to real Supabase Auth. [login] still checks the hardcoded
-/// [_testAccount] pending Phase 1's login work (see
-/// docs/FairTix-Backend-Roadmap.md) — replace it the same way, with
-/// `supabase.auth.signInWithPassword(...)` followed by loading the
-/// matching row from the Postgres `users` table into [UserSession].
-///
-/// Exactly one seeded test account exists so the login -> dashboard ->
-/// navigation flow can be exercised end-to-end before real login is wired
-/// up. No other sample accounts are created anywhere in the app.
+/// [register], [verifyRegistrationOtp], [resendRegistrationOtp], and
+/// [login] are all wired to real Supabase Auth. [login] calls
+/// `supabase.auth.signInWithPassword(...)`, then loads the matching row
+/// from the Postgres `public.users` table into [UserSession].
 class UserAuthService {
   UserAuthService._();
   static final UserAuthService instance = UserAuthService._();
 
-  static const String _testEmail = 'eventgoer@fairtix.test';
-  static const String _testPassword = 'FairTix123!';
-
-  static const AppUser _testAccount = AppUser(
-    fullName: 'Test Eventgoer',
-    username: '@testeventgoer',
-    email: _testEmail,
-    idType: 'Philippine National ID (PhilSys)',
-    isVerified: true,
-  );
-
-  /// Shown on the login screen so testers know what to type. Set this to an
-  /// empty string once real authentication is wired in.
-  static const String debugCredentialsHint = '$_testEmail / $_testPassword';
+  /// Shown on the login screen so testers know what to type. Left empty
+  /// now that [login] hits real Supabase Auth — there's no single shared
+  /// test account anymore, each tester registers their own.
+  static const String debugCredentialsHint = '';
 
   Future<AppUser> login({
     required String email,
@@ -48,19 +32,37 @@ class UserAuthService {
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
 
-    // Simulate network latency so the loading state is visible, matching
-    // how a real backend call would behave.
-    await Future.delayed(const Duration(milliseconds: 400));
+    AuthResponse response;
+    try {
+      response = await Supabase.instance.client.auth.signInWithPassword(
+        email: normalizedEmail,
+        password: password,
+      );
+    } on AuthException catch (e) {
+      throw UserAuthException(e.message);
+    }
 
-    if (normalizedEmail != _testEmail.toLowerCase() ||
-        password != _testPassword) {
+    final authUser = response.user;
+    if (authUser == null) {
       throw const UserAuthException(
         'Invalid email or password. Please try again.',
       );
     }
 
-    UserSession.instance.signIn(_testAccount);
-    return _testAccount;
+    final Map<String, dynamic> row;
+    try {
+      row = await Supabase.instance.client
+          .from('users')
+          .select()
+          .eq('id', authUser.id)
+          .single();
+    } on PostgrestException catch (e) {
+      throw UserAuthException('Could not load your account details: ${e.message}');
+    }
+
+    final account = AppUser.fromRow(row);
+    UserSession.instance.signIn(account);
+    return account;
   }
 
   /// Creates a new eventgoer account in Supabase Auth. A `public.users`
@@ -229,7 +231,8 @@ class UserAuthService {
     return path;
   }
 
-  void logout() {
+  Future<void> logout() async {
     UserSession.instance.signOut();
+    await Supabase.instance.client.auth.signOut();
   }
 }

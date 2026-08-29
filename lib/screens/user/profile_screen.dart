@@ -4,10 +4,10 @@ import '../../models/app_user.dart';
 import '../../services/user_auth_service.dart';
 import '../../services/user_session.dart';
 import '../../theme/app_theme.dart';
+import 'change_password_screen.dart';
 import 'help_support_screen.dart';
 import 'login_screen.dart';
 import 'notification_preferences_screen.dart';
-import 'simple_placeholder_screen.dart';
 import 'transactions_screen.dart';
 
 /// "My Profile" tab — account details, ID verification status, app
@@ -23,12 +23,6 @@ class ProfileScreen extends StatelessWidget {
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginScreen()),
       (route) => false,
-    );
-  }
-
-  void _openPlaceholder(BuildContext context, String title, IconData icon) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => SimplePlaceholderScreen(title: title, icon: icon)),
     );
   }
 
@@ -109,7 +103,9 @@ class ProfileScreen extends StatelessWidget {
                           icon: Icons.lock_outline_rounded,
                           label: 'CHANGE PASSWORD',
                           value: 'Change Password',
-                          onTap: () => _openPlaceholder(context, 'Change Password', Icons.lock_outline_rounded),
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const ChangePasswordScreen()),
+                          ),
                         ),
                       ],
                     ),

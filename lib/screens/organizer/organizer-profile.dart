@@ -3,6 +3,7 @@ import 'app_colors.dart';
 import '../../models/organizer.dart';
 import '../../services/organizer_auth_service.dart';
 import '../../services/organizer_session.dart';
+import 'organizer-change-password.dart';
 import 'organizer-scaffold.dart';
 import 'organizer-splash.dart';
 import 'organizer-subscription-plan.dart';
@@ -171,10 +172,10 @@ class OrganizerProfileScreen extends StatelessWidget {
               const SizedBox(height: 18),
               InkWell(
                 onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                          'Password changes are coming soon. Please contact support.'),
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const OrganizerChangePasswordScreen(),
                     ),
                   );
                 },

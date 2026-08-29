@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/admin_auth_service.dart';
 import '../../services/admin_session.dart';
+import '../../services/password_service.dart';
 import '../organizer/app_colors.dart';
 import 'admin-accounts.dart';
 import 'admin-dashboard.dart';
@@ -29,6 +30,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
   bool _showCurrentPassword = false;
   bool _showNewPassword = false;
   bool _showConfirmPassword = false;
+  bool _isSavingPassword = false;
 
   static const _items = [
     (Icons.grid_view_rounded, 'Dashboard'),
@@ -73,14 +75,30 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
     }
   }
 
-  void _savePassword() {
+  Future<void> _savePassword() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Password changed successfully.')),
-    );
-    _currentPasswordController.clear();
-    _newPasswordController.clear();
-    _confirmPasswordController.clear();
+
+    setState(() => _isSavingPassword = true);
+    try {
+      await PasswordService.instance.changePassword(
+        currentPassword: _currentPasswordController.text,
+        newPassword: _newPasswordController.text,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password changed successfully.')),
+      );
+      _currentPasswordController.clear();
+      _newPasswordController.clear();
+      _confirmPasswordController.clear();
+    } on PasswordChangeException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: AppColors.dangerRed),
+      );
+    } finally {
+      if (mounted) setState(() => _isSavingPassword = false);
+    }
   }
 
   Future<void> _confirmLogout() async {
@@ -477,6 +495,9 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
                   () => setState(
                     () => _showCurrentPassword = !_showCurrentPassword,
                   ),
+                  validator: (value) => (value == null || value.isEmpty)
+                      ? 'Enter your current password.'
+                      : null,
                 ),
                 const SizedBox(height: 15),
                 _passwordField(
@@ -507,12 +528,12 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
                   children: [
                     const Expanded(
                       child: Text(
-                        'Password changes are not saved to a backend yet.',
+                        'Your name and email stay locked to your admin account. Only your password can be changed here.',
                         style: TextStyle(color: Color(0xFFA6A9B7), fontSize: 8),
                       ),
                     ),
                     FilledButton(
-                      onPressed: _savePassword,
+                      onPressed: _isSavingPassword ? null : _savePassword,
                       style: FilledButton.styleFrom(
                         backgroundColor: AppColors.primaryPurple,
                         padding: const EdgeInsets.symmetric(
@@ -523,13 +544,22 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
                           borderRadius: BorderRadius.circular(6),
                         ),
                       ),
-                      child: const Text(
-                        'Save Changes',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+                      child: _isSavingPassword
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'Save Changes',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                     ),
                   ],
                 ),

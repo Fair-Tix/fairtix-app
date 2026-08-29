@@ -45,12 +45,20 @@ class PasswordService {
       );
     } on AuthException {
       throw const PasswordChangeException('Current password is incorrect.');
+    } catch (_) {
+      throw const PasswordChangeException(
+        'Could not verify your current password. Check your connection and try again.',
+      );
     }
 
     try {
       await client.auth.updateUser(UserAttributes(password: newPassword));
     } on AuthException catch (e) {
       throw PasswordChangeException(e.message);
+    } catch (_) {
+      throw const PasswordChangeException(
+        'Could not save your new password. Check your connection and try again.',
+      );
     }
   }
 }

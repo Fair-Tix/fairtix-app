@@ -257,6 +257,46 @@
   - ⬜ Admin (`admin_auth_service.dart`) still checks a hardcoded test
     account — same pattern applies when that's picked up.
 
+## Progress update (session 5 — admin login)
+
+- ✅ `admin-login.dart` / `admin_auth_service.dart`'s `login()`: now calls
+  `supabase.auth.signInWithPassword(...)`, then confirms
+  `public.users.role == 'admin'` for the signed-in account (signs back
+  out and rejects otherwise — a buyer/organizer account, or any account
+  not yet promoted to admin, can't get in). On success,
+  `AdminSession.instance.signIn(...)` is populated with the account's
+  real email from `public.users` instead of just echoing back whatever
+  string was typed into the form.
+  `logout()` now also calls `supabase.auth.signOut()` (fire-and-forget,
+  matching the organizer version — its one call site in
+  `admin-profile.dart`'s logout dialog is a synchronous handler).
+  `debugCredentialsHint` is now `''`, so the login screen's "Test
+  account: ..." hint box no longer renders.
+  - `admin-login.dart` itself needed **no changes** — unlike the
+    eventgoer/organizer logins, there's no "pending verification" state
+    for admins to route around, so the existing on-success
+    `Navigator.pushReplacement(... AdminDashboardScreen)` already does
+    the right thing once `login()` either succeeds or throws.
+  - ⚠️ **Admin accounts still don't self-register, by design** (see
+    Phase 1 below) — this screen has no sign-up link. Before this login
+    can work at all, seed one admin manually: Supabase Dashboard →
+    Authentication → Add user, then in the SQL Editor:
+    ```sql
+    update public.users set role = 'admin' where email = 'the-seeded-email';
+    ```
+  - ⚠️ Not done: `admin-profile.dart` still has leftover copy from the
+    Firebase-era placeholder ("Local Admin Session", "until Firebase is
+    connected", "MEMBER SINCE: Not available yet") — cosmetic only, left
+    alone since it wasn't required to make login itself work, but worth
+    cleaning up alongside a future admin-profile pass.
+  - ⚠️ Not done: "Forgot Password?" still just shows a snackbar; would
+    map to `supabase.auth.resetPasswordForEmail(...)`.
+
+All three portals (eventgoer, organizer, admin) now authenticate against
+real Supabase Auth. What's left of Phase 1 is polish (password reset,
+role-gating the eventgoer login against non-buyer accounts) rather than
+core wiring — see the individual ⚠️ notes above.
+
 ## Phase 1 — Real Login/Register for all three portals (Supabase Auth)
 
 This replaces the three hardcoded test-account services

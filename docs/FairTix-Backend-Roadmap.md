@@ -12,10 +12,11 @@
 - ✅ `lib/supabase_config.dart`: created with your project URL + anon key
 - ✅ `android/settings.gradle.kts`, `android/app/build.gradle.kts`: Google
   Services plugin removed
-- ✅ Firebase-only files moved to `_deprecated_firebase/` (safe to delete
-  once the app builds clean): `firebase_options.dart`,
+- ✅ All Firebase-only files (`firebase_options.dart`,
   `google-services.json`, `firebase.json`, `.firebaserc`,
-  `firestore.rules`, `storage.rules`, `functions/`
+  `firestore.rules`, `storage.rules`, `functions/`) are gone from the
+  project entirely — confirmed no `_deprecated_firebase/` folder or any
+  other Firebase file exists anywhere in the repo as of this check
 - ✅ `supabase/schema.sql`: Postgres tables for all 11 entities in the
   Chapter III Data Dictionary (Users, Organizer Subscriptions, Events,
   Ticket Tiers, Tickets, Transactions, Resale Listings, Scanner Sessions,
@@ -284,11 +285,16 @@
     ```sql
     update public.users set role = 'admin' where email = 'the-seeded-email';
     ```
-  - ⚠️ Not done: `admin-profile.dart` still has leftover copy from the
-    Firebase-era placeholder ("Local Admin Session", "until Firebase is
-    connected", "MEMBER SINCE: Not available yet") — cosmetic only, left
-    alone since it wasn't required to make login itself work, but worth
-    cleaning up alongside a future admin-profile pass.
+  - ✅ (fixed in session 6) `admin-profile.dart` no longer shows
+    leftover Firebase-era placeholder copy ("Local Admin Session",
+    "until Firebase is connected", "Not available yet"). `AdminSession`
+    now also stores `memberSince` (the real `created_at` from
+    `public.users`, set by `login()`), and the profile screen displays
+    it plus a plain "Administrator" role badge — accurate since
+    `login()` already verified `role == 'admin'` to get this far. The
+    "Recent Activity" card's copy was also corrected: it no longer
+    implies the backend isn't connected (it is) — it now says plainly
+    that activity logging itself hasn't been built yet.
   - ⚠️ Not done: "Forgot Password?" still just shows a snackbar; would
     map to `supabase.auth.resetPasswordForEmail(...)`.
 

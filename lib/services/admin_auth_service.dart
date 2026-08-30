@@ -71,7 +71,12 @@ class AdminAuthService {
       );
     }
 
-    AdminSession.instance.signIn((row['email'] as String?) ?? normalizedEmail);
+    AdminSession.instance.signIn(
+      (row['email'] as String?) ?? normalizedEmail,
+      memberSince: row['created_at'] != null
+          ? DateTime.tryParse(row['created_at'] as String)
+          : null,
+    );
   }
 
   void logout() {

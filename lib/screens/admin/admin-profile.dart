@@ -357,16 +357,23 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 3),
               decoration: BoxDecoration(
-                border: Border.all(color: AppColors.primaryPurpleLight),
+                color: AppColors.infoBlueBg,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Text(
-                'Local Admin Session',
-                style: TextStyle(
-                  color: AppColors.primaryPurple,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w600,
-                ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.shield_outlined, size: 11, color: AppColors.infoBlue),
+                  SizedBox(width: 5),
+                  Text(
+                    'Administrator',
+                    style: TextStyle(
+                      color: AppColors.infoBlue,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 25),
@@ -375,19 +382,21 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
               Icons.mail_outline,
               'EMAIL',
               currentEmail,
-              'This is the signed-in admin session until Firebase is connected.',
+              null,
             ),
             _profileDetail(
               Icons.calendar_today_outlined,
               'MEMBER SINCE',
-              'Not available yet',
-              'Member info is not connected to a backend yet.',
+              AdminSession.instance.memberSince != null
+                  ? formatFriendlyDate(AdminSession.instance.memberSince!)
+                  : '\u2014',
+              null,
             ),
             _profileDetail(
               Icons.shield_outlined,
               'ROLE',
-              'Local admin',
-              'Role data is managed in the app until backend auth is added.',
+              'Administrator',
+              null,
             ),
             const SizedBox(height: 18),
             const Divider(height: 1),
@@ -705,7 +714,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
           padding: const EdgeInsets.all(20),
           child: Center(
             child: Text(
-              'No recent activity yet. Activity will appear here once the backend is connected.',
+              'Activity logging isn\u2019t built yet \u2014 actions you take (approvals, suspensions, etc.) aren\u2019t recorded to a log for display here.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: AppColors.textGray,

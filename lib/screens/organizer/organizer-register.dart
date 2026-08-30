@@ -116,10 +116,13 @@ class _OrganizerRegisterScreenState extends State<OrganizerRegisterScreen> {
     // confirmations enabled (the current setup — see
     // docs/FairTix-Backend-Roadmap.md), there's no session yet at this
     // point, and Storage RLS requires one, so the documents can't be
-    // uploaded until the organizer confirms their email and logs in
-    // (not built yet — tracked as a known gap in the roadmap). Uploading
-    // opportunistically here means this keeps working the moment that
-    // changes, without another code change.
+    // uploaded until the organizer confirms their email and logs in.
+    // Uploading opportunistically here means this keeps working the
+    // moment that changes, without another code change. If it's skipped
+    // (the common case today), OrganizerLoginScreen's post-login check
+    // (account.hasSubmittedDocuments) routes to
+    // OrganizerDocumentUploadScreen as a backstop, so the documents still
+    // get collected — just one step later than originally intended.
     if (OrganizerAuthService.instance.hasActiveSession) {
       try {
         await OrganizerAuthService.instance.uploadOrganizerDocument(

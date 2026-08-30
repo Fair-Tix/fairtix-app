@@ -121,6 +121,8 @@ class OrganizerAuthService {
       subscriptionPlan: subscriptionPlan,
       subscriptionRenewsAt: subscriptionRenewsAt,
       idVerificationStatus: (row['id_verification_status'] as String?) ?? 'pending',
+      venueProofUrl: row['venue_proof_url'] as String?,
+      eventPermitUrl: row['event_permit_url'] as String?,
     );
 
     OrganizerSession.instance.signIn(account);

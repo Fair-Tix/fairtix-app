@@ -22,6 +22,19 @@ class OrganizerAccount {
   /// or to block the sign-in.
   final String idVerificationStatus;
 
+  /// Storage path of the uploaded "Proof of Venue Booking" document, or
+  /// null if it hasn't been uploaded yet. Registration collects this file
+  /// but often can't upload it immediately (Supabase requires an active
+  /// session, which doesn't exist right after `signUp()` when email
+  /// confirmation is required) — [OrganizerLoginScreen] checks this field
+  /// after a successful login and routes to
+  /// [OrganizerDocumentUploadScreen] if it's still null.
+  final String? venueProofUrl;
+
+  /// Storage path of the uploaded "Valid Event Permit" document. Same
+  /// null-until-uploaded behavior as [venueProofUrl].
+  final String? eventPermitUrl;
+
   const OrganizerAccount({
     required this.id,
     required this.fullName,
@@ -30,7 +43,15 @@ class OrganizerAccount {
     this.subscriptionPlan,
     this.subscriptionRenewsAt,
     this.idVerificationStatus = 'pending',
+    this.venueProofUrl,
+    this.eventPermitUrl,
   });
+
+  /// Whether both proof-of-organization documents are on file. Login
+  /// routing uses this to decide whether the organizer still needs to be
+  /// sent to [OrganizerDocumentUploadScreen] before they can be queued
+  /// for admin review.
+  bool get hasSubmittedDocuments => venueProofUrl != null && eventPermitUrl != null;
 
   /// Single-letter avatar shown in the sidebar/top bar/profile screen.
   String get avatarInitial =>
@@ -39,6 +60,8 @@ class OrganizerAccount {
   OrganizerAccount copyWith({
     String? subscriptionPlan,
     DateTime? subscriptionRenewsAt,
+    String? venueProofUrl,
+    String? eventPermitUrl,
   }) {
     return OrganizerAccount(
       id: id,
@@ -49,6 +72,8 @@ class OrganizerAccount {
       subscriptionRenewsAt:
           subscriptionRenewsAt ?? this.subscriptionRenewsAt,
       idVerificationStatus: idVerificationStatus,
+      venueProofUrl: venueProofUrl ?? this.venueProofUrl,
+      eventPermitUrl: eventPermitUrl ?? this.eventPermitUrl,
     );
   }
 }

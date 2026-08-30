@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'app_colors.dart';
 import '../../models/organizer.dart';
 import '../../services/organizer_auth_service.dart';
+import 'organizer-document-upload.dart';
 import 'organizer-register.dart';
 import 'organizer-dashboard.dart';
 import 'organizer-subscription-plan.dart';
@@ -55,11 +56,24 @@ class _OrganizerLoginScreenState extends State<OrganizerLoginScreen> {
 
     // Route based on the account's real id_verification_status rather
     // than always going to the Dashboard:
+    //  - documents missing -> "One More Step" upload screen (registration
+    //    couldn't upload them earlier because no session existed yet)
     //  - not verified yet  -> "Verification Pending" (admin hasn't
     //    approved the application; covers both 'pending' and 'rejected',
     //    since there's no separate resubmission screen for organizers yet)
     //  - verified, no plan -> pick a subscription plan first
     //  - verified, has plan -> straight into the Dashboard
+    if (!account.hasSubmittedDocuments) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (_) => OrganizerDocumentUploadScreen(account: account),
+        ),
+        (route) => false,
+      );
+      return;
+    }
+
     if (account.idVerificationStatus != 'verified') {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Welcome back! Your application is still under review.')),

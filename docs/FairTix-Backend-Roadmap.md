@@ -297,6 +297,74 @@ real Supabase Auth. What's left of Phase 1 is polish (password reset,
 role-gating the eventgoer login against non-buyer accounts) rather than
 core wiring — see the individual ⚠️ notes above.
 
+## Progress update (session 6 — manual admin verification workflow)
+
+The eventgoer/organizer upload side (ID, selfie, venue proof, event
+permit) and the login-side routing on `id_verification_status` were both
+already done (sessions 1–5). What was still missing was the other half:
+an admin screen that actually shows pending submissions, lets an admin
+look at the uploaded documents, and flips the status to `verified` /
+`rejected`. That's now built, entirely on top of existing infrastructure
+(RLS in `policies.sql` already allowed admin reads/writes of any user row
+and any private-bucket file; the new work was fetching, displaying, and
+reviewing it):
+
+- ✅ `models/admin_user_summary.dart` (new): `AdminUserSummary` — one
+  `public.users` row shaped for the two admin review screens, plus
+  `hasReviewableDocuments` (gates the Review button so it never opens an
+  empty dialog).
+- ✅ `services/admin_user_service.dart` (new): `fetchUsers({role})` reads
+  `public.users` (optionally filtered by role) newest-first;
+  `getSignedUrl(bucket, path)` calls `storage.createSignedUrl(...)` — no
+  public URLs are ever used, matching both private buckets
+  (`identity_docs`, `organizer_docs`); `setIdVerificationStatus()` and
+  `setAccountStatus()` write the two status columns admins are allowed to
+  touch on someone else's row (via `users_update_own_or_admin`).
+- ✅ `widgets/admin_document_viewer.dart` (new): `showAdminReviewDialog(...)`
+  — a reusable dialog (used by both admin screens) that fetches a fresh
+  signed URL per document, renders images inline and offers a
+  copy-signed-link fallback for non-images (e.g. a PDF permit — there's no
+  in-app PDF viewer), and shows Approve/Reject (when `currentStatus ==
+  'pending'`) or a single Close button otherwise. Handles missing files
+  ("Not uploaded yet"), failed signed-URL generation, and failed image
+  loads as inline states rather than crashing.
+  - ✅ (this pass) Approve/Reject now require a second "Are you sure?"
+    confirmation (`_confirmAndAct`) before the Supabase update actually
+    runs — previously they fired immediately on tap.
+  - ✅ (this pass) Documents lay out side-by-side via `LayoutBuilder` +
+    `Wrap` once the dialog has ≥420px to work with (both review flows
+    only ever show 2 documents, so this reliably gives the "ID next to
+    selfie" / "venue proof next to permit" layout on desktop), and stack
+    vertically below that width — same breakpoint style used elsewhere
+    (e.g. `organizer-register.dart`'s `isWide` checks). Tapping an image
+    now opens it full-screen in an `InteractiveViewer` (pinch/drag zoom)
+    instead of only the fixed 220px inline thumbnail.
+  - No automated face comparison of any kind is implemented anywhere in
+    this dialog or its services, by design — the admin looks at both
+    images and decides.
+- ✅ `admin-accounts.dart`: real `AdminUserService.fetchUsers()` backs the
+  list (was previously a static shell per this task's brief, though the
+  fetch/filter/review/suspend wiring in the current file already covers
+  everything except the two items above) — role + verification-status
+  filter chips, a search box (name/username/email), loading/error/empty
+  states with Retry, and Review/Suspend actions per row. Approving/
+  rejecting or suspending/reactivating refetches the list so the row's
+  new state (and the pending queue) stays accurate without a manual
+  refresh, though the refresh button is also there.
+- ✅ `admin-organizer-applications.dart`: same pattern, scoped to
+  `role = 'organizer'`, with a `verified` status displayed as "Approved"
+  (organizer-facing label) rather than the raw enum value. Documents
+  reviewed are `venue_proof_url` + `event_permit_url` only — organizer
+  registration doesn't currently collect a personal ID
+  (`id_document_url`), so that field isn't part of this review; if that
+  ever changes, add a third `AdminReviewDocument` here.
+- Realtime: no `supabase...stream()` subscriptions exist anywhere else in
+  this codebase yet (grep the repo — Phase 5 is the first place one's
+  planned, for `qr_scan_logs`), so both screens stick with the same
+  fetch-then-refetch-after-mutation pattern already used throughout
+  (organizer login, event repository, etc.) rather than introducing a
+  one-off realtime channel just for this.
+
 ## Phase 1 — Real Login/Register for all three portals (Supabase Auth)
 
 This replaces the three hardcoded test-account services
@@ -395,8 +463,12 @@ screen code needs to change.
 
 ## Phase 6 — Admin Panel (Approvals, Fraud, Reports)
 
-- `admin-organizer-applications.dart`, `admin-accounts.dart`,
-  `admin-resale-monitoring.dart`, `admin-fraud-alerts.dart` all become
+> `admin-organizer-applications.dart` and `admin-accounts.dart` are done
+> — see "session 6" above. `admin-resale-monitoring.dart` and
+> `admin-fraud-alerts.dart` below are still the static/placeholder shells
+> this section originally described for all four screens.
+
+- `admin-resale-monitoring.dart`, `admin-fraud-alerts.dart` all become
   straightforward `supabase.from(...)` reads/writes once `role = 'admin'`
   is set on the signed-in account, since RLS already grants admins full
   access to every table

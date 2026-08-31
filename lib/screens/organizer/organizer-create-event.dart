@@ -1,4 +1,8 @@
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'app_colors.dart';
 import '../../models/organizer_event.dart';
 import '../../services/event_repository.dart';
@@ -11,15 +15,22 @@ class TicketTierInput {
   final TextEditingController quantityController;
 
   TicketTierInput({String name = '', String price = '', String quantity = ''})
-      : nameController = TextEditingController(text: name),
-        priceController = TextEditingController(text: price),
-        quantityController = TextEditingController(text: quantity);
+    : nameController = TextEditingController(text: name),
+      priceController = TextEditingController(text: price),
+      quantityController = TextEditingController(text: quantity);
 
   void dispose() {
     nameController.dispose();
     priceController.dispose();
     quantityController.dispose();
   }
+}
+
+class PickedDocument {
+  final Uint8List bytes;
+  final String fileName;
+
+  const PickedDocument({required this.bytes, required this.fileName});
 }
 
 class OrganizerCreateEventScreen extends StatefulWidget {
@@ -34,30 +45,111 @@ class _OrganizerCreateEventScreenState
     extends State<OrganizerCreateEventScreen> {
   final TextEditingController _eventNameController = TextEditingController();
   final TextEditingController _dateController = TextEditingController();
+  final TextEditingController _endDateController = TextEditingController();
   final TextEditingController _venueController = TextEditingController();
-  final TextEditingController _descriptionController =
-      TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
+
+  // Single-Day (one event_start_date) vs Multi-Day (a run of generated
+  // per-day sub-events between a start and end date — see
+  // EventRepository.createEvent). Defaults to Single-Day since that's the
+  // common case.
+  EventSpan _span = EventSpan.singleDay;
+  DateTime? _startDate;
+  DateTime? _endDate;
 
   // Starts with a single blank tier - the organizer fills in real values;
   // no sample tier name/price/quantity is pre-populated.
   final List<TicketTierInput> _tiers = [TicketTierInput()];
 
-  // TODO(backend): Replace these tap-to-simulate uploads with a real file
-  // picker (e.g. the `file_picker` package) and upload to Firebase Storage.
-  String? _permitFileName;
-  bool _bannerUploaded = false;
+  // Event banner: picked locally, then uploaded to the `event_banners`
+  // bucket right after the event row exists (EventRepository.uploadEventBanner
+  // needs a real event_id — see the policy comment there).
+  Uint8List? _bannerBytes;
+  String? _bannerExt;
+
+  // Supporting documents (venue contract, LGU permit, etc.) — same
+  // upload-after-create flow as the banner, via
+  // EventRepository.uploadEventDocument.
+  final List<PickedDocument> _documents = [];
+
   String? _formError;
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
     _eventNameController.dispose();
     _dateController.dispose();
+    _endDateController.dispose();
     _venueController.dispose();
     _descriptionController.dispose();
     for (final tier in _tiers) {
       tier.dispose();
     }
     super.dispose();
+  }
+
+  String _formatDate(DateTime d) => '${d.month}/${d.day}/${d.year}';
+
+  Future<void> _pickBanner() async {
+    final XFile? picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+    );
+    if (picked == null) return;
+    final bytes = await picked.readAsBytes();
+    final ext = picked.name.contains('.') ? picked.name.split('.').last : 'jpg';
+    if (!mounted) return;
+    setState(() {
+      _bannerBytes = bytes;
+      _bannerExt = ext;
+    });
+  }
+
+  Future<void> _pickDocuments() async {
+    final FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png'],
+      withData: true,
+      allowMultiple: true,
+    );
+    if (result == null) return;
+    final picked = result.files
+        .where((f) => f.bytes != null)
+        .map((f) => PickedDocument(bytes: f.bytes!, fileName: f.name))
+        .toList();
+    if (picked.isEmpty) return;
+    setState(() => _documents.addAll(picked));
+  }
+
+  /// Uploads whatever banner/documents were picked for the just-created
+  /// [event]. Failures here are shown as a warning but never block
+  /// navigation — the event itself was already created successfully.
+  Future<void> _uploadAttachments(OrganizerEvent event) async {
+    try {
+      if (_bannerBytes != null) {
+        await EventRepository.instance.uploadEventBanner(
+          eventId: event.id,
+          bytes: _bannerBytes!,
+          fileExtension: _bannerExt ?? 'jpg',
+        );
+      }
+      for (final doc in _documents) {
+        await EventRepository.instance.uploadEventDocument(
+          eventId: event.id,
+          bytes: doc.bytes,
+          fileName: doc.fileName,
+        );
+      }
+    } on EventRepositoryException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '"${event.name}" was created, but ${e.message.toLowerCase()}',
+          ),
+        ),
+      );
+    }
   }
 
   void _addTier() {
@@ -75,24 +167,42 @@ class _OrganizerCreateEventScreenState
 
   bool _validate() {
     if (_eventNameController.text.trim().isEmpty ||
-        _dateController.text.trim().isEmpty ||
         _venueController.text.trim().isEmpty) {
-      setState(() => _formError =
-          'Event name, date & time, and venue are required.');
+      setState(() => _formError = 'Event name and venue are required.');
       return false;
+    }
+    if (_span == EventSpan.singleDay) {
+      if (_startDate == null) {
+        setState(() => _formError = 'Pick a date for the event.');
+        return false;
+      }
+    } else {
+      if (_startDate == null || _endDate == null) {
+        setState(() => _formError = 'Pick both a start date and an end date.');
+        return false;
+      }
+      if (!_endDate!.isAfter(_startDate!)) {
+        setState(
+          () => _formError = 'The end date must be after the start date.',
+        );
+        return false;
+      }
     }
     for (final tier in _tiers) {
       if (tier.nameController.text.trim().isEmpty ||
           tier.priceController.text.trim().isEmpty ||
           tier.quantityController.text.trim().isEmpty) {
-        setState(() =>
-            _formError = 'Fill in every ticket tier, or remove unused ones.');
+        setState(
+          () =>
+              _formError = 'Fill in every ticket tier, or remove unused ones.',
+        );
         return false;
       }
       if (double.tryParse(tier.priceController.text.trim()) == null ||
           int.tryParse(tier.quantityController.text.trim()) == null) {
-        setState(() => _formError =
-            'Ticket price and quantity must be valid numbers.');
+        setState(
+          () => _formError = 'Ticket price and quantity must be valid numbers.',
+        );
         return false;
       }
     }
@@ -100,62 +210,109 @@ class _OrganizerCreateEventScreenState
     return true;
   }
 
-  void _saveDraft() {
+  Future<void> _saveDraft() async {
     if (_eventNameController.text.trim().isEmpty) {
-      setState(() => _formError =
-          'Give your event a name before saving it as a draft.');
+      setState(
+        () =>
+            _formError = 'Give your event a name before saving it as a draft.',
+      );
       return;
     }
-    final event = EventRepository.instance.addEvent(
-      name: _eventNameController.text.trim(),
-      date: _dateController.text.trim(),
-      venue: _venueController.text.trim(),
-      description: _descriptionController.text.trim(),
-      status: EventStatus.draft,
-      tiers: _buildTiers(),
-    );
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('"${event.name}" saved as a draft.')),
-    );
-    Navigator.pop(context);
+    if (_startDate == null) {
+      setState(() => _formError = 'Pick a date before saving it as a draft.');
+      return;
+    }
+    if (_span == EventSpan.multiDay &&
+        (_endDate == null || !_endDate!.isAfter(_startDate!))) {
+      setState(
+        () => _formError =
+            'Pick a valid end date (after the start date) before saving.',
+      );
+      return;
+    }
+    setState(() {
+      _isSubmitting = true;
+      _formError = null;
+    });
+    try {
+      final event = await EventRepository.instance.createEvent(
+        name: _eventNameController.text.trim(),
+        venue: _venueController.text.trim(),
+        description: _descriptionController.text.trim(),
+        span: _span,
+        startDate: _startDate!,
+        endDate: _span == EventSpan.multiDay ? _endDate : null,
+        status: EventStatus.draft,
+        tiers: _buildTiers(),
+      );
+      await _uploadAttachments(event);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('"${event.name}" saved as a draft.')),
+      );
+      Navigator.pop(context);
+    } on EventRepositoryException catch (e) {
+      if (!mounted) return;
+      setState(() => _formError = e.message);
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
   }
 
   List<TicketTier> _buildTiers() {
     return _tiers
-        .where((t) =>
-            t.nameController.text.trim().isNotEmpty &&
-            double.tryParse(t.priceController.text.trim()) != null &&
-            int.tryParse(t.quantityController.text.trim()) != null)
-        .map((t) => TicketTier(
-              name: t.nameController.text.trim(),
-              price: double.parse(t.priceController.text.trim()),
-              quantity: int.parse(t.quantityController.text.trim()),
-            ))
+        .where(
+          (t) =>
+              t.nameController.text.trim().isNotEmpty &&
+              double.tryParse(t.priceController.text.trim()) != null &&
+              int.tryParse(t.quantityController.text.trim()) != null,
+        )
+        .map(
+          (t) => TicketTier(
+            name: t.nameController.text.trim(),
+            price: double.parse(t.priceController.text.trim()),
+            quantity: int.parse(t.quantityController.text.trim()),
+          ),
+        )
         .toList();
   }
 
-  void _publishEvent() {
+  Future<void> _publishEvent() async {
     if (!_validate()) return;
 
-    final event = EventRepository.instance.addEvent(
-      name: _eventNameController.text.trim(),
-      date: _dateController.text.trim(),
-      venue: _venueController.text.trim(),
-      description: _descriptionController.text.trim(),
-      status: EventStatus.published,
-      tiers: _buildTiers(),
-    );
+    setState(() => _isSubmitting = true);
+    try {
+      final event = await EventRepository.instance.createEvent(
+        name: _eventNameController.text.trim(),
+        venue: _venueController.text.trim(),
+        description: _descriptionController.text.trim(),
+        span: _span,
+        startDate: _startDate!,
+        endDate: _span == EventSpan.multiDay ? _endDate : null,
+        status: EventStatus.published,
+        tiers: _buildTiers(),
+      );
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => OrganizerEventCreatedScreen(
-          eventName: event.name,
-          date: event.date,
-          venue: event.venue,
+      await _uploadAttachments(event);
+
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => OrganizerEventCreatedScreen(
+            eventName: event.name,
+            date: event.date,
+            venue: event.venue,
+            isMultiDay: event.isMultiDay,
+          ),
         ),
-      ),
-    );
+      );
+    } on EventRepositoryException catch (e) {
+      if (!mounted) return;
+      setState(() => _formError = e.message);
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
   }
 
   @override
@@ -202,18 +359,22 @@ class _OrganizerCreateEventScreenState
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel',
-                    style: TextStyle(color: AppColors.textDark)),
+                onPressed: _isSubmitting ? null : () => Navigator.pop(context),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: AppColors.textDark),
+                ),
               ),
               const SizedBox(width: 8),
               OutlinedButton(
-                onPressed: _saveDraft,
+                onPressed: _isSubmitting ? null : _saveDraft,
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.primaryPurple,
                   side: const BorderSide(color: AppColors.primaryPurple),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 22,
+                    vertical: 14,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -222,22 +383,85 @@ class _OrganizerCreateEventScreenState
               ),
               const SizedBox(width: 12),
               ElevatedButton(
-                onPressed: _publishEvent,
+                onPressed: _isSubmitting ? null : _publishEvent,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryPurple,
                   foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 22,
+                    vertical: 14,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                child: const Text('Publish Event'),
+                child: _isSubmitting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('Publish Event'),
               ),
             ],
           ),
         ],
       ),
+    );
+  }
+
+  Widget _datePickerField({
+    required String label,
+    required TextEditingController controller,
+    required ValueChanged<DateTime> onPicked,
+    required DateTime firstDate,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: AppTextStyles.label),
+        const SizedBox(height: 8),
+        TextField(
+          controller: controller,
+          readOnly: true,
+          enabled: !_isSubmitting,
+          onTap: () async {
+            final date = await showDatePicker(
+              context: context,
+              initialDate: firstDate,
+              firstDate: DateTime(2024),
+              lastDate: DateTime(2030),
+            );
+            if (date != null) onPicked(date);
+          },
+          decoration: InputDecoration(
+            hintText: 'Select Date',
+            hintStyle: AppTextStyles.bodyGray,
+            prefixIcon: const Icon(
+              Icons.calendar_today_outlined,
+              size: 18,
+              color: AppColors.textGray,
+            ),
+            filled: true,
+            fillColor: Colors.white,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppColors.borderLight),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppColors.borderLight),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -256,65 +480,123 @@ class _OrganizerCreateEventScreenState
                 controller: _eventNameController,
               ),
               const SizedBox(height: 18),
+              const Text('Event Duration *', style: AppTextStyles.label),
+              const SizedBox(height: 8),
               Row(
                 children: [
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Date & Time *', style: AppTextStyles.label),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _dateController,
-                          readOnly: true,
-                          onTap: () async {
-                            final date = await showDatePicker(
-                              context: context,
-                              initialDate: DateTime.now(),
-                              firstDate: DateTime(2024),
-                              lastDate: DateTime(2030),
-                            );
-                            if (date != null) {
-                              _dateController.text =
-                                  '${date.month}/${date.day}/${date.year}';
-                            }
-                          },
-                          decoration: InputDecoration(
-                            hintText: 'Select Date',
-                            hintStyle: AppTextStyles.bodyGray,
-                            prefixIcon: const Icon(Icons.calendar_today_outlined,
-                                size: 18, color: AppColors.textGray),
-                            filled: true,
-                            fillColor: Colors.white,
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 14),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide:
-                                  const BorderSide(color: AppColors.borderLight),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide:
-                                  const BorderSide(color: AppColors.borderLight),
-                            ),
-                          ),
-                        ),
-                      ],
+                    child: ChoiceChip(
+                      label: const Text('Single-Day'),
+                      selected: _span == EventSpan.singleDay,
+                      onSelected: _isSubmitting
+                          ? null
+                          : (_) => setState(() {
+                              _span = EventSpan.singleDay;
+                              _endDate = null;
+                              _endDateController.clear();
+                            }),
+                      labelStyle: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _span == EventSpan.singleDay
+                            ? Colors.white
+                            : AppColors.textGray,
+                      ),
+                      selectedColor: AppColors.primaryPurple,
+                      backgroundColor: const Color(0xFFF0EEFA),
+                      side: BorderSide.none,
+                      showCheckmark: false,
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 10),
                   Expanded(
-                    child: AppTextField(
-                      label: 'Venue *',
-                      hint: 'Arena, Hotel, or Stadium',
-                      controller: _venueController,
-                      prefixIcon: const Icon(Icons.location_on_outlined,
-                          size: 18, color: AppColors.textGray),
+                    child: ChoiceChip(
+                      label: const Text('Multi-Day'),
+                      selected: _span == EventSpan.multiDay,
+                      onSelected: _isSubmitting
+                          ? null
+                          : (_) => setState(() => _span = EventSpan.multiDay),
+                      labelStyle: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _span == EventSpan.multiDay
+                            ? Colors.white
+                            : AppColors.textGray,
+                      ),
+                      selectedColor: AppColors.primaryPurple,
+                      backgroundColor: const Color(0xFFF0EEFA),
+                      side: BorderSide.none,
+                      showCheckmark: false,
                     ),
                   ),
                 ],
               ),
+              if (_span == EventSpan.multiDay) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'One event page is generated per day, each with its own '
+                  'ticket inventory.',
+                  style: AppTextStyles.bodyGray.copyWith(fontSize: 11),
+                ),
+              ],
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: _datePickerField(
+                      label: _span == EventSpan.singleDay
+                          ? 'Date *'
+                          : 'Start Date *',
+                      controller: _dateController,
+                      onPicked: (date) {
+                        setState(() {
+                          _startDate = date;
+                          _dateController.text = _formatDate(date);
+                        });
+                      },
+                      firstDate: DateTime.now(),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _span == EventSpan.multiDay
+                        ? _datePickerField(
+                            label: 'End Date *',
+                            controller: _endDateController,
+                            onPicked: (date) {
+                              setState(() {
+                                _endDate = date;
+                                _endDateController.text = _formatDate(date);
+                              });
+                            },
+                            firstDate: _startDate ?? DateTime.now(),
+                          )
+                        : AppTextField(
+                            label: 'Venue *',
+                            hint: 'Arena, Hotel, or Stadium',
+                            controller: _venueController,
+                            prefixIcon: const Icon(
+                              Icons.location_on_outlined,
+                              size: 18,
+                              color: AppColors.textGray,
+                            ),
+                          ),
+                  ),
+                ],
+              ),
+              if (_span == EventSpan.multiDay) ...[
+                const SizedBox(height: 18),
+                AppTextField(
+                  label: 'Venue *',
+                  hint: 'Arena, Hotel, or Stadium',
+                  controller: _venueController,
+                  prefixIcon: const Icon(
+                    Icons.location_on_outlined,
+                    size: 18,
+                    color: AppColors.textGray,
+                  ),
+                ),
+              ],
               const SizedBox(height: 18),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -333,13 +615,15 @@ class _OrganizerCreateEventScreenState
                       contentPadding: const EdgeInsets.all(16),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide:
-                            const BorderSide(color: AppColors.borderLight),
+                        borderSide: const BorderSide(
+                          color: AppColors.borderLight,
+                        ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide:
-                            const BorderSide(color: AppColors.borderLight),
+                        borderSide: const BorderSide(
+                          color: AppColors.borderLight,
+                        ),
                       ),
                     ),
                   ),
@@ -353,10 +637,17 @@ class _OrganizerCreateEventScreenState
           title: 'Ticket Tiers',
           headerTrailing: TextButton.icon(
             onPressed: _addTier,
-            icon: const Icon(Icons.add, size: 16, color: AppColors.primaryPurple),
+            icon: const Icon(
+              Icons.add,
+              size: 16,
+              color: AppColors.primaryPurple,
+            ),
             label: const Text(
               '+ Add New Tier',
-              style: TextStyle(color: AppColors.primaryPurple, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                color: AppColors.primaryPurple,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
           child: Column(
@@ -397,10 +688,13 @@ class _OrganizerCreateEventScreenState
                     ),
                     const SizedBox(width: 8),
                     IconButton(
-                      onPressed:
-                          _tiers.length > 1 ? () => _removeTier(index) : null,
-                      icon: const Icon(Icons.delete_outline,
-                          color: AppColors.dangerRed),
+                      onPressed: _tiers.length > 1
+                          ? () => _removeTier(index)
+                          : null,
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: AppColors.dangerRed,
+                      ),
                     ),
                   ],
                 ),
@@ -419,40 +713,70 @@ class _OrganizerCreateEventScreenState
         _card(
           title: 'Event Banner',
           child: InkWell(
-            onTap: () => setState(() => _bannerUploaded = true),
+            onTap: _isSubmitting ? null : _pickBanner,
             borderRadius: BorderRadius.circular(10),
-            child: Container(
-              height: 150,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF5F3FF),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: AppColors.primaryPurple.withValues(alpha: 0.4),
-                  width: 1.4,
-                ),
-              ),
-              alignment: Alignment.center,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.image_outlined,
-                      color: AppColors.primaryPurple, size: 30),
-                  const SizedBox(height: 10),
-                  Text(
-                    _bannerUploaded ? 'Image Selected' : 'Upload Image',
-                    style: const TextStyle(
-                      color: AppColors.primaryPurple,
-                      fontWeight: FontWeight.w700,
+            child: _bannerBytes != null
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Image.memory(
+                          _bannerBytes!,
+                          height: 150,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                        ),
+                        Container(
+                          height: 150,
+                          width: double.infinity,
+                          color: Colors.black.withValues(alpha: 0.35),
+                        ),
+                        const Text(
+                          'Change Image',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : Container(
+                    height: 150,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF5F3FF),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AppColors.primaryPurple.withValues(alpha: 0.4),
+                        width: 1.4,
+                      ),
+                    ),
+                    alignment: Alignment.center,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.image_outlined,
+                          color: AppColors.primaryPurple,
+                          size: 30,
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          'Upload Image',
+                          style: TextStyle(
+                            color: AppColors.primaryPurple,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '16:9 aspect ratio recommended',
+                          style: AppTextStyles.bodyGray.copyWith(fontSize: 12),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '16:9 aspect ratio recommended',
-                    style: AppTextStyles.bodyGray.copyWith(fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
           ),
         ),
         const SizedBox(height: 20),
@@ -461,51 +785,56 @@ class _OrganizerCreateEventScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (_permitFileName != null)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF9FAFB),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.image_outlined,
-                          size: 18, color: AppColors.textGray),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Proof of Venue Booking',
-                                style: AppTextStyles.label),
-                            Text(
-                              _permitFileName!,
-                              style: AppTextStyles.bodyGray
-                                  .copyWith(fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+              if (_documents.isEmpty)
+                Text(
+                  'No documents uploaded yet.',
+                  style: AppTextStyles.bodyGray.copyWith(fontSize: 12),
                 )
               else
-                Text(
-                  'No document uploaded yet.',
-                  style: AppTextStyles.bodyGray.copyWith(fontSize: 12),
-                ),
-              const SizedBox(height: 12),
+                for (var i = 0; i < _documents.length; i++) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF9FAFB),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.description_outlined,
+                          size: 18,
+                          color: AppColors.textGray,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _documents[i].fileName,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.label,
+                          ),
+                        ),
+                        InkWell(
+                          onTap: _isSubmitting
+                              ? null
+                              : () => setState(() => _documents.removeAt(i)),
+                          child: const Icon(
+                            Icons.delete_outline,
+                            size: 18,
+                            color: AppColors.dangerRed,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+              const SizedBox(height: 2),
               OutlineButtonWidget(
-                label: 'Upload Permit',
-                onPressed: () {
-                  // TODO(backend): open a real file picker and upload the
-                  // selected document to Storage.
-                  setState(() {
-                    _permitFileName = 'Document selected';
-                  });
-                },
+                label: 'Add Document',
+                onPressed: _isSubmitting ? null : _pickDocuments,
                 height: 48,
               ),
             ],
@@ -535,7 +864,9 @@ class _OrganizerCreateEventScreenState
             children: [
               Text(
                 title,
-                style: AppTextStyles.h3.copyWith(color: AppColors.primaryPurple),
+                style: AppTextStyles.h3.copyWith(
+                  color: AppColors.primaryPurple,
+                ),
               ),
               ?headerTrailing,
             ],

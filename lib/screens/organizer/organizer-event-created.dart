@@ -8,12 +8,14 @@ class OrganizerEventCreatedScreen extends StatelessWidget {
   final String eventName;
   final String date;
   final String venue;
+  final bool isMultiDay;
 
   const OrganizerEventCreatedScreen({
     super.key,
     required this.eventName,
     required this.date,
     required this.venue,
+    this.isMultiDay = false,
   });
 
   @override
@@ -42,8 +44,11 @@ class OrganizerEventCreatedScreen extends StatelessWidget {
                     shape: BoxShape.circle,
                   ),
                   alignment: Alignment.center,
-                  child: const Icon(Icons.check_circle_outline,
-                      color: AppColors.successGreen, size: 32),
+                  child: const Icon(
+                    Icons.check_circle_outline,
+                    color: AppColors.successGreen,
+                    size: 32,
+                  ),
                 ),
                 const SizedBox(height: 22),
                 const Text(
@@ -53,16 +58,22 @@ class OrganizerEventCreatedScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'Your event is now live and attendees can start purchasing '
-                  'tickets.',
+                  isMultiDay
+                      ? 'Your multi-day event is now live \u2014 a page was '
+                            'generated for each day, and attendees can start '
+                            'purchasing tickets.'
+                      : 'Your event is now live and attendees can start '
+                            'purchasing tickets.',
                   textAlign: TextAlign.center,
                   style: AppTextStyles.bodyGray.copyWith(height: 1.5),
                 ),
                 const SizedBox(height: 26),
                 Container(
                   width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF9FAFB),
                     borderRadius: BorderRadius.circular(12),

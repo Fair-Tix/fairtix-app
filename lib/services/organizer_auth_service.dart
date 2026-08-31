@@ -33,7 +33,7 @@ class OrganizerAuthService {
   /// pricing from Chapter III: ₱299 = Basic, ₱699 = Standard,
   /// ₱1,499 = Premium. Falls back to null (unrecognized amount) rather
   /// than guessing.
-  static String? _planNameFromMonthlyFee(num? fee) {
+  static String? planNameFromMonthlyFee(num? fee) {
     switch (fee) {
       case 299:
         return 'Basic';
@@ -41,6 +41,19 @@ class OrganizerAuthService {
         return 'Standard';
       case 1499:
         return 'Premium';
+      default:
+        return null;
+    }
+  }
+
+  static num? monthlyFeeForPlanName(String planName) {
+    switch (planName) {
+      case 'Basic':
+        return 299;
+      case 'Standard':
+        return 699;
+      case 'Premium':
+        return 1499;
       default:
         return null;
     }
@@ -78,7 +91,9 @@ class OrganizerAuthService {
           .single();
     } on PostgrestException catch (e) {
       await Supabase.instance.client.auth.signOut();
-      throw OrganizerAuthException('Could not load your account details: ${e.message}');
+      throw OrganizerAuthException(
+        'Could not load your account details: ${e.message}',
+      );
     }
 
     if (row['role'] != 'organizer') {
@@ -101,9 +116,13 @@ class OrganizerAuthService {
           .limit(1)
           .maybeSingle();
       if (subRow != null) {
-        subscriptionPlan = _planNameFromMonthlyFee(subRow['monthly_fee'] as num?);
+        subscriptionPlan = planNameFromMonthlyFee(
+          subRow['monthly_fee'] as num?,
+        );
         final endDate = subRow['end_date'] as String?;
-        subscriptionRenewsAt = endDate != null ? DateTime.tryParse(endDate) : null;
+        subscriptionRenewsAt = endDate != null
+            ? DateTime.tryParse(endDate)
+            : null;
       }
     } on PostgrestException {
       // Non-fatal: the organizer just hasn't picked (or synced) a plan yet;
@@ -112,21 +131,71 @@ class OrganizerAuthService {
     }
 
     final fullName = (row['full_name'] as String?)?.trim() ?? '';
-    final organizationName = (row['organization_name'] as String?)?.trim() ?? '';
+    final organizationName =
+        (row['organization_name'] as String?)?.trim() ?? '';
     final account = OrganizerAccount(
       id: authUser.id,
       fullName: fullName.isNotEmpty ? fullName : 'Organizer',
       email: (row['email'] as String?) ?? normalizedEmail,
-      organizationName: organizationName.isNotEmpty ? organizationName : 'Your Organization',
+      organizationName: organizationName.isNotEmpty
+          ? organizationName
+          : 'Your Organization',
       subscriptionPlan: subscriptionPlan,
       subscriptionRenewsAt: subscriptionRenewsAt,
-      idVerificationStatus: (row['id_verification_status'] as String?) ?? 'pending',
+      idVerificationStatus:
+          (row['id_verification_status'] as String?) ?? 'pending',
       venueProofUrl: row['venue_proof_url'] as String?,
       eventPermitUrl: row['event_permit_url'] as String?,
     );
 
     OrganizerSession.instance.signIn(account);
     return account;
+  }
+
+  Future<void> selectSubscriptionPlan({
+    required String planName,
+    required DateTime renewsAt,
+  }) async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) {
+      throw const OrganizerAuthException(
+        'You must be signed in to choose a subscription plan.',
+      );
+    }
+
+    final monthlyFee = monthlyFeeForPlanName(planName);
+    if (monthlyFee == null) {
+      throw OrganizerAuthException('Unknown organizer plan: $planName');
+    }
+
+    final startDate = DateTime.now();
+    final row = {
+      'user_id': userId,
+      'start_date': startDate.toIso8601String().split('T').first,
+      'end_date': renewsAt.toIso8601String().split('T').first,
+      'status': 'active',
+      'monthly_fee': monthlyFee,
+    };
+
+    try {
+      await Supabase.instance.client
+          .from('organizer_subscriptions')
+          .insert(row);
+    } on PostgrestException catch (e) {
+      throw OrganizerAuthException(
+        'Could not save your subscription plan: ${e.message}',
+      );
+    }
+
+    final currentAccount = OrganizerSession.instance.account;
+    if (currentAccount != null) {
+      OrganizerSession.instance.updateAccount(
+        currentAccount.copyWith(
+          subscriptionPlan: planName,
+          subscriptionRenewsAt: renewsAt,
+        ),
+      );
+    }
   }
 
   /// Creates a new organizer account in Supabase Auth. A `public.users`
@@ -179,7 +248,8 @@ class OrganizerAuthService {
   /// and this stays false until the organizer confirms their email and
   /// logs in. Storage uploads require a session, so callers should check
   /// this before calling [uploadOrganizerDocument].
-  bool get hasActiveSession => Supabase.instance.client.auth.currentUser != null;
+  bool get hasActiveSession =>
+      Supabase.instance.client.auth.currentUser != null;
 
   /// Uploads a proof-of-organization document ("venue_proof" or
   /// "event_permit") to the private `organizer_docs` Storage bucket (see
@@ -206,24 +276,36 @@ class OrganizerAuthService {
 
     final ext = fileExtension.replaceFirst('.', '').toLowerCase();
     final safeExt = ext.isEmpty ? 'pdf' : ext;
-    final path = '$userId/${docKind}_${DateTime.now().millisecondsSinceEpoch}.$safeExt';
+    final path =
+        '$userId/${docKind}_${DateTime.now().millisecondsSinceEpoch}.$safeExt';
     final contentType = safeExt == 'pdf'
         ? 'application/pdf'
         : 'image/${safeExt == 'jpg' ? 'jpeg' : safeExt}';
-    final column = docKind == 'venue_proof' ? 'venue_proof_url' : 'event_permit_url';
+    final column = docKind == 'venue_proof'
+        ? 'venue_proof_url'
+        : 'event_permit_url';
 
     try {
-      await Supabase.instance.client.storage.from('organizer_docs').uploadBinary(
+      await Supabase.instance.client.storage
+          .from('organizer_docs')
+          .uploadBinary(
             path,
             bytes,
             fileOptions: FileOptions(upsert: true, contentType: contentType),
           );
 
-      await Supabase.instance.client.from('users').update({column: path}).eq('id', userId);
+      await Supabase.instance.client
+          .from('users')
+          .update({column: path})
+          .eq('id', userId);
     } on StorageException catch (e) {
-      throw OrganizerAuthException('Could not upload your document: ${e.message}');
+      throw OrganizerAuthException(
+        'Could not upload your document: ${e.message}',
+      );
     } on PostgrestException catch (e) {
-      throw OrganizerAuthException('Could not save your document details: ${e.message}');
+      throw OrganizerAuthException(
+        'Could not save your document details: ${e.message}',
+      );
     }
 
     return path;

@@ -1,10 +1,20 @@
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
 import '../../services/organizer_session.dart';
+import '../../services/organizer_subscription_service.dart';
 import 'organizer-subscription-confirmed.dart';
 
-class OrganizerSubscriptionPlanScreen extends StatelessWidget {
+class OrganizerSubscriptionPlanScreen extends StatefulWidget {
   const OrganizerSubscriptionPlanScreen({super.key});
+
+  @override
+  State<OrganizerSubscriptionPlanScreen> createState() =>
+      _OrganizerSubscriptionPlanScreenState();
+}
+
+class _OrganizerSubscriptionPlanScreenState
+    extends State<OrganizerSubscriptionPlanScreen> {
+  bool _isSaving = false;
 
   @override
   Widget build(BuildContext context) {
@@ -56,17 +66,23 @@ class OrganizerSubscriptionPlanScreen extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
-                              child: _planCard(
-                                  context, _basicPlan(currentPlan))),
+                            child: _planCard(context, _basicPlan(currentPlan)),
+                          ),
                           const SizedBox(width: 20),
                           Expanded(
-                              child: _planCard(
-                                  context, _standardPlan(currentPlan))),
+                            child: _planCard(
+                              context,
+                              _standardPlan(currentPlan),
+                            ),
+                          ),
                           const SizedBox(width: 20),
                           Expanded(
-                              child: _planCard(
-                                  context, _premiumPlan(currentPlan),
-                                  highlighted: true)),
+                            child: _planCard(
+                              context,
+                              _premiumPlan(currentPlan),
+                              highlighted: true,
+                            ),
+                          ),
                         ],
                       )
                     : Column(
@@ -75,8 +91,11 @@ class OrganizerSubscriptionPlanScreen extends StatelessWidget {
                           const SizedBox(height: 20),
                           _planCard(context, _standardPlan(currentPlan)),
                           const SizedBox(height: 20),
-                          _planCard(context, _premiumPlan(currentPlan),
-                              highlighted: true),
+                          _planCard(
+                            context,
+                            _premiumPlan(currentPlan),
+                            highlighted: true,
+                          ),
                         ],
                       ),
                 const SizedBox(height: 28),
@@ -96,46 +115,49 @@ class OrganizerSubscriptionPlanScreen extends StatelessWidget {
   }
 
   _PlanInfo _basicPlan(String? currentPlan) => _PlanInfo(
-        name: 'Basic',
-        price: '\u20B1299',
-        features: const [
-          'Up to 3 events/month',
-          'Max 500 tickets/event',
-          '8% platform fee/ticket',
-          'Unlimited scanner sessions',
-        ],
-        isCurrent: currentPlan == 'Basic',
-      );
+    name: 'Basic',
+    price: '\u20B1299',
+    features: const [
+      'Up to 3 events/month',
+      'Max 500 tickets/event',
+      '8% platform fee/ticket',
+      'Unlimited scanner sessions',
+    ],
+    isCurrent: currentPlan == 'Basic',
+  );
 
   _PlanInfo _standardPlan(String? currentPlan) => _PlanInfo(
-        name: 'Standard',
-        price: '\u20B1699',
-        features: const [
-          'Up to 9 events/month',
-          'Max 5,000 tickets/event',
-          '9% platform fee/ticket',
-          'Unlimited scanner sessions',
-          'CSV export & analytics',
-        ],
-        isCurrent: currentPlan == 'Standard',
-      );
+    name: 'Standard',
+    price: '\u20B1699',
+    features: const [
+      'Up to 9 events/month',
+      'Max 5,000 tickets/event',
+      '9% platform fee/ticket',
+      'Unlimited scanner sessions',
+      'CSV export & analytics',
+    ],
+    isCurrent: currentPlan == 'Standard',
+  );
 
   _PlanInfo _premiumPlan(String? currentPlan) => _PlanInfo(
-        name: 'Premium',
-        price: '\u20B11,499',
-        badge: 'BEST VALUE',
-        features: const [
-          'Unlimited events',
-          'Unlimited ticket capacity',
-          '10% platform fee/ticket',
-          'Unlimited scanner sessions',
-          'CSV export & enhanced analytics',
-        ],
-        isCurrent: currentPlan == 'Premium',
-      );
+    name: 'Premium',
+    price: '\u20B11,499',
+    badge: 'BEST VALUE',
+    features: const [
+      'Unlimited events',
+      'Unlimited ticket capacity',
+      '10% platform fee/ticket',
+      'Unlimited scanner sessions',
+      'CSV export & enhanced analytics',
+    ],
+    isCurrent: currentPlan == 'Premium',
+  );
 
-  Widget _planCard(BuildContext context, _PlanInfo plan,
-      {bool highlighted = false}) {
+  Widget _planCard(
+    BuildContext context,
+    _PlanInfo plan, {
+    bool highlighted = false,
+  }) {
     return Container(
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
@@ -152,8 +174,10 @@ class OrganizerSubscriptionPlanScreen extends StatelessWidget {
             Align(
               alignment: Alignment.centerRight,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.warningOrange,
                   borderRadius: BorderRadius.circular(999),
@@ -212,9 +236,7 @@ class OrganizerSubscriptionPlanScreen extends StatelessWidget {
                   Icon(
                     Icons.check,
                     size: 18,
-                    color: highlighted
-                        ? Colors.white
-                        : AppColors.primaryPurple,
+                    color: highlighted ? Colors.white : AppColors.primaryPurple,
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -222,8 +244,7 @@ class OrganizerSubscriptionPlanScreen extends StatelessWidget {
                       f,
                       style: TextStyle(
                         fontSize: 13,
-                        color:
-                            highlighted ? Colors.white : AppColors.textDark,
+                        color: highlighted ? Colors.white : AppColors.textDark,
                       ),
                     ),
                   ),
@@ -251,56 +272,80 @@ class OrganizerSubscriptionPlanScreen extends StatelessWidget {
                     ),
                   )
                 : highlighted
-                    ? ElevatedButton(
-                        onPressed: () => _selectPlan(context, plan),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: AppColors.primaryPurpleDarker,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                        ),
-                        child: Text('Select ${plan.name}'),
-                      )
-                    : OutlinedButton(
-                        onPressed: () => _selectPlan(context, plan),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.primaryPurple,
-                          side: const BorderSide(
-                              color: AppColors.primaryPurple),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                        ),
-                        child: Text('Select ${plan.name}'),
+                ? ElevatedButton(
+                    onPressed: _isSaving
+                        ? null
+                        : () => _selectPlan(context, plan),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: AppColors.primaryPurpleDarker,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
                       ),
+                    ),
+                    child: _isSaving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text('Select ${plan.name}'),
+                  )
+                : OutlinedButton(
+                    onPressed: _isSaving
+                        ? null
+                        : () => _selectPlan(context, plan),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primaryPurple,
+                      side: const BorderSide(color: AppColors.primaryPurple),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    child: _isSaving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.2,
+                              color: AppColors.primaryPurple,
+                            ),
+                          )
+                        : Text('Select ${plan.name}'),
+                  ),
           ),
         ],
       ),
     );
   }
 
-  void _selectPlan(BuildContext context, _PlanInfo plan) {
-    final renewsAt = DateTime.now().add(const Duration(days: 30));
-    final currentAccount = OrganizerSession.instance.account;
-    if (currentAccount != null) {
-      OrganizerSession.instance.updateAccount(
-        currentAccount.copyWith(
-          subscriptionPlan: plan.name,
-          subscriptionRenewsAt: renewsAt,
+  Future<void> _selectPlan(BuildContext context, _PlanInfo plan) async {
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    setState(() => _isSaving = true);
+    try {
+      final renewsAt = await OrganizerSubscriptionService.instance.selectPlan(
+        plan.name,
+      );
+      if (!mounted) return;
+      navigator.push(
+        MaterialPageRoute(
+          builder: (_) => OrganizerSubscriptionConfirmedScreen(
+            planName: plan.name,
+            price: plan.price,
+            renewsAt: renewsAt,
+          ),
         ),
       );
+    } on OrganizerSubscriptionException catch (e) {
+      if (!mounted) return;
+      messenger?.showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => OrganizerSubscriptionConfirmedScreen(
-          planName: plan.name,
-          price: plan.price,
-          renewsAt: renewsAt,
-        ),
-      ),
-    );
   }
 }
 

@@ -11,8 +11,36 @@ import 'organizer-edit-event.dart';
 import 'organizer-my-events.dart';
 import 'organizer-scanner-session.dart';
 
-class OrganizerDashboardScreen extends StatelessWidget {
+class OrganizerDashboardScreen extends StatefulWidget {
   const OrganizerDashboardScreen({super.key});
+
+  @override
+  State<OrganizerDashboardScreen> createState() =>
+      _OrganizerDashboardScreenState();
+}
+
+class _OrganizerDashboardScreenState extends State<OrganizerDashboardScreen> {
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _isLoading = true);
+    try {
+      await EventRepository.instance.refresh();
+    } on EventRepositoryException {
+      // Non-fatal here: the dashboard just shows zeroed stat cards / an
+      // empty events table rather than blocking the whole page on a retry
+      // flow — My Events (organizer-my-events.dart) is where a failed
+      // load gets a visible error + Retry button.
+    }
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,318 +53,375 @@ class OrganizerDashboardScreen extends StatelessWidget {
     return OrganizerScaffold(
       pageTitle: 'Organizer Dashboard',
       activeItem: OrganizerNavItem.dashboard,
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Welcome + action buttons
-          Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            alignment: WrapAlignment.spaceBetween,
-            spacing: 16,
-            runSpacing: 16,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Welcome back,', style: AppTextStyles.bodyGray),
-                  Text(organizationName, style: AppTextStyles.h1),
-                ],
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const OrganizerSendAnnouncementScreen(),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.campaign_outlined, size: 18, color: AppColors.primaryPurple),
-                    label: const Text('Send Announcement'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.primaryPurple,
-                      side: const BorderSide(color: AppColors.primaryPurple),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 18, vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const OrganizerCreateEventScreen(),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Create Event'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryPurple,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 18, vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 28),
-
-          // Stat cards — computed from real event data (starts at zero for a
-          // brand-new organizer; no hardcoded sample totals).
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final cards = [
-                _StatCard(
-                  icon: Icons.event_available_outlined,
-                  label: 'Total Events',
-                  value: '${events.length}',
-                ),
-                _StatCard(
-                  icon: Icons.confirmation_number_outlined,
-                  label: 'Tickets Sold',
-                  value: '${EventRepository.instance.totalTicketsSold}',
-                ),
-                _StatCard(
-                  icon: Icons.paid_outlined,
-                  label: 'Revenue',
-                  value:
-                      '\u20B1${EventRepository.instance.totalGrossRevenue.toStringAsFixed(0)}',
-                  valueColor: AppColors.successGreen,
-                ),
-              ];
-              if (isNarrow) {
-                return Column(
-                  children: cards
-                      .map((c) => Padding(
-                            padding: const EdgeInsets.only(bottom: 16),
-                            child: c,
-                          ))
-                      .toList(),
-                );
-              }
-              return Row(
-                children: cards
-                    .map((c) => Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.only(right: 16),
-                            child: c,
-                          ),
-                        ))
-                    .toList(),
-              );
-            },
-          ),
-          const SizedBox(height: 24),
-
-          // My events table
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.borderLight),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+      body: _isLoading
+          ? const Padding(
+              padding: EdgeInsets.all(48),
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('My Events', style: AppTextStyles.h3),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const OrganizerMyEventsScreen(),
-                            ),
-                          );
-                        },
-                        child: const Text(
-                          'View All',
-                          style: TextStyle(
+                // Welcome + action buttons
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  alignment: WrapAlignment.spaceBetween,
+                  spacing: 16,
+                  runSpacing: 16,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Welcome back,', style: AppTextStyles.bodyGray),
+                        Text(organizationName, style: AppTextStyles.h1),
+                      ],
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const OrganizerSendAnnouncementScreen(),
+                              ),
+                            );
+                          },
+                          icon: const Icon(
+                            Icons.campaign_outlined,
+                            size: 18,
                             color: AppColors.primaryPurple,
-                            fontWeight: FontWeight.w600,
+                          ),
+                          label: const Text('Send Announcement'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.primaryPurple,
+                            side: const BorderSide(
+                              color: AppColors.primaryPurple,
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 14,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (events.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
-                    child: Column(
-                      children: [
-                        const Icon(Icons.event_note_outlined,
-                            size: 40, color: AppColors.textGray),
-                        const SizedBox(height: 12),
-                        Text(
-                          'No events yet. Create your first event to get started.',
-                          textAlign: TextAlign.center,
-                          style: AppTextStyles.bodyGray,
+                        const SizedBox(width: 12),
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const OrganizerCreateEventScreen(),
+                              ),
+                            );
+                            _load();
+                          },
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('Create Event'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primaryPurple,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 14,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
                         ),
                       ],
                     ),
-                  )
-                else
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minWidth: constraints(context),
+                  ],
+                ),
+                const SizedBox(height: 28),
+
+                // Stat cards — computed from real event data (starts at zero for a
+                // brand-new organizer; no hardcoded sample totals).
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final cards = [
+                      _StatCard(
+                        icon: Icons.event_available_outlined,
+                        label: 'Total Events',
+                        value: '${events.length}',
                       ),
-                      child: DataTable(
-                        headingRowColor:
-                            WidgetStateProperty.all(const Color(0xFFF9FAFB)),
-                        columns: const [
-                          DataColumn(label: Text('EVENT NAME')),
-                          DataColumn(label: Text('DATE')),
-                          DataColumn(label: Text('VENUE')),
-                          DataColumn(label: Text('SOLD')),
-                          DataColumn(label: Text('STATUS')),
-                          DataColumn(label: Text('ACTIONS')),
-                        ],
-                        rows: events
-                            .take(5)
-                            .map((event) => _eventRow(context, event))
+                      _StatCard(
+                        icon: Icons.confirmation_number_outlined,
+                        label: 'Tickets Sold',
+                        value: '${EventRepository.instance.totalTicketsSold}',
+                      ),
+                      _StatCard(
+                        icon: Icons.paid_outlined,
+                        label: 'Revenue',
+                        value:
+                            '\u20B1${EventRepository.instance.totalGrossRevenue.toStringAsFixed(0)}',
+                        valueColor: AppColors.successGreen,
+                      ),
+                    ];
+                    if (isNarrow) {
+                      return Column(
+                        children: cards
+                            .map(
+                              (c) => Padding(
+                                padding: const EdgeInsets.only(bottom: 16),
+                                child: c,
+                              ),
+                            )
                             .toList(),
-                      ),
-                    ),
+                      );
+                    }
+                    return Row(
+                      children: cards
+                          .map(
+                            (c) => Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.only(right: 16),
+                                child: c,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    );
+                  },
+                ),
+                const SizedBox(height: 24),
+
+                // My events table
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.borderLight),
                   ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('My Events', style: AppTextStyles.h3),
+                            TextButton(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const OrganizerMyEventsScreen(),
+                                  ),
+                                );
+                              },
+                              child: const Text(
+                                'View All',
+                                style: TextStyle(
+                                  color: AppColors.primaryPurple,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (events.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+                          child: Column(
+                            children: [
+                              const Icon(
+                                Icons.event_note_outlined,
+                                size: 40,
+                                color: AppColors.textGray,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'No events yet. Create your first event to get started.',
+                                textAlign: TextAlign.center,
+                                style: AppTextStyles.bodyGray,
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minWidth: constraints(context),
+                            ),
+                            child: DataTable(
+                              headingRowColor: WidgetStateProperty.all(
+                                const Color(0xFFF9FAFB),
+                              ),
+                              columns: const [
+                                DataColumn(label: Text('EVENT NAME')),
+                                DataColumn(label: Text('DATE')),
+                                DataColumn(label: Text('VENUE')),
+                                DataColumn(label: Text('SOLD')),
+                                DataColumn(label: Text('STATUS')),
+                                DataColumn(label: Text('ACTIONS')),
+                              ],
+                              rows: events
+                                  .take(5)
+                                  .map((event) => _eventRow(context, event))
+                                  .toList(),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ],
             ),
-          ),
-        ],
-      ),
     );
   }
 
   double constraints(BuildContext context) =>
       MediaQuery.of(context).size.width - 260 - 64;
 
+  Widget _eventThumbnail(String? bannerPath) {
+    final url = EventRepository.instance.publicBannerUrl(bannerPath);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        width: 36,
+        height: 36,
+        color: AppColors.primaryPurple.withValues(alpha: 0.1),
+        alignment: Alignment.center,
+        child: url == null
+            ? const Icon(
+                Icons.image_outlined,
+                size: 18,
+                color: AppColors.primaryPurple,
+              )
+            : Image.network(
+                url,
+                width: 36,
+                height: 36,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const Icon(
+                  Icons.image_outlined,
+                  size: 18,
+                  color: AppColors.primaryPurple,
+                ),
+              ),
+      ),
+    );
+  }
+
   DataRow _eventRow(BuildContext context, OrganizerEvent event) {
     final isPublished = event.status == EventStatus.published;
-    return DataRow(cells: [
-      DataCell(
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: AppColors.primaryPurple.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(6),
+    return DataRow(
+      cells: [
+        DataCell(
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _eventThumbnail(event.bannerUrl),
+              const SizedBox(width: 12),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 220),
+                child: Text(
+                  event.name,
+                  style: AppTextStyles.label,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
+                ),
               ),
-              alignment: Alignment.center,
-              child: const Icon(Icons.image_outlined,
-                  size: 18, color: AppColors.primaryPurple),
-            ),
-            const SizedBox(width: 12),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 220),
-              child: Text(
-                event.name,
-                style: AppTextStyles.label,
-                overflow: TextOverflow.ellipsis,
-                maxLines: 2,
-              ),
-            ),
-          ],
-        ),
-      ),
-      DataCell(Text(event.date, style: AppTextStyles.body)),
-      DataCell(Text(event.venue, style: AppTextStyles.body)),
-      DataCell(Text(event.soldLabel, style: AppTextStyles.label)),
-      DataCell(
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: isPublished
-                ? AppColors.successGreenBg
-                : const Color(0xFFF3F4F6),
-            borderRadius: BorderRadius.circular(999),
+            ],
           ),
-          child: Text(
-            event.status.label,
-            style: TextStyle(
-              color:
-                  isPublished ? AppColors.successGreen : AppColors.textGray,
-              fontWeight: FontWeight.w700,
-              fontSize: 11,
+        ),
+        DataCell(Text(event.date, style: AppTextStyles.body)),
+        DataCell(Text(event.venue, style: AppTextStyles.body)),
+        DataCell(Text(event.soldLabel, style: AppTextStyles.label)),
+        DataCell(
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: isPublished
+                  ? AppColors.successGreenBg
+                  : const Color(0xFFF3F4F6),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              event.status.label,
+              style: TextStyle(
+                color: isPublished
+                    ? AppColors.successGreen
+                    : AppColors.textGray,
+                fontWeight: FontWeight.w700,
+                fontSize: 11,
+              ),
             ),
           ),
         ),
-      ),
-      DataCell(
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => OrganizerEditEventScreen(eventId: event.id),
-                  ),
-                );
-              },
-              child: const Text('Manage',
-                  style: TextStyle(color: AppColors.textDark)),
-            ),
-            if (event.status == EventStatus.published)
+        DataCell(
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
               TextButton(
                 onPressed: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (_) =>
-                          OrganizerScannerSessionScreen(eventId: event.id),
+                          OrganizerEditEventScreen(eventId: event.id),
                     ),
                   );
                 },
-                child: const Text('Scan',
-                    style: TextStyle(color: AppColors.primaryPurple)),
+                child: const Text(
+                  'Manage',
+                  style: TextStyle(color: AppColors.textDark),
+                ),
               ),
-            OutlinedButton(
-              onPressed: event.status == EventStatus.cancelled
-                  ? null
-                  : () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              OrganizerCancelEventScreen(eventId: event.id),
-                        ),
-                      );
-                    },
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.dangerRed,
-                side: const BorderSide(color: AppColors.dangerRed),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              if (event.status == EventStatus.published)
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            OrganizerScannerSessionScreen(eventId: event.id),
+                      ),
+                    );
+                  },
+                  child: const Text(
+                    'Scan',
+                    style: TextStyle(color: AppColors.primaryPurple),
+                  ),
+                ),
+              OutlinedButton(
+                onPressed: event.status == EventStatus.cancelled
+                    ? null
+                    : () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                OrganizerCancelEventScreen(eventId: event.id),
+                          ),
+                        );
+                      },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.dangerRed,
+                  side: const BorderSide(color: AppColors.dangerRed),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                ),
+                child: const Text('Cancel'),
               ),
-              child: const Text('Cancel'),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
-    ]);
+      ],
+    );
   }
 }
 
@@ -380,10 +465,7 @@ class _StatCard extends StatelessWidget {
             children: [
               Text(label, style: AppTextStyles.bodyGray),
               const SizedBox(height: 2),
-              Text(
-                value,
-                style: AppTextStyles.h2.copyWith(color: valueColor),
-              ),
+              Text(value, style: AppTextStyles.h2.copyWith(color: valueColor)),
             ],
           ),
         ],

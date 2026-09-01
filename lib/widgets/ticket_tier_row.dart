@@ -20,14 +20,14 @@ class TicketTierRow extends StatelessWidget {
   /// this event has been reached) — the row is dimmed and unresponsive.
   final VoidCallback? onTap;
 
-  bool get _isDisabled => onTap == null;
+  bool get _isDisabled => onTap == null || tier.isSoldOut;
 
   @override
   Widget build(BuildContext context) {
     return Opacity(
       opacity: _isDisabled ? 0.45 : 1,
       child: InkWell(
-        onTap: onTap,
+        onTap: tier.isSoldOut ? null : onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
           margin: const EdgeInsets.only(bottom: 10),
@@ -43,14 +43,29 @@ class TicketTierRow extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${tier.name} (${tier.seatingLabel})',
-                    style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: AppColors.textDark),
-                  ),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      tier.name,
+                      style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: AppColors.textDark),
+                    ),
+                    if (tier.isSoldOut) ...[
+                      const SizedBox(height: 3),
+                      const Text(
+                        'Sold out',
+                        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.error),
+                      ),
+                    ] else if (tier.remainingQuantity != null && tier.remainingQuantity! <= 10) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        'Only ${tier.remainingQuantity} left',
+                        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.warning),
+                      ),
+                    ],
+                  ],
+                ),
               ),
               Text(
                 formatPeso(withPlatformFee(tier.price, kPrimaryPlatformFeeRate)).replaceAll('.00', ''),

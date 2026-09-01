@@ -17,9 +17,10 @@ enum TransactionCategory { ticketPurchase, resalePurchase, resaleSale }
 
 enum TransactionStatus { completed, pending, failed }
 
-/// Placeholder payment transaction model for UI scaffolding.
-/// TODO: replace with the real TRANSACTIONS Firestore document (linked to
-/// a PayMongo Sandbox payment intent) once the payment backend is wired up.
+/// A payment transaction (ticket purchase, resale purchase, or resale
+/// sale), backed by `public.transactions` joined through `public.tickets`
+/// / `public.ticket_tiers` / `public.events` (see
+/// services/transaction_repository.dart for the query).
 class AppTransaction {
   const AppTransaction({
     required this.id,
@@ -77,4 +78,47 @@ class AppTransaction {
         TransactionStatus.pending => 'Pending',
         TransactionStatus.failed => 'Failed',
       };
+
+  /// Builds an [AppTransaction] from a `public.transactions` row fetched
+  /// with its ticket/tier/event joined in (see
+  /// TransactionRepository.refresh's select string). [currentUserId] is
+  /// needed to tell a resale sale (money received, this user is the
+  /// seller) apart from a resale purchase (money paid, this user is the
+  /// buyer) — the row itself doesn't say which side of the transaction
+  /// "you" are.
+  factory AppTransaction.fromRow(Map<String, dynamic> row, {required String currentUserId}) {
+    final ticketRow = row['tickets'] as Map<String, dynamic>?;
+    final tierRow = ticketRow?['ticket_tiers'] as Map<String, dynamic>?;
+    final eventRow = tierRow?['events'] as Map<String, dynamic>?;
+
+    final isSeller = row['seller_id'] == currentUserId;
+    final rawType = row['transaction_type'] as String;
+    final category = isSeller
+        ? TransactionCategory.resaleSale
+        : (rawType == 'resale' ? TransactionCategory.resalePurchase : TransactionCategory.ticketPurchase);
+
+    final amount = (row['amount'] as num).toDouble();
+    final platformFee = (row['platform_fee'] as num).toDouble();
+
+    final rawStatus = row['status'] as String;
+    final status = switch (rawStatus) {
+      'completed' => TransactionStatus.completed,
+      'pending' => TransactionStatus.pending,
+      _ => TransactionStatus.failed, // 'failed' or 'refunded'
+    };
+
+    return AppTransaction(
+      id: row['transaction_id'] as String,
+      eventTitle: (eventRow?['title'] as String?) ?? 'Unknown event',
+      tierName: (tierRow?['tier_name'] as String?) ?? 'Ticket',
+      category: category,
+      amount: amount,
+      subtotal: amount - platformFee,
+      platformFee: platformFee,
+      dateTime: DateTime.parse(row['created_at'] as String),
+      paymentMethod: 'PayMongo Sandbox',
+      status: status,
+      ticketId: row['ticket_id'] as String?,
+    );
+  }
 }

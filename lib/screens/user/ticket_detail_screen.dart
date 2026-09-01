@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../models/event.dart';
 import '../../models/ticket.dart';
@@ -6,7 +7,6 @@ import '../../theme/app_theme.dart';
 import '../../widgets/dashed_divider.dart';
 import '../../widgets/gradient_pill_button.dart';
 import '../../widgets/purple_header_bar.dart';
-import '../../widgets/qr_placeholder.dart';
 import 'resale_listing_screen.dart';
 
 /// "My Ticket" screen — shown after tapping a ticket from the My Tickets
@@ -129,7 +129,7 @@ class TicketDetailScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 18),
                   Center(
-                    child: QrPlaceholder(seed: ticket.qrToken, size: 200),
+                    child: _TicketQrCode(qrToken: ticket.qrToken, size: 200),
                   ),
                   const SizedBox(height: 18),
                   const Center(
@@ -168,5 +168,45 @@ class TicketDetailScreen extends StatelessWidget {
           onPressed: null,
         );
     }
+  }
+}
+
+/// Renders [qrToken] (the ticket's real `qr_code_token` from
+/// `public.tickets`) as a scannable QR code via `qr_flutter`, and keeps
+/// the rendered widget for a given token cached in memory for the
+/// lifetime of the app run — reopening the same ticket's detail screen
+/// doesn't regenerate the QR image from scratch. This is in-memory
+/// caching only (cleared on app restart); persisting it to disk would
+/// need a local storage package that isn't in this project's
+/// dependencies yet.
+class _TicketQrCode extends StatelessWidget {
+  const _TicketQrCode({required this.qrToken, required this.size});
+
+  final String qrToken;
+  final double size;
+
+  static final Map<String, Widget> _cache = {};
+
+  @override
+  Widget build(BuildContext context) {
+    return _cache.putIfAbsent(
+      qrToken,
+      () => Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.inputBorderLight),
+        ),
+        child: QrImageView(
+          data: qrToken,
+          version: QrVersions.auto,
+          size: size,
+          backgroundColor: AppColors.white,
+          eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: AppColors.textDark),
+          dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: AppColors.textDark),
+        ),
+      ),
+    );
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/sample_tickets.dart';
 import '../../models/event.dart';
 import '../../navigation/app_nav.dart';
+import '../../services/ticket_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_pill_button.dart';
 import '../../widgets/ticket_tier_row.dart';
@@ -19,6 +20,17 @@ class EventDetailsScreen extends StatefulWidget {
 
 class _EventDetailsScreenState extends State<EventDetailsScreen> {
   TicketTier? _selectedTier;
+
+  @override
+  void initState() {
+    super.initState();
+    // Refresh the owned-tickets cache so the one-ticket-per-account limit
+    // check below reflects any purchase made since this cache was last
+    // loaded (e.g. from another device, or earlier this session).
+    TicketRepository.instance.refresh().then((_) {
+      if (mounted) setState(() {});
+    });
+  }
 
   /// Whether FairTix's one-ticket-per-account-per-event purchase limit
   /// blocks the current user from buying a ticket for this event —

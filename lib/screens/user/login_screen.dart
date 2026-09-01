@@ -10,6 +10,7 @@ import '../../widgets/pill_text_field.dart';
 import 'identity_verification_screen.dart';
 import 'registration_pending_screen.dart';
 import 'registration_screen.dart';
+import '../staff/staff_pin_entry_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -172,6 +173,26 @@ class _LoginScreenState extends State<LoginScreen> {
                       TextSpan(text: "Don't have an account? "),
                       TextSpan(
                         text: 'Sign Up',
+                        style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.white),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              GestureDetector(
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const StaffPinEntryScreen()),
+                  );
+                },
+                child: RichText(
+                  text: TextSpan(
+                    style: AppTextStyles.footerText,
+                    children: const [
+                      TextSpan(text: 'Entry staff? '),
+                      TextSpan(
+                        text: 'Scan tickets',
                         style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.white),
                       ),
                     ],

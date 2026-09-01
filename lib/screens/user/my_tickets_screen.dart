@@ -1,15 +1,42 @@
 import 'package:flutter/material.dart';
 
-import '../../data/sample_tickets.dart';
 import '../../models/ticket.dart';
+import '../../services/ticket_repository.dart';
 import '../../theme/app_theme.dart';
 import 'ticket_detail_screen.dart';
 
-/// "My Tickets" tab — lists every ticket the current user owns.
-/// TODO: replace `sampleMyTickets` with a real query against the TICKETS
-/// Firestore collection filtered by owner_id == current user.
-class MyTicketsScreen extends StatelessWidget {
+/// "My Tickets" tab — lists every ticket the current user owns, backed by
+/// [TicketRepository] (real query against `public.tickets`).
+class MyTicketsScreen extends StatefulWidget {
   const MyTicketsScreen({super.key});
+
+  @override
+  State<MyTicketsScreen> createState() => _MyTicketsScreenState();
+}
+
+class _MyTicketsScreenState extends State<MyTicketsScreen> {
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTickets();
+  }
+
+  Future<void> _loadTickets() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      await TicketRepository.instance.refresh();
+    } on TicketRepositoryException catch (e) {
+      _errorMessage = e.message;
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   void _openTicket(BuildContext context, Ticket ticket) {
     Navigator.of(context).push(
@@ -19,57 +46,80 @@ class MyTicketsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tickets = sampleMyTickets;
+    final tickets = TicketRepository.instance.tickets;
+
     return Scaffold(
       backgroundColor: AppColors.pageBackground,
       body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                    sliver: SliverToBoxAdapter(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('My Tickets', style: AppTextStyles.sectionHeading),
-                          const SizedBox(height: 4),
-                          const Text('Tickets you\u2019ve purchased or received', style: AppTextStyles.bodyMuted),
-                          const SizedBox(height: 18),
-                        ],
+        child: RefreshIndicator(
+          onRefresh: _loadTickets,
+          child: CustomScrollView(
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                sliver: SliverToBoxAdapter(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('My Tickets', style: AppTextStyles.sectionHeading),
+                      const SizedBox(height: 4),
+                      const Text('Tickets you\u2019ve purchased or received', style: AppTextStyles.bodyMuted),
+                      const SizedBox(height: 18),
+                    ],
+                  ),
+                ),
+              ),
+              if (_isLoading)
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: CircularProgressIndicator(color: AppColors.accentPurple)),
+                )
+              else if (_errorMessage != null)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(_errorMessage!, style: AppTextStyles.bodyMuted, textAlign: TextAlign.center),
+                        const SizedBox(height: 10),
+                        TextButton(onPressed: _loadTickets, child: const Text('Try again')),
+                      ],
+                    ),
+                  ),
+                )
+              else if (tickets.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.confirmation_number_outlined, size: 48, color: AppColors.accentPurple.withValues(alpha: 0.35)),
+                        const SizedBox(height: 14),
+                        const Text('No tickets yet', style: AppTextStyles.sectionHeading),
+                        const SizedBox(height: 6),
+                        const Text('Tickets you buy will show up here.', style: AppTextStyles.bodyMuted),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                  sliver: SliverList.builder(
+                    itemCount: tickets.length,
+                    itemBuilder: (context, index) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _TicketCard(
+                        ticket: tickets[index],
+                        onTap: () => _openTicket(context, tickets[index]),
                       ),
                     ),
                   ),
-                  if (tickets.isEmpty)
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.confirmation_number_outlined, size: 48, color: AppColors.accentPurple.withValues(alpha: 0.35)),
-                            const SizedBox(height: 14),
-                            const Text('No tickets yet', style: AppTextStyles.sectionHeading),
-                            const SizedBox(height: 6),
-                            const Text('Tickets you buy will show up here.', style: AppTextStyles.bodyMuted),
-                          ],
-                        ),
-                      ),
-                    )
-                  else
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                      sliver: SliverList.builder(
-                        itemCount: tickets.length,
-                        itemBuilder: (context, index) => Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _TicketCard(
-                            ticket: tickets[index],
-                            onTap: () => _openTicket(context, tickets[index]),
-                          ),
-                        ),
-                      ),
-                    ),
-          ],
+                ),
+            ],
+          ),
         ),
       ),
     );

@@ -1,17 +1,28 @@
 import 'package:flutter/material.dart';
 
-/// Placeholder ticket tier model for UI scaffolding.
-/// TODO: replace with the real TICKET_TIERS Firestore document once wired up.
+/// A ticket tier as shown to eventgoers, backed by `public.ticket_tiers`
+/// (see supabase/schema.sql).
 class TicketTier {
   const TicketTier({
+    required this.id,
     required this.name,
     required this.seatingLabel,
     required this.price,
+    this.remainingQuantity,
   });
 
+  /// `ticket_tiers.tier_id` — needed so checkout can reference the exact
+  /// tier row being purchased.
+  final String id;
   final String name;
   final String seatingLabel; // e.g. "Reserved Seating", "Free Seating"
   final double price;
+
+  /// `ticket_tiers.remaining_quantity`. Null when unknown (treated as
+  /// available) — always populated once loaded via [PublicEventRepository].
+  final int? remainingQuantity;
+
+  bool get isSoldOut => remainingQuantity != null && remainingQuantity! <= 0;
 }
 
 /// Placeholder event model for UI scaffolding.

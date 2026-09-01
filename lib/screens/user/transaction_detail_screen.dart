@@ -122,7 +122,7 @@ class TransactionDetailScreen extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'This is a simulated transaction record — no real money was processed.',
+                      'Paid via PayMongo Sandbox (test mode) — no real money was processed.',
                       style: AppTextStyles.bodyMuted.copyWith(fontSize: 12),
                     ),
                   ),

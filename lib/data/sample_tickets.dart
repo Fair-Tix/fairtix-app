@@ -1,13 +1,11 @@
 import '../models/ticket.dart';
+import '../services/ticket_repository.dart';
 
-/// Tickets the current user owns.
-/// TODO(backend): replace with a real query against the TICKETS
-/// Firestore collection filtered by owner_id == current user once wired
-/// up.
-///
-/// Starts empty on every app run — no sample/dummy tickets are seeded
-/// here. Screens that read this already render an empty state when the
-/// list has no entries.
+/// Deprecated: kept only so any not-yet-migrated screens that still
+/// import this list don't break. Real ticket data now comes from
+/// [TicketRepository] (see my_tickets_screen.dart), which is refreshed
+/// after every purchase and whenever My Tickets / an event's details
+/// screen is opened.
 final List<Ticket> sampleMyTickets = [];
 
 /// Event ids for which the current user has already resold their ticket.
@@ -25,7 +23,7 @@ final Set<String> soldTicketEventIds = {};
 /// [eventId] — i.e. they've already used their one-ticket-per-account
 /// purchase slot for this event and haven't resold it (yet).
 bool userOwnsTicketForEvent(String eventId) {
-  return sampleMyTickets.any(
+  return TicketRepository.instance.tickets.any(
     (t) => t.event.id == eventId && (t.status == TicketStatus.valid || t.status == TicketStatus.listed),
   );
 }

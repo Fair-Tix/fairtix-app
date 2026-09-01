@@ -1,16 +1,36 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
 
-import '../../data/sample_tickets.dart';
-import '../../data/sample_transactions.dart';
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import '../../models/event.dart';
 import '../../models/ticket.dart';
-import '../../models/transaction.dart';
+import '../../services/ticket_repository.dart';
+import '../../services/transaction_repository.dart';
 import '../../services/user_session.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_pill_button.dart';
 import '../../widgets/purple_header_bar.dart';
 import 'checkout_confirmation_screen.dart';
 
+/// Real checkout flow:
+///  1. Ask the `paymongo-checkout` Supabase Edge Function to create a
+///     PayMongo Sandbox Payment Link (the function holds the PayMongo
+///     secret key — see supabase/functions/paymongo-checkout/index.ts).
+///  2. Open that link in the browser so the buyer pays on PayMongo's own
+///     Sandbox checkout page.
+///  3. Once the buyer confirms they've paid, call the `purchase_ticket`
+///     Postgres RPC (supabase/purchase_functions.sql), which atomically
+///     checks stock, creates the `tickets` row, records the `transactions`
+///     row, and decrements `ticket_tiers.remaining_quantity`.
+///
+/// NOTE: without a webhook endpoint verifying the PayMongo payment status
+/// server-side, step 3 trusts the buyer's "I've paid" tap rather than
+/// PayMongo's own confirmation. Wiring a `paymongo-webhook` Edge Function
+/// that listens for `link.payment.paid` and calls `purchase_ticket` itself
+/// is the natural next hardening step — tracked as a follow-up, not done
+/// here.
 class CheckoutScreen extends StatefulWidget {
   const CheckoutScreen({super.key, required this.event, required this.tier});
 
@@ -21,54 +41,129 @@ class CheckoutScreen extends StatefulWidget {
   State<CheckoutScreen> createState() => _CheckoutScreenState();
 }
 
+enum _CheckoutStage { review, creatingLink, awaitingPayment, finalizing }
+
 class _CheckoutScreenState extends State<CheckoutScreen> {
-  bool _isProcessing = false;
+  _CheckoutStage _stage = _CheckoutStage.review;
+  String? _checkoutUrl;
+  String? _linkId;
+  String? _errorMessage;
 
-  Future<void> _handleConfirmPurchase() async {
-    setState(() => _isProcessing = true);
-    // TODO: replace with a real PayMongo Sandbox checkout session + escrow
-    // hold via Cloud Functions once the payment backend is wired up.
-    await Future.delayed(const Duration(milliseconds: 900));
-    if (!mounted) return;
-
-    final newTicket = Ticket(
-      id: 'tkt_${DateTime.now().millisecondsSinceEpoch}',
-      event: widget.event,
-      tier: widget.tier,
-      ownerName: UserSession.instance.account?.fullName ?? 'FairTix User',
-      qrToken: 'FTX-${DateTime.now().millisecondsSinceEpoch}',
-    );
-    sampleMyTickets.add(newTicket);
+  Future<void> _handleStartPayment() async {
+    setState(() {
+      _stage = _CheckoutStage.creatingLink;
+      _errorMessage = null;
+    });
 
     final ticketPrice = widget.tier.price;
     final platformFee = ticketPrice * kPrimaryPlatformFeeRate;
     final total = ticketPrice + platformFee;
 
-    sampleTransactions.add(
-      AppTransaction(
-        id: 'txn_${DateTime.now().millisecondsSinceEpoch}',
-        eventTitle: widget.event.title,
-        tierName: widget.tier.name,
-        category: TransactionCategory.ticketPurchase,
-        subtotal: ticketPrice,
-        platformFee: platformFee,
-        amount: total,
-        dateTime: DateTime.now(),
-        paymentMethod: 'PayMongo Sandbox (Simulated)',
-        ticketId: newTicket.id,
-      ),
-    );
+    try {
+      final response = await Supabase.instance.client.functions.invoke(
+        'paymongo-checkout',
+        body: {
+          'amount': total,
+          'description': '${widget.tier.name} \u2013 ${widget.event.title}',
+          'tierId': widget.tier.id,
+        },
+      );
 
-    setState(() => _isProcessing = false);
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => CheckoutConfirmationScreen(
-          event: widget.event,
-          tier: widget.tier,
-          purchasedTicket: newTicket,
+      final data = response.data;
+      if (data is! Map || data['checkout_url'] == null || data['link_id'] == null) {
+        final errorText = (data is Map ? data['error'] as String? : null) ??
+            'Could not start the PayMongo checkout.';
+        throw Exception(errorText);
+      }
+
+      final url = data['checkout_url'] as String;
+      setState(() {
+        _checkoutUrl = url;
+        _linkId = data['link_id'] as String;
+        _stage = _CheckoutStage.awaitingPayment;
+      });
+
+      final launched = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      if (!launched && mounted) {
+        setState(() => _errorMessage = 'Could not open the payment page automatically. Use the link below.');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _stage = _CheckoutStage.review;
+        _errorMessage = 'Could not start payment: ${e.toString().replaceFirst('Exception: ', '')}';
+      });
+    }
+  }
+
+  Future<void> _handleConfirmPaid() async {
+    setState(() {
+      _stage = _CheckoutStage.finalizing;
+      _errorMessage = null;
+    });
+
+    // Deterministic token derived from the PayMongo link id — matches what
+    // paymongo-webhook computes server-side when PayMongo itself confirms
+    // the payment. Whichever of the two fires first actually creates the
+    // ticket; the other safely becomes a no-op (see _do_ticket_purchase in
+    // supabase/purchase_functions.sql), so a ticket is never double-issued
+    // for one payment no matter which path lands first.
+    final linkId = _linkId;
+    if (linkId == null) {
+      setState(() {
+        _stage = _CheckoutStage.awaitingPayment;
+        _errorMessage = 'Missing payment reference — please restart checkout.';
+      });
+      return;
+    }
+    final qrToken = 'FTX-$linkId';
+
+    try {
+      final result = await Supabase.instance.client.rpc(
+        'purchase_ticket',
+        params: {'p_tier_id': widget.tier.id, 'p_qr_code_token': qrToken},
+      );
+
+      final row = (result is List) ? result.first as Map<String, dynamic> : result as Map<String, dynamic>;
+
+      final newTicket = Ticket(
+        id: row['ticket_id'] as String,
+        event: widget.event,
+        tier: widget.tier,
+        ownerName: UserSession.instance.account?.fullName ?? 'FairTix User',
+        qrToken: row['qr_code_token'] as String,
+      );
+
+      // Refresh the real My Tickets / Transactions caches (see
+      // TicketRepository / TransactionRepository) so they reflect this
+      // purchase the moment those screens are next opened, instead of
+      // showing stale data until their own next manual refresh.
+      unawaited(TicketRepository.instance.refresh());
+      unawaited(TransactionRepository.instance.refresh());
+
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => CheckoutConfirmationScreen(
+            event: widget.event,
+            tier: widget.tier,
+            purchasedTicket: newTicket,
+          ),
         ),
-      ),
-    );
+      );
+    } on PostgrestException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _stage = _CheckoutStage.awaitingPayment;
+        _errorMessage = e.message;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _stage = _CheckoutStage.awaitingPayment;
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
   }
 
   @override
@@ -76,6 +171,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final ticketPrice = widget.tier.price;
     final platformFee = ticketPrice * kPrimaryPlatformFeeRate;
     final total = ticketPrice + platformFee;
+    final isBusy = _stage == _CheckoutStage.creatingLink || _stage == _CheckoutStage.finalizing;
 
     return Scaffold(
       backgroundColor: AppColors.pageBackground,
@@ -169,7 +265,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'This is a simulated payment — no real money is processed.',
+                            'You\u2019ll pay via PayMongo\u2019s Sandbox checkout page (test mode \u2014 no real money is processed).',
                             style: AppTextStyles.bodyMuted.copyWith(fontSize: 12),
                           ),
                         ),
@@ -179,16 +275,76 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 ],
               ),
             ),
+            if (_stage == _CheckoutStage.awaitingPayment) ...[
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.accentPurple.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.accentPurple.withValues(alpha: 0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.open_in_new_rounded, size: 18, color: AppColors.accentPurple),
+                        SizedBox(width: 8),
+                        Text('Complete your payment', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.accentPurple)),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'A PayMongo Sandbox payment page opened in your browser. Once you\u2019ve completed the test payment there, come back and tap the button below.',
+                      style: AppTextStyles.bodyMuted.copyWith(fontSize: 12.5, height: 1.4),
+                    ),
+                    if (_checkoutUrl != null) ...[
+                      const SizedBox(height: 10),
+                      InkWell(
+                        onTap: () => launchUrl(Uri.parse(_checkoutUrl!), mode: LaunchMode.externalApplication),
+                        child: Text(
+                          'Reopen payment page',
+                          style: AppTextStyles.bodyMuted.copyWith(
+                            fontSize: 12.5,
+                            color: AppColors.accentPurple,
+                            fontWeight: FontWeight.w700,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+            if (_errorMessage != null) ...[
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.error.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+                ),
+                child: Text(
+                  _errorMessage!,
+                  style: TextStyle(fontSize: 12.5, color: AppColors.error, height: 1.4),
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
             GradientPillButton(
-              label: 'Confirm Purchase',
-              loading: _isProcessing,
-              onPressed: _handleConfirmPurchase,
+              label: _stage == _CheckoutStage.awaitingPayment ? 'I\u2019ve Completed Payment' : 'Pay with PayMongo',
+              loading: isBusy,
+              onPressed: _stage == _CheckoutStage.awaitingPayment ? _handleConfirmPaid : _handleStartPayment,
             ),
             const SizedBox(height: 14),
             Center(
               child: TextButton(
-                onPressed: () => Navigator.of(context).maybePop(),
+                onPressed: isBusy ? null : () => Navigator.of(context).maybePop(),
                 child: const Text(
                   'Cancel and go back',
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.textMuted, decoration: TextDecoration.underline),

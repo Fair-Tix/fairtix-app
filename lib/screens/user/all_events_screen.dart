@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
 
-import '../../data/sample_events.dart';
 import '../../models/event.dart';
+import '../../services/public_event_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/purple_header_bar.dart';
 import '../../widgets/upcoming_event_tile.dart';
 import 'event_details_screen.dart';
 
 /// Full event catalogue, reached via "See all" on the Dashboard's
-/// Featured Events section.
-/// TODO: replace `sampleEvents` with a real query against the EVENTS
-/// Firestore collection (status == published) once the backend is wired up.
+/// Featured Events section. Backed by `public.events` (status ==
+/// published) via [PublicEventRepository].
 class AllEventsScreen extends StatefulWidget {
   const AllEventsScreen({super.key});
 
@@ -20,11 +19,34 @@ class AllEventsScreen extends StatefulWidget {
 
 class _AllEventsScreenState extends State<AllEventsScreen> {
   String _searchQuery = '';
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadEvents();
+  }
+
+  Future<void> _loadEvents() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      await PublicEventRepository.instance.refresh();
+    } on PublicEventRepositoryException catch (e) {
+      _errorMessage = e.message;
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   List<EventSummary> get _filteredEvents {
-    if (_searchQuery.isEmpty) return sampleEvents;
+    final all = PublicEventRepository.instance.events;
+    if (_searchQuery.isEmpty) return all;
     final query = _searchQuery.toLowerCase();
-    return sampleEvents.where((e) => e.title.toLowerCase().contains(query)).toList();
+    return all.where((e) => e.title.toLowerCase().contains(query)).toList();
   }
 
   void _openEvent(EventSummary event) {
@@ -67,24 +89,49 @@ class _AllEventsScreenState extends State<AllEventsScreen> {
             ),
             const SizedBox(height: 16),
             Expanded(
-              child: events.isEmpty
-                  ? Center(
-                      child: Text(
-                        _searchQuery.isEmpty
-                            ? 'No events available yet. Check back soon!'
-                            : 'No events match your search.',
-                        style: AppTextStyles.bodyMuted,
-                      ),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.only(bottom: 20),
-                      itemCount: events.length,
-                      separatorBuilder: (_, _) => const Divider(color: AppColors.inputBorderLight, height: 1),
-                      itemBuilder: (context, index) => UpcomingEventTile(
-                        event: events[index],
-                        onTap: () => _openEvent(events[index]),
-                      ),
-                    ),
+              child: RefreshIndicator(
+                onRefresh: _loadEvents,
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator(color: AppColors.accentPurple))
+                    : _errorMessage != null
+                        ? ListView(
+                            children: [
+                              const SizedBox(height: 60),
+                              Center(
+                                child: Column(
+                                  children: [
+                                    Text(_errorMessage!, style: AppTextStyles.bodyMuted, textAlign: TextAlign.center),
+                                    const SizedBox(height: 10),
+                                    TextButton(onPressed: _loadEvents, child: const Text('Try again')),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          )
+                        : events.isEmpty
+                            ? ListView(
+                                children: [
+                                  const SizedBox(height: 60),
+                                  Center(
+                                    child: Text(
+                                      _searchQuery.isEmpty
+                                          ? 'No events available yet. Check back soon!'
+                                          : 'No events match your search.',
+                                      style: AppTextStyles.bodyMuted,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : ListView.separated(
+                                padding: const EdgeInsets.only(bottom: 20),
+                                itemCount: events.length,
+                                separatorBuilder: (_, _) => const Divider(color: AppColors.inputBorderLight, height: 1),
+                                itemBuilder: (context, index) => UpcomingEventTile(
+                                  event: events[index],
+                                  onTap: () => _openEvent(events[index]),
+                                ),
+                              ),
+              ),
             ),
           ],
         ),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/admin_session.dart';
-import '../../services/event_repository.dart';
+import '../../services/admin_revenue_service.dart';
 import '../organizer/app_colors.dart';
 import 'admin-accounts.dart';
 import 'admin-dashboard.dart';
@@ -24,6 +24,32 @@ class AdminRevenueReportsScreen extends StatefulWidget {
 
 class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
   String _range = 'This Month';
+  List<PlanRevenue> _plans = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRevenue();
+  }
+
+  Future<void> _loadRevenue() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      final plans = await AdminRevenueService.instance.fetchByPlan();
+      if (!mounted) return;
+      setState(() => _plans = plans);
+    } on AdminRevenueException catch (e) {
+      if (!mounted) return;
+      setState(() => _errorMessage = e.message);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   static const _items = [
     (Icons.grid_view_rounded, 'Dashboard'),
@@ -225,11 +251,10 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
   }
 
   Widget _buildContent(bool isWide) {
-    final repository = EventRepository.instance;
-    final revenue = repository.totalGrossRevenue;
-    final fees = revenue * 0.10;
-    final payouts = revenue - fees;
-    final hasData = repository.events.isNotEmpty;
+    final revenue = _plans.fold<double>(0, (sum, p) => sum + p.gross);
+    final fees = _plans.fold<double>(0, (sum, p) => sum + p.fees);
+    final payouts = _plans.fold<double>(0, (sum, p) => sum + p.net);
+    final hasData = _plans.any((p) => p.tickets > 0);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -266,7 +291,13 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
         ),
         if (!isWide) ...[const SizedBox(height: 12), _buildRangeControls()],
         const SizedBox(height: 18),
+        if (_errorMessage != null) ...[
+          _buildErrorBanner(),
+          const SizedBox(height: 12),
+        ],
         _buildSummaryCards(revenue, fees, payouts, hasData),
+        const SizedBox(height: 18),
+        _buildFeesByPlan(),
         const SizedBox(height: 18),
         if (isWide)
           Row(
@@ -363,7 +394,7 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
             const Color(0xFFB05BFF),
             'Platform Fees',
             _money(fees),
-            hasData ? '10% of recorded gross' : 'No fee data yet',
+            hasData ? 'Per plan: 8% / 9% / 10%' : 'No fee data yet',
           ),
           (
             Icons.sell_outlined,
@@ -441,6 +472,110 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
               .toList(),
         );
       },
+    );
+  }
+
+  Widget _buildErrorBanner() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF2F2),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFFECACA)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              _errorMessage!,
+              style: const TextStyle(color: Color(0xFFB91C1C), fontSize: 11),
+            ),
+          ),
+          TextButton(onPressed: _loadRevenue, child: const Text('Retry')),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFeesByPlan() {
+    return _panel(
+      title: 'Platform Fees by Plan',
+      trailing: _isLoading ? 'Loading...' : 'From recorded ticket sales',
+      child: Column(
+        children: [
+          const Divider(height: 1),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 10, 16, 10),
+            child: Row(
+              children: [
+                Expanded(child: Text('PLAN', style: _headerStyle)),
+                Expanded(child: Text('FEE RATE', style: _headerStyle)),
+                Expanded(child: Text('TICKETS', style: _headerStyle)),
+                Expanded(child: Text('TICKET REVENUE', style: _headerStyle)),
+                Expanded(child: Text('PLATFORM FEES', style: _headerStyle)),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          for (final plan in _plans.isEmpty
+              ? [
+                  for (final (name, rate) in AdminRevenueService.plans)
+                    PlanRevenue(
+                      plan: name,
+                      rate: rate,
+                      tickets: 0,
+                      gross: 0,
+                      fees: 0,
+                      net: 0,
+                    ),
+                ]
+              : _plans)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      plan.plan,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      plan.rateLabel,
+                      style: const TextStyle(
+                        color: AppColors.primaryPurple,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      '${plan.tickets}',
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      _money(plan.gross),
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      _money(plan.fees),
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -693,7 +828,7 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
     );
   }
 
-  String _money(double amount) => '₱${amount.toStringAsFixed(0)}';
+  String _money(double amount) => '₱${amount.toStringAsFixed(2)}';
 
   void _showMessage(String message) => ScaffoldMessenger.of(
     context,

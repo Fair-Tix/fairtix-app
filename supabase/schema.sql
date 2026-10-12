@@ -231,6 +231,51 @@ create table public.notifications (
   sent_at         timestamptz not null default now()
 );
 
+-- Notify a user when an admin approves or rejects their account.
+-- Runs as SECURITY DEFINER because notifications_insert_admin_only
+-- (policies.sql) blocks clients from inserting notifications directly,
+-- and it fires on ANY change to id_verification_status, so it works for
+-- eventgoer ID review and organizer document review alike. Email delivery
+-- is a separate concern (needs an Edge Function) — this only creates the
+-- in-app notification row.
+create function public.notify_verification_change()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  if new.id_verification_status is distinct from old.id_verification_status then
+    if new.id_verification_status = 'verified' then
+      insert into public.notifications (user_id, title, message, type, channel)
+      values (
+        new.id,
+        'Account Activated',
+        case when new.role = 'organizer'
+          then 'Your organizer application has been approved. You can now choose a plan and create events.'
+          else 'Your identity has been verified. You can now browse events, purchase tickets, and use the Resale Market.'
+        end,
+        'system',
+        'in_app'
+      );
+    elsif new.id_verification_status = 'rejected' then
+      insert into public.notifications (user_id, title, message, type, channel)
+      values (
+        new.id,
+        'Verification Rejected',
+        'We could not verify your submitted documents. Please log in and submit them again.',
+        'system',
+        'in_app'
+      );
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger on_user_verification_change
+  after update of id_verification_status on public.users
+  for each row execute procedure public.notify_verification_change();
+
 -- ── Organizer Fees (Table 16) ────────────────────────────────────────────
 create table public.organizer_fees (
   fee_id         uuid primary key default gen_random_uuid(),

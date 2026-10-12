@@ -225,12 +225,26 @@ class OrganizerAuthService {
           'role': 'organizer',
         },
       );
-      if (response.user == null) {
+      final user = response.user;
+      if (user == null) {
         throw const OrganizerAuthException(
           'Could not create your account. Please try again.',
         );
       }
+      // Supabase returns an obfuscated user with empty `identities` (no
+      // error) when the email already belongs to a confirmed account.
+      if (user.identities != null && user.identities!.isEmpty) {
+        throw const OrganizerAuthException(
+          'An account with this email already exists. Try logging in instead.',
+        );
+      }
     } on AuthException catch (e) {
+      final msg = e.message.toLowerCase();
+      if (msg.contains('already registered') || msg.contains('already exists')) {
+        throw const OrganizerAuthException(
+          'An account with this email already exists. Try logging in instead.',
+        );
+      }
       throw OrganizerAuthException(e.message);
     }
   }

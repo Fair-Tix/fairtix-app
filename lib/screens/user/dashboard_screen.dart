@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/sample_notifications.dart';
 import '../../models/event.dart';
+import '../../services/notification_repository.dart';
 import '../../services/public_event_repository.dart';
 import '../../services/user_session.dart';
 import '../../theme/app_theme.dart';
@@ -40,6 +41,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _errorMessage = e.message;
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+    // Refresh the bell's unread dot too. A notification failure shouldn't
+    // block or error the events list, so it's swallowed here (the
+    // notifications screen itself shows load errors).
+    try {
+      await NotificationRepository.instance.refresh();
+      if (mounted) setState(() {});
+    } on NotificationRepositoryException {
+      // ignore
     }
   }
 

@@ -4,15 +4,15 @@ import '../../data/sample_notifications.dart';
 import '../../data/sample_tickets.dart';
 import '../../models/app_notification.dart';
 import '../../models/ticket.dart';
+import '../../services/notification_repository.dart';
 import '../../theme/app_theme.dart';
 import 'ticket_sold_screen.dart';
 
-/// In-app notification feed. Currently the only actionable notification
-/// type is [AppNotificationType.ticketSold] — tapping one opens the
-/// Ticket Sold confirmation for the seller. Tapping any notification
-/// marks it as read.
-/// TODO: replace `sampleNotifications` with a real feed (FCM message
-/// history or a NOTIFICATIONS collection) once the backend is wired up.
+/// In-app notification feed, loaded from the Postgres `notifications`
+/// table via [NotificationRepository]. Currently the only actionable
+/// notification type is [AppNotificationType.ticketSold] — tapping one
+/// opens the Ticket Sold confirmation for the seller. Tapping any
+/// notification marks it as read (saved to the database).
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
 
@@ -21,10 +21,42 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
-  void _handleTap(AppNotification notification) {
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      await NotificationRepository.instance.refresh();
+    } on NotificationRepositoryException catch (e) {
+      _errorMessage = e.message;
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _handleTap(AppNotification notification) async {
     final index = sampleNotifications.indexWhere((n) => n.id == notification.id);
     if (index != -1 && !sampleNotifications[index].isRead) {
       setState(() => sampleNotifications[index] = sampleNotifications[index].copyWith(isRead: true));
+      try {
+        await NotificationRepository.instance.markRead(notification.id);
+      } on NotificationRepositoryException catch (e) {
+        if (!mounted) return;
+        // Roll the unread dot back so the UI matches what's saved.
+        setState(() => sampleNotifications[index] = sampleNotifications[index].copyWith(isRead: false));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        return;
+      }
     }
 
     if (notification.type != AppNotificationType.ticketSold) return;
@@ -80,29 +112,57 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.textDark),
         ),
       ),
-      body: notifications.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.notifications_none_rounded, size: 48, color: AppColors.accentPurple.withValues(alpha: 0.35)),
-                  const SizedBox(height: 14),
-                  const Text('No notifications yet', style: AppTextStyles.sectionHeading),
-                ],
-              ),
-            )
-          : ListView.separated(
-              padding: const EdgeInsets.all(20),
-              itemCount: notifications.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 10),
-              itemBuilder: (context, index) {
-                final notification = notifications[index];
-                return _NotificationTile(
-                  notification: notification,
-                  onTap: () => _handleTap(notification),
-                );
-              },
-            ),
+      body: _isLoading && notifications.isEmpty
+          ? const Center(child: CircularProgressIndicator())
+          : _errorMessage != null && notifications.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(_errorMessage!, textAlign: TextAlign.center, style: AppTextStyles.bodyMuted),
+                        const SizedBox(height: 12),
+                        TextButton(onPressed: _load, child: const Text('Try again')),
+                      ],
+                    ),
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  child: notifications.isEmpty
+                      ? ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          children: [
+                            SizedBox(
+                              height: MediaQuery.of(context).size.height * 0.6,
+                              child: Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.notifications_none_rounded, size: 48, color: AppColors.accentPurple.withValues(alpha: 0.35)),
+                                    const SizedBox(height: 14),
+                                    const Text('No notifications yet', style: AppTextStyles.sectionHeading),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      : ListView.separated(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.all(20),
+                          itemCount: notifications.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 10),
+                          itemBuilder: (context, index) {
+                            final notification = notifications[index];
+                            return _NotificationTile(
+                              notification: notification,
+                              onTap: () => _handleTap(notification),
+                            );
+                          },
+                        ),
+                ),
     );
   }
 }
@@ -115,7 +175,7 @@ class _NotificationTile extends StatelessWidget {
 
   IconData get _icon => switch (notification.type) {
         AppNotificationType.ticketSold => Icons.sell_rounded,
-        AppNotificationType.general => Icons.info_outline_rounded,
+        AppNotificationType.general => Icons.notifications_rounded,
       };
 
   @override

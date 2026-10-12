@@ -97,12 +97,35 @@ class UserAuthService {
               '${birthDate.day.toString().padLeft(2, '0')}',
         },
       );
-      if (response.user == null) {
+      final user = response.user;
+      if (user == null) {
         throw const UserAuthException(
           'Could not create your account. Please try again.',
         );
       }
+      // With "Confirm email" enabled, Supabase does NOT error when the email
+      // already belongs to a confirmed account (to avoid leaking which
+      // emails are registered). It returns an obfuscated user whose
+      // `identities` list is empty, so we have to detect that ourselves.
+      if (user.identities != null && user.identities!.isEmpty) {
+        throw const UserAuthException(
+          'An account with this email already exists. Try logging in instead.',
+        );
+      }
     } on AuthException catch (e) {
+      final msg = e.message.toLowerCase();
+      if (msg.contains('already registered') || msg.contains('already exists')) {
+        throw const UserAuthException(
+          'An account with this email already exists. Try logging in instead.',
+        );
+      }
+      // The signup trigger inserts into public.users, so a taken username
+      // (unique constraint) surfaces as this generic database error.
+      if (msg.contains('database error saving new user')) {
+        throw const UserAuthException(
+          'That username is already taken. Please choose another.',
+        );
+      }
       throw UserAuthException(e.message);
     }
   }

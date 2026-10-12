@@ -107,25 +107,13 @@ $$;
 revoke all on function public._do_ticket_purchase(uuid, uuid, text) from public, anon, authenticated;
 
 -- ── Entry point 1: called by the buyer's own signed-in client ───────────
-create or replace function public.purchase_ticket(
-  p_tier_id uuid,
-  p_qr_code_token text
-)
-returns public.tickets
-language plpgsql
-security definer set search_path = public
-as $$
-declare
-  v_buyer_id uuid := auth.uid();
-begin
-  if v_buyer_id is null then
-    raise exception 'You need to be signed in to purchase a ticket.';
-  end if;
-  return public._do_ticket_purchase(p_tier_id, v_buyer_id, p_qr_code_token);
-end;
-$$;
-
-grant execute on function public.purchase_ticket(uuid, text) to authenticated;
+-- NOTE: purchase_ticket (the old buyer-callable entry point) has been
+-- REMOVED. It minted a ticket without checking that a payment happened,
+-- so a failed/canceled payment (or a direct RPC call) still produced a
+-- ticket. Tickets are now issued only through fulfill_ticket_purchase,
+-- called server-side by the paymongo-verify / paymongo-webhook Edge
+-- Functions after PayMongo itself confirms the link is paid.
+drop function if exists public.purchase_ticket(uuid, text);
 
 -- ── Entry point 2: called by the paymongo-webhook Edge Function only ────
 -- Takes buyer_id explicitly since a webhook call has no user session/JWT

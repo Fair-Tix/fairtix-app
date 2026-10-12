@@ -20,17 +20,18 @@ import 'checkout_confirmation_screen.dart';
 ///     secret key — see supabase/functions/paymongo-checkout/index.ts).
 ///  2. Open that link in the browser so the buyer pays on PayMongo's own
 ///     Sandbox checkout page.
-///  3. Once the buyer confirms they've paid, call the `purchase_ticket`
-///     Postgres RPC (supabase/purchase_functions.sql), which atomically
-///     checks stock, creates the `tickets` row, records the `transactions`
-///     row, and decrements `ticket_tiers.remaining_quantity`.
+///  3. Once the buyer taps "I've completed payment", call the
+///     `paymongo-verify` Edge Function (supabase/functions/paymongo-verify),
+///     which asks PayMongo directly whether the link is PAID and only then
+///     issues the ticket (atomically checking stock, creating the
+///     `tickets` row, recording the `transactions` row, and decrementing
+///     `ticket_tiers.remaining_quantity` — see
+///     supabase/purchase_functions.sql). A failed or canceled payment
+///     therefore never produces a ticket.
 ///
-/// NOTE: without a webhook endpoint verifying the PayMongo payment status
-/// server-side, step 3 trusts the buyer's "I've paid" tap rather than
-/// PayMongo's own confirmation. Wiring a `paymongo-webhook` Edge Function
-/// that listens for `link.payment.paid` and calls `purchase_ticket` itself
-/// is the natural next hardening step — tracked as a follow-up, not done
-/// here.
+/// `paymongo-webhook` is a second, independent path that issues the same
+/// ticket when PayMongo notifies us server-to-server; both use the same
+/// deterministic token, so a payment can never yield two tickets.
 class CheckoutScreen extends StatefulWidget {
   const CheckoutScreen({super.key, required this.event, required this.tier});
 
@@ -116,15 +117,22 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       });
       return;
     }
-    final qrToken = 'FTX-$linkId';
 
     try {
-      final result = await Supabase.instance.client.rpc(
-        'purchase_ticket',
-        params: {'p_tier_id': widget.tier.id, 'p_qr_code_token': qrToken},
+      // paymongo-verify asks PayMongo itself whether this link is paid and
+      // only then issues the ticket. If the payment failed, was canceled,
+      // or never happened, it returns an error and NO ticket is created.
+      final response = await Supabase.instance.client.functions.invoke(
+        'paymongo-verify',
+        body: {'linkId': linkId},
       );
 
-      final row = (result is List) ? result.first as Map<String, dynamic> : result as Map<String, dynamic>;
+      final row = response.data;
+      if (row is! Map || row['ticket_id'] == null || row['qr_code_token'] == null) {
+        final errorText = (row is Map ? row['error'] as String? : null) ??
+            'Could not confirm your payment. Please try again.';
+        throw Exception(errorText);
+      }
 
       final newTicket = Ticket(
         id: row['ticket_id'] as String,
@@ -151,6 +159,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           ),
         ),
       );
+    } on FunctionException catch (e) {
+      // The Edge Function answered with a non-2xx (e.g. 402 payment not
+      // completed). Show its message and stay on the payment step so the
+      // buyer can finish paying or reopen the link — no ticket exists.
+      if (!mounted) return;
+      final details = e.details;
+      final message = (details is Map ? details['error'] as String? : null) ??
+          'Could not confirm your payment. Please try again.';
+      setState(() {
+        _stage = _CheckoutStage.awaitingPayment;
+        _errorMessage = message;
+      });
     } on PostgrestException catch (e) {
       if (!mounted) return;
       setState(() {

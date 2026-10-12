@@ -3,10 +3,13 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../models/event.dart';
 import '../../models/ticket.dart';
+import '../../services/resale_repository.dart';
 import '../../services/screen_protection.dart';
+import '../../services/ticket_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/dashed_divider.dart';
 import '../../widgets/gradient_pill_button.dart';
+import '../../widgets/offline_copy_banner.dart';
 import '../../widgets/purple_header_bar.dart';
 import 'resale_listing_screen.dart';
 
@@ -28,6 +31,8 @@ class TicketDetailScreen extends StatefulWidget {
 class _TicketDetailScreenState extends State<TicketDetailScreen> {
   Ticket get ticket => widget.ticket;
 
+  bool _isCancelingListing = false;
+
   @override
   void initState() {
     super.initState();
@@ -46,6 +51,54 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     );
   }
 
+  Future<void> _handleCancelListing() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Cancel this listing?'),
+        content: const Text(
+          'Your ticket will come off the Resale Market and go back to being a regular ticket in your wallet.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Keep Listing'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Cancel Listing'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isCancelingListing = true);
+    try {
+      await ResaleRepository.instance.cancelListing(ticketId: ticket.id);
+    } on ResaleException catch (e) {
+      if (!mounted) return;
+      setState(() => _isCancelingListing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: AppColors.error),
+      );
+      return;
+    }
+
+    // The cancel worked. Reload the wallet so the status is right when we
+    // go back; if the reload fails the next load will catch up.
+    try {
+      await TicketRepository.instance.refresh();
+    } on TicketRepositoryException {
+      // Ignored on purpose; see above.
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Listing canceled. Your ticket is valid again.')),
+    );
+    Navigator.of(context).maybePop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final event = ticket.event;
@@ -60,6 +113,10 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (TicketRepository.instance.isFromCache) ...[
+              OfflineCopyBanner(lastSyncedAt: TicketRepository.instance.lastSyncedAt),
+              const SizedBox(height: 14),
+            ],
             Container(
               padding: const EdgeInsets.all(22),
               decoration: BoxDecoration(
@@ -181,13 +238,31 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
           onPressed: () => _handleListForResale(context),
         );
       case TicketStatus.listed:
-        return GradientPillButton(
-          label: 'Listed for Resale \u2014 ${formatPeso(ticket.resalePrice ?? ticket.tier.price)}',
-          onPressed: null,
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            GradientPillButton(
+              label: 'Listed for Resale \u2014 ${formatPeso(ticket.resalePrice ?? ticket.tier.price)}',
+              onPressed: null,
+            ),
+            const SizedBox(height: 10),
+            TextButton(
+              onPressed: _isCancelingListing ? null : _handleCancelListing,
+              child: Text(
+                _isCancelingListing ? 'Canceling\u2026' : 'Cancel Listing',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.accentPurple),
+              ),
+            ),
+          ],
         );
       case TicketStatus.used:
         return const GradientPillButton(
           label: 'Ticket Already Used',
+          onPressed: null,
+        );
+      case TicketStatus.canceled:
+        return const GradientPillButton(
+          label: 'Ticket Canceled',
           onPressed: null,
         );
     }
@@ -195,40 +270,34 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
 }
 
 /// Renders [qrToken] (the ticket's real `qr_code_token` from
-/// `public.tickets`) as a scannable QR code via `qr_flutter`, and keeps
-/// the rendered widget for a given token cached in memory for the
-/// lifetime of the app run — reopening the same ticket's detail screen
-/// doesn't regenerate the QR image from scratch. This is in-memory
-/// caching only (cleared on app restart); persisting it to disk would
-/// need a local storage package that isn't in this project's
-/// dependencies yet.
+/// `public.tickets`) as a scannable QR code via `qr_flutter`.
+///
+/// The QR image is drawn locally from the token, so it needs no network.
+/// What makes it viewable offline (including after an app restart) is
+/// that the token itself is saved to encrypted device storage by
+/// TicketRepository / TicketCache, not anything in this widget.
 class _TicketQrCode extends StatelessWidget {
   const _TicketQrCode({required this.qrToken, required this.size});
 
   final String qrToken;
   final double size;
 
-  static final Map<String, Widget> _cache = {};
-
   @override
   Widget build(BuildContext context) {
-    return _cache.putIfAbsent(
-      qrToken,
-      () => Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: AppColors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.inputBorderLight),
-        ),
-        child: QrImageView(
-          data: qrToken,
-          version: QrVersions.auto,
-          size: size,
-          backgroundColor: AppColors.white,
-          eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: AppColors.textDark),
-          dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: AppColors.textDark),
-        ),
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.inputBorderLight),
+      ),
+      child: QrImageView(
+        data: qrToken,
+        version: QrVersions.auto,
+        size: size,
+        backgroundColor: AppColors.white,
+        eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: AppColors.textDark),
+        dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: AppColors.textDark),
       ),
     );
   }

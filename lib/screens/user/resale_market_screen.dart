@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../data/sample_resale_listings.dart';
 import '../../data/sample_tickets.dart';
 import '../../models/ticket.dart';
+import '../../navigation/tab_index_notifier.dart';
+import '../../services/ticket_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/market_listing_card.dart';
 import '../../widgets/my_listing_card.dart';
@@ -24,7 +26,37 @@ class _ResaleMarketScreenState extends State<ResaleMarketScreen> {
   String _selectedCategory = 'All';
   String _searchQuery = '';
 
-  // TODO: `sampleMyTickets`/`sampleResaleListings` are in-memory demo data.
+  @override
+  void initState() {
+    super.initState();
+    _refreshMyListings();
+    mainShellTabIndex.addListener(_onTabChanged);
+  }
+
+  @override
+  void dispose() {
+    mainShellTabIndex.removeListener(_onTabChanged);
+    super.dispose();
+  }
+
+  // This tab stays alive inside the shell's PageView, so initState only
+  // runs once. Reload whenever the user switches back to it (e.g. via
+  // "View Listing" after listing a ticket) so new listings show up.
+  void _onTabChanged() {
+    if (mainShellTabIndex.value == 2) _refreshMyListings();
+  }
+
+  Future<void> _refreshMyListings() async {
+    try {
+      await TicketRepository.instance.refresh();
+      if (mounted) setState(() {});
+    } on TicketRepositoryException {
+      // Keep showing what we already have.
+    }
+  }
+
+  // TODO: `sampleResaleListings` (other people's listings, below) is still
+  // in-memory demo data. "My listed tickets" now comes from the real wallet.
   // Replace with a live query against RESALE_LISTINGS once the resale
   // backend is wired up. Category chips are currently cosmetic only —
   // sample events don't carry a category field yet.
@@ -34,7 +66,7 @@ class _ResaleMarketScreenState extends State<ResaleMarketScreen> {
   // listings automatically close 24 hours before the event and any
   // unsold ticket is returned to its owner — an expired listing simply
   // shouldn't still be visible in the market.
-  List<Ticket> get _myListings => sampleMyTickets
+  List<Ticket> get _myListings => TicketRepository.instance.tickets
       .where((t) => t.status == TicketStatus.listed && !t.event.isResaleWindowClosed)
       .toList();
 

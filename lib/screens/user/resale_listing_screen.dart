@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../data/sample_tickets.dart';
 import '../../models/event.dart';
 import '../../models/ticket.dart';
+import '../../services/resale_repository.dart';
+import '../../services/ticket_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_pill_button.dart';
 import '../../widgets/purple_header_bar.dart';
@@ -28,7 +29,7 @@ class _ResaleListingScreenState extends State<ResaleListingScreen> {
   bool _isSubmitting = false;
 
   double get _minPrice => widget.ticket.minResalePrice;
-  double get _maxPrice => widget.ticket.tier.price;
+  double get _maxPrice => widget.ticket.maxResalePrice;
 
   bool get _windowClosed => widget.ticket.event.isResaleWindowClosed;
 
@@ -73,21 +74,38 @@ class _ResaleListingScreenState extends State<ResaleListingScreen> {
     super.dispose();
   }
 
-  void _handleListTicket() async {
+  Future<void> _handleListTicket() async {
     final price = _enteredPrice;
-    if (!_isValid || price == null) return;
+    if (!_isValid || price == null || _isSubmitting) return;
     setState(() => _isSubmitting = true);
-    // TODO: replace with a real Cloud Function call that creates the
-    // RESALE_LISTINGS record and holds the ticket's QR code pending
-    // reissuance to a buyer once the resale backend is wired up.
-    await Future.delayed(const Duration(milliseconds: 700));
+
+    try {
+      await ResaleRepository.instance.listTicket(ticketId: widget.ticket.id, price: price);
+    } on ResaleException catch (e) {
+      // Nothing was listed, so don't show the confirmation — stay here and
+      // say why (e.g. window closed, price out of range).
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: AppColors.error),
+      );
+      return;
+    }
+
+    // The listing now exists in the database. Reload the wallet so the
+    // ticket shows as "listed" everywhere. If the reload itself fails the
+    // listing is still real, so fall back to a locally updated copy.
+    try {
+      await TicketRepository.instance.refresh();
+    } on TicketRepositoryException {
+      // Ignored on purpose; see above.
+    }
     if (!mounted) return;
 
-    final listedTicket = widget.ticket.copyWith(status: TicketStatus.listed, resalePrice: price);
-    final index = sampleMyTickets.indexWhere((t) => t.id == widget.ticket.id);
-    if (index != -1) {
-      sampleMyTickets[index] = listedTicket;
-    }
+    final refreshed = TicketRepository.instance.getById(widget.ticket.id);
+    final listedTicket = (refreshed != null && refreshed.status == TicketStatus.listed)
+        ? refreshed
+        : widget.ticket.copyWith(status: TicketStatus.listed, resalePrice: price);
 
     setState(() => _isSubmitting = false);
     Navigator.of(context).pushReplacement(
@@ -144,7 +162,7 @@ class _ResaleListingScreenState extends State<ResaleListingScreen> {
                   const Text('Original Price', style: AppTextStyles.bodyMuted),
                   const SizedBox(height: 4),
                   Text(
-                    formatPeso(ticket.tier.price),
+                    formatPeso(ticket.originalPrice),
                     style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.textDark),
                   ),
                 ],

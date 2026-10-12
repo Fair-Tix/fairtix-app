@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../models/ticket.dart';
+import '../../navigation/tab_index_notifier.dart';
 import '../../services/ticket_repository.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/offline_copy_banner.dart';
 import 'ticket_detail_screen.dart';
 
 /// "My Tickets" tab — lists every ticket the current user owns, backed by
@@ -22,6 +24,32 @@ class _MyTicketsScreenState extends State<MyTicketsScreen> {
   void initState() {
     super.initState();
     _loadTickets();
+    mainShellTabIndex.addListener(_onTabChanged);
+  }
+
+  @override
+  void dispose() {
+    mainShellTabIndex.removeListener(_onTabChanged);
+    super.dispose();
+  }
+
+  // This tab stays alive inside the shell's PageView, so initState only
+  // runs once. Without this, a ticket bought or listed elsewhere keeps
+  // its old status here until the user pulls to refresh.
+  void _onTabChanged() {
+    if (mainShellTabIndex.value == 1) _refreshSilently();
+  }
+
+  /// Reloads without the full-screen spinner. If it fails, whatever is
+  /// already on screen stays put.
+  Future<void> _refreshSilently() async {
+    try {
+      await TicketRepository.instance.refresh();
+      if (!mounted) return;
+      setState(() => _errorMessage = null);
+    } on TicketRepositoryException {
+      // Keep showing the current list.
+    }
   }
 
   Future<void> _loadTickets() async {
@@ -39,9 +67,11 @@ class _MyTicketsScreenState extends State<MyTicketsScreen> {
   }
 
   void _openTicket(BuildContext context, Ticket ticket) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => TicketDetailScreen(ticket: ticket)),
-    );
+    Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: (_) => TicketDetailScreen(ticket: ticket)))
+        // Fires when the ticket screen (or a resale flow opened from it) is
+        // closed, so a status change made there shows up here.
+        .then((_) => _refreshSilently());
   }
 
   @override
@@ -65,6 +95,10 @@ class _MyTicketsScreenState extends State<MyTicketsScreen> {
                       const SizedBox(height: 4),
                       const Text('Tickets you\u2019ve purchased or received', style: AppTextStyles.bodyMuted),
                       const SizedBox(height: 18),
+                      if (!_isLoading && _errorMessage == null && TicketRepository.instance.isFromCache) ...[
+                        OfflineCopyBanner(lastSyncedAt: TicketRepository.instance.lastSyncedAt),
+                        const SizedBox(height: 14),
+                      ],
                     ],
                   ),
                 ),
@@ -136,6 +170,7 @@ class _TicketCard extends StatelessWidget {
         TicketStatus.valid => (label: 'Valid', color: AppColors.success),
         TicketStatus.listed => (label: 'Listed', color: AppColors.accentPurple),
         TicketStatus.used => (label: 'Used', color: AppColors.textMuted),
+        TicketStatus.canceled => (label: 'Canceled', color: AppColors.error),
       };
 
   @override

@@ -4,15 +4,14 @@ import 'event.dart';
 
 /// Lifecycle state of an owned ticket instance.
 /// Mirrors the `ticket_status` enum in `public.tickets` (see
-/// supabase/schema.sql) — 'canceled' is folded into [used] here since this
-/// UI only needs to distinguish tickets that can still be listed for
-/// resale from ones that can't.
-enum TicketStatus { valid, listed, used }
+/// supabase/schema.sql): valid, listed, used, canceled.
+enum TicketStatus { valid, listed, used, canceled }
 
 TicketStatus _statusFromRow(String raw) => switch (raw) {
       'listed' => TicketStatus.listed,
       'valid' => TicketStatus.valid,
-      _ => TicketStatus.used, // 'used' or 'canceled'
+      'canceled' => TicketStatus.canceled,
+      _ => TicketStatus.used, // 'used', or anything unrecognised
     };
 
 /// A ticket the current user owns, backed by `public.tickets` joined
@@ -27,6 +26,7 @@ class Ticket {
     required this.qrToken,
     this.status = TicketStatus.valid,
     this.resalePrice,
+    this.purchasePrice,
   });
 
   final String id;
@@ -40,11 +40,20 @@ class Ticket {
   /// Mirrors `resale_listings.listing_price` for this ticket.
   final double? resalePrice;
 
+  /// `tickets.purchase_price` — what the owner actually paid (before the
+  /// platform fee). The server measures the 50%–100% resale band against
+  /// this, so the UI does too. Null for tickets built without a database
+  /// row, in which case the tier's current price is used.
+  final double? purchasePrice;
+
+  /// The "original price" the resale band is measured against.
+  double get originalPrice => purchasePrice ?? tier.price;
+
   /// System-enforced resale floor: 50% of the original purchase price.
-  double get minResalePrice => tier.price * 0.5;
+  double get minResalePrice => originalPrice * 0.5;
 
   /// System-enforced resale ceiling: 100% of the original purchase price.
-  double get maxResalePrice => tier.price;
+  double get maxResalePrice => originalPrice;
 
   Ticket copyWith({TicketStatus? status, double? resalePrice}) {
     return Ticket(
@@ -55,6 +64,7 @@ class Ticket {
       qrToken: qrToken,
       status: status ?? this.status,
       resalePrice: resalePrice ?? this.resalePrice,
+      purchasePrice: purchasePrice,
     );
   }
 
@@ -95,14 +105,22 @@ class Ticket {
       accentColor: _colorForId(eventRow['event_id'] as String),
     );
 
+    // The database status is the source of truth. An active listing only
+    // upgrades a ticket that is still valid/listed to "listed" (and supplies
+    // its price); it must never override a ticket that has since been used
+    // or canceled.
+    final dbStatus = _statusFromRow(row['ticket_status'] as String);
+    final isLive = dbStatus == TicketStatus.valid || dbStatus == TicketStatus.listed;
+
     return Ticket(
       id: row['ticket_id'] as String,
       event: event,
       tier: tier,
       ownerName: ownerName,
       qrToken: row['qr_code_token'] as String,
-      status: resalePrice != null ? TicketStatus.listed : _statusFromRow(row['ticket_status'] as String),
+      status: (resalePrice != null && isLive) ? TicketStatus.listed : dbStatus,
       resalePrice: resalePrice,
+      purchasePrice: (row['purchase_price'] as num?)?.toDouble(),
     );
   }
 

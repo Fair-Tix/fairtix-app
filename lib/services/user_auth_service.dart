@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/app_user.dart';
+import 'ticket_repository.dart';
 import 'user_session.dart';
 
 /// Thrown when an eventgoer auth action (login, register, OTP) fails.
@@ -255,6 +256,9 @@ class UserAuthService {
   }
 
   Future<void> logout() async {
+    // Must run before signOut(): it needs the current user id to find the
+    // saved offline ticket copy to delete.
+    await TicketRepository.instance.clearForLogout();
     UserSession.instance.signOut();
     await Supabase.instance.client.auth.signOut();
   }

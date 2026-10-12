@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/event.dart';
 import '../../models/ticket.dart';
+import '../../services/public_event_repository.dart';
 import '../../services/ticket_repository.dart';
 import '../../services/transaction_repository.dart';
 import '../../services/user_session.dart';
@@ -148,6 +149,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       // showing stale data until their own next manual refresh.
       unawaited(TicketRepository.instance.refresh());
       unawaited(TransactionRepository.instance.refresh());
+      // Also reload the event catalogue so ticket_tiers.remaining_quantity
+      // (just decremented server-side) shows its new value everywhere.
+      unawaited(PublicEventRepository.instance.refresh());
 
       if (!mounted) return;
       Navigator.of(context).pushReplacement(

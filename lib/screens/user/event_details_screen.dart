@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/sample_tickets.dart';
 import '../../models/event.dart';
 import '../../navigation/app_nav.dart';
+import '../../services/public_event_repository.dart';
 import '../../services/ticket_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_pill_button.dart';
@@ -21,15 +22,32 @@ class EventDetailsScreen extends StatefulWidget {
 class _EventDetailsScreenState extends State<EventDetailsScreen> {
   TicketTier? _selectedTier;
 
+  /// The freshest copy of this event (tiers include the latest
+  /// remaining_quantity). Falls back to the one passed in if the
+  /// repository doesn't have it cached.
+  EventSummary get _event => PublicEventRepository.instance.getById(widget.event.id) ?? widget.event;
+
   @override
   void initState() {
     super.initState();
+    _reloadEvent();
     // Refresh the owned-tickets cache so the one-ticket-per-account limit
     // check below reflects any purchase made since this cache was last
     // loaded (e.g. from another device, or earlier this session).
     TicketRepository.instance.refresh().then((_) {
       if (mounted) setState(() {});
     });
+  }
+
+  /// Reloads the catalogue so tier availability is current. Failures are
+  /// ignored — the screen just keeps showing the data it already has.
+  Future<void> _reloadEvent() async {
+    try {
+      await PublicEventRepository.instance.refresh();
+    } on PublicEventRepositoryException {
+      // keep showing cached data
+    }
+    if (mounted) setState(() {});
   }
 
   /// Whether FairTix's one-ticket-per-account-per-event purchase limit
@@ -40,14 +58,19 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
 
   bool get _alreadyOwnsTicket => userOwnsTicketForEvent(widget.event.id);
 
-  void _handleBuyTicket() {
-    final tier = _selectedTier;
-    if (tier == null || _limitReached) return;
-    Navigator.of(context).push(
+  Future<void> _handleBuyTicket() async {
+    final selected = _selectedTier;
+    if (selected == null || _limitReached) return;
+    // Use the latest copy of the selected tier (matched by id) so checkout
+    // sees current availability.
+    final tier = _event.tiers.firstWhere((t) => t.id == selected.id, orElse: () => selected);
+    await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => CheckoutScreen(event: widget.event, tier: tier),
+        builder: (_) => CheckoutScreen(event: _event, tier: tier),
       ),
     );
+    // Back from checkout/confirmation: pull the new remaining quantity.
+    if (mounted) await _reloadEvent();
   }
 
   void _handleViewMyTicket() {
@@ -56,7 +79,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final event = widget.event;
+    final event = _event;
     return Scaffold(
       backgroundColor: AppColors.pageBackground,
       body: Stack(
@@ -131,7 +154,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                       ...event.tiers.map(
                         (tier) => TicketTierRow(
                           tier: tier,
-                          isSelected: _selectedTier == tier,
+                          isSelected: _selectedTier?.id == tier.id,
                           onTap: _limitReached ? null : () => setState(() => _selectedTier = tier),
                         ),
                       ),

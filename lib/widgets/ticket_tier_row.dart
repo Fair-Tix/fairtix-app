@@ -57,11 +57,16 @@ class TicketTierRow extends StatelessWidget {
                         'Sold out',
                         style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.error),
                       ),
-                    ] else if (tier.remainingQuantity != null && tier.remainingQuantity! <= 10) ...[
+                    ] else if (tier.remainingQuantity != null) ...[
                       const SizedBox(height: 3),
                       Text(
-                        'Only ${tier.remainingQuantity} left',
-                        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.warning),
+                        '${tier.remainingQuantity} left',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          // Highlight low stock; otherwise keep it subtle.
+                          color: tier.remainingQuantity! <= 10 ? AppColors.warning : AppColors.textMuted,
+                        ),
                       ),
                     ],
                   ],

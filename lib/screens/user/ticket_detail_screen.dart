@@ -3,6 +3,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../models/event.dart';
 import '../../models/ticket.dart';
+import '../../services/screen_protection.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/dashed_divider.dart';
 import '../../widgets/gradient_pill_button.dart';
@@ -12,10 +13,32 @@ import 'resale_listing_screen.dart';
 /// "My Ticket" screen — shown after tapping a ticket from the My Tickets
 /// list. Displays the ticket's details and QR code, and is the entry
 /// point into the in-app resale flow.
-class TicketDetailScreen extends StatelessWidget {
+///
+/// Screenshots and screen recording are blocked while this screen is open
+/// (see [ScreenProtection]) so the QR code can't be copied.
+class TicketDetailScreen extends StatefulWidget {
   const TicketDetailScreen({super.key, required this.ticket});
 
   final Ticket ticket;
+
+  @override
+  State<TicketDetailScreen> createState() => _TicketDetailScreenState();
+}
+
+class _TicketDetailScreenState extends State<TicketDetailScreen> {
+  Ticket get ticket => widget.ticket;
+
+  @override
+  void initState() {
+    super.initState();
+    ScreenProtection.enable();
+  }
+
+  @override
+  void dispose() {
+    ScreenProtection.disable();
+    super.dispose();
+  }
 
   void _handleListForResale(BuildContext context) {
     Navigator.of(context).push(

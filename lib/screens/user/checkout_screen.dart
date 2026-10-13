@@ -233,8 +233,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Widget build(BuildContext context) {
     final ticketPrice = widget.tier.price;
     final isFree = ticketPrice <= 0;
-    final platformFee = ticketPrice * kPrimaryPlatformFeeRate;
-    final total = ticketPrice + platformFee;
     final isBusy = _stage == _CheckoutStage.creatingLink || _stage == _CheckoutStage.finalizing;
 
     return Scaffold(
@@ -310,7 +308,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     children: [
                       const Text('Ticket Price', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textDark)),
                       Text(
-                        isFree ? 'Free' : formatPeso(total),
+                        isFree ? 'Free' : formatPeso(ticketPrice),
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.accentPurple),
                       ),
                     ],

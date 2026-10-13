@@ -27,10 +27,11 @@ class MarketListingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The buyer pays exactly the listing price. The struck-through number is
+    // what the original owner paid, so a discounted listing reads as a deal.
     final resalePrice = listing.resalePrice ?? listing.tier.price;
-    final buyerResalePrice = withPlatformFee(resalePrice, kResalePlatformFeeRate);
-    final buyerOriginalPrice = withPlatformFee(listing.tier.price, kPrimaryPlatformFeeRate);
-    final bool isDiscounted = buyerResalePrice < buyerOriginalPrice;
+    final originalPrice = listing.originalPrice;
+    final bool isDiscounted = resalePrice < originalPrice;
     final closesAt = listing.event.resaleListingCloseTime;
 
     return Container(
@@ -115,7 +116,7 @@ class MarketListingCard extends StatelessWidget {
               const SizedBox(height: 2),
               if (isDiscounted)
                 Text(
-                  formatPeso(buyerOriginalPrice).replaceAll('.00', ''),
+                  formatPeso(originalPrice).replaceAll('.00', ''),
                   style: const TextStyle(
                     fontSize: 11,
                     color: AppColors.textMuted,
@@ -123,7 +124,7 @@ class MarketListingCard extends StatelessWidget {
                   ),
                 ),
               Text(
-                formatPeso(buyerResalePrice).replaceAll('.00', ''),
+                formatPeso(resalePrice).replaceAll('.00', ''),
                 style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: AppColors.accentPurple),
               ),
               const SizedBox(height: 8),

@@ -8,17 +8,6 @@ import '../services/ticket_repository.dart';
 /// screen is opened.
 final List<Ticket> sampleMyTickets = [];
 
-/// Event ids for which the current user has already resold their ticket.
-/// Per the study's purchase-limit rule, once a user resells their ticket
-/// for an event, that "slot" is not returned — they may not purchase
-/// another ticket for the same event. Populated when a "your ticket has
-/// been bought" notification is opened (see NotificationsScreen), which
-/// simulates the resale completing and the ticket leaving `sampleMyTickets`.
-/// TODO(backend): replace with a real query against TRANSACTIONS
-/// (transaction_type == resale, seller_id == current user) once the
-/// backend is wired up.
-final Set<String> soldTicketEventIds = {};
-
 /// True if the current user currently owns a valid or listed ticket for
 /// [eventId] — i.e. they've already used their one-ticket-per-account
 /// purchase slot for this event and haven't resold it (yet).
@@ -28,12 +17,14 @@ bool userOwnsTicketForEvent(String eventId) {
   );
 }
 
-/// True if the current user has already resold a ticket for [eventId].
-bool userHasResoldTicketForEvent(String eventId) => soldTicketEventIds.contains(eventId);
-
-/// True if the user is blocked from purchasing (primary or resale) a
-/// ticket for [eventId] under FairTix's one-ticket-per-account-per-event
-/// purchase limit — either because they still hold a ticket for it, or
-/// because they've already resold one and the slot isn't returned.
-bool isPurchaseLimitReached(String eventId) =>
-    userOwnsTicketForEvent(eventId) || userHasResoldTicketForEvent(eventId);
+/// True if the user is blocked from purchasing (primary or resale) a ticket
+/// for [eventId] under FairTix's one-ticket-per-account-per-event purchase
+/// limit because they still hold a ticket for it.
+///
+/// This is only the app-side shortcut that greys out the buy buttons. The
+/// real rule lives on the server (checkout_quote, _do_ticket_purchase and
+/// buy_resale_listing, via ticket_slot_used in supabase/checkout_guard.sql),
+/// and it also covers the case this can't see: a user who already RESOLD
+/// their ticket for the event doesn't get the slot back. They can still tap
+/// Buy, and the server answers with a plain-sentence refusal.
+bool isPurchaseLimitReached(String eventId) => userOwnsTicketForEvent(eventId);

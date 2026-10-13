@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
-import '../../data/sample_resale_listings.dart';
-import '../../data/sample_tickets.dart';
 import '../../models/event.dart';
 import '../../models/ticket.dart';
+import '../../services/notification_repository.dart';
+import '../../services/resale_repository.dart';
+import '../../services/ticket_repository.dart';
+import '../../services/transaction_repository.dart';
 import '../../services/user_session.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_pill_button.dart';
@@ -12,8 +16,12 @@ import 'checkout_confirmation_screen.dart';
 
 /// Checkout screen for buying another user's resale listing.
 /// Mirrors [CheckoutScreen] but sources its price from the listing's
-/// resale price instead of the tier's original price, and transfers
-/// ownership of the ticket (QR reissuance) to the buyer on confirmation.
+/// resale price instead of the tier's original price. Confirming calls the
+/// `buy_resale_listing` database function (supabase/resale_purchase.sql),
+/// which transfers the ticket, issues the buyer a new QR code, records the
+/// transaction and notifies both sides, all in one step.
+///
+/// Payment is simulated (no real money moves), as the notice on screen says.
 class ResaleCheckoutScreen extends StatefulWidget {
   const ResaleCheckoutScreen({super.key, required this.listing});
 
@@ -25,26 +33,52 @@ class ResaleCheckoutScreen extends StatefulWidget {
 
 class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> {
   bool _isProcessing = false;
+  String? _errorMessage;
 
   Future<void> _handleConfirmPurchase() async {
-    setState(() => _isProcessing = true);
-    // TODO: replace with a real PayMongo Sandbox checkout session +
-    // Cloud Function that releases the seller's escrow hold and
-    // reissues the QR code's signing key to the buyer, once the resale
-    // backend is wired up.
-    await Future.delayed(const Duration(milliseconds: 900));
-    if (!mounted) return;
-
     final listing = widget.listing;
+    final listingId = listing.listingId;
+    if (_isProcessing) return;
+    if (listingId == null) {
+      setState(() => _errorMessage = 'This listing can\u2019t be bought. Go back and reopen the Resale Market.');
+      return;
+    }
+
+    setState(() {
+      _isProcessing = true;
+      _errorMessage = null;
+    });
+
+    final BoughtTicket bought;
+    try {
+      bought = await ResaleRepository.instance.buyListing(listingId);
+    } on ResaleException catch (e) {
+      // Nothing was bought (listing gone, purchase limit, window closed...).
+      // Stay here and say why.
+      if (!mounted) return;
+      setState(() {
+        _isProcessing = false;
+        _errorMessage = e.message;
+      });
+      return;
+    }
+
+    // The purchase is done. Refresh what it changed: the wallet (new ticket,
+    // which also feeds the one-ticket-per-event check), the transaction
+    // history, and the notifications the database just wrote.
+    unawaited(TicketRepository.instance.refresh().catchError((_) {}));
+    unawaited(TransactionRepository.instance.refresh().catchError((_) {}));
+    unawaited(NotificationRepository.instance.refresh().catchError((_) {}));
+
+    if (!mounted) return;
     final newTicket = Ticket(
-      id: 'tkt_${DateTime.now().millisecondsSinceEpoch}',
+      id: bought.ticketId,
       event: listing.event,
       tier: listing.tier,
       ownerName: UserSession.instance.account?.fullName ?? 'FairTix User',
-      qrToken: 'FTX-RS-${listing.id}-${DateTime.now().millisecondsSinceEpoch}',
+      qrToken: bought.qrToken,
+      purchasePrice: listing.purchasePrice,
     );
-    sampleMyTickets.add(newTicket);
-    sampleResaleListings.removeWhere((t) => t.id == listing.id);
 
     setState(() => _isProcessing = false);
     Navigator.of(context).pushReplacement(
@@ -61,9 +95,9 @@ class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> {
   @override
   Widget build(BuildContext context) {
     final listing = widget.listing;
+    // The buyer pays exactly the listing price; FairTix's resale fee comes out
+    // of the seller's proceeds.
     final resalePrice = listing.resalePrice ?? listing.tier.price;
-    final platformFee = resalePrice * kResalePlatformFeeRate;
-    final total = resalePrice + platformFee;
 
     return Scaffold(
       backgroundColor: AppColors.pageBackground,
@@ -152,7 +186,7 @@ class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> {
                     children: [
                       const Text('Resale Price', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textDark)),
                       Text(
-                        formatPeso(total),
+                        formatPeso(resalePrice),
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.accentPurple),
                       ),
                     ],
@@ -181,6 +215,22 @@ class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> {
                 ],
               ),
             ),
+            if (_errorMessage != null) ...[
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.error.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+                ),
+                child: Text(
+                  _errorMessage!,
+                  style: TextStyle(fontSize: 12.5, color: AppColors.error, height: 1.4),
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
             GradientPillButton(
               label: 'Confirm Purchase',

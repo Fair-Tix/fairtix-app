@@ -51,12 +51,10 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
   }
 
   /// Whether FairTix's one-ticket-per-account-per-event purchase limit
-  /// blocks the current user from buying a ticket for this event —
-  /// either because they already hold one, or because they've already
-  /// resold their ticket for it.
+  /// blocks the current user from buying a ticket for this event because
+  /// they already hold one. (A user who already RESOLD their ticket is
+  /// refused by the server when they try to buy; see isPurchaseLimitReached.)
   bool get _limitReached => isPurchaseLimitReached(widget.event.id);
-
-  bool get _alreadyOwnsTicket => userOwnsTicketForEvent(widget.event.id);
 
   Future<void> _handleBuyTicket() async {
     final selected = _selectedTier;
@@ -145,10 +143,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                       ),
                       const SizedBox(height: 16),
                       if (_limitReached) ...[
-                        _PurchaseLimitNotice(
-                          alreadyOwnsTicket: _alreadyOwnsTicket,
-                          onViewMyTicket: _alreadyOwnsTicket ? _handleViewMyTicket : null,
-                        ),
+                        _PurchaseLimitNotice(onViewMyTicket: _handleViewMyTicket),
                         const SizedBox(height: 16),
                       ],
                       ...event.tiers.map(
@@ -206,13 +201,11 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
 
 /// Shown on the Event Details screen in place of ticket-tier selection
 /// when FairTix's one-ticket-per-account-per-event purchase limit blocks
-/// the current user from buying — either because they still hold a
-/// ticket for this event, or because they've already resold one.
+/// the current user from buying because they still hold a ticket for it.
 class _PurchaseLimitNotice extends StatelessWidget {
-  const _PurchaseLimitNotice({required this.alreadyOwnsTicket, this.onViewMyTicket});
+  const _PurchaseLimitNotice({required this.onViewMyTicket});
 
-  final bool alreadyOwnsTicket;
-  final VoidCallback? onViewMyTicket;
+  final VoidCallback onViewMyTicket;
 
   @override
   Widget build(BuildContext context) {
@@ -233,27 +226,23 @@ class _PurchaseLimitNotice extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  alreadyOwnsTicket ? 'You already have a ticket for this event' : 'Purchase limit reached for this event',
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.warning),
+                const Text(
+                  'You already have a ticket for this event',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.warning),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  alreadyOwnsTicket
-                      ? 'FairTix allows one ticket per account per event.'
-                      : 'You\u2019ve already resold your ticket for this event, so you can\u2019t purchase another one.',
+                  'FairTix allows one ticket per account per event.',
                   style: AppTextStyles.bodyMuted.copyWith(fontSize: 12, height: 1.35),
                 ),
-                if (onViewMyTicket != null) ...[
-                  const SizedBox(height: 8),
-                  GestureDetector(
-                    onTap: onViewMyTicket,
-                    child: const Text(
-                      'View My Ticket',
-                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: AppColors.accentPurple, decoration: TextDecoration.underline),
-                    ),
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap: onViewMyTicket,
+                  child: const Text(
+                    'View My Ticket',
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: AppColors.accentPurple, decoration: TextDecoration.underline),
                   ),
-                ],
+                ),
               ],
             ),
           ),

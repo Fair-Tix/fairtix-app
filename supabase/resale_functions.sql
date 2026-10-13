@@ -32,6 +32,8 @@ declare
   v_ticket public.tickets;
   v_event_status event_status;
   v_event_start date;
+  v_event_title text;
+  v_tier_name text;
   v_price numeric(10,2);
   v_floor numeric(10,2);
   v_listing public.resale_listings;
@@ -61,8 +63,8 @@ begin
     raise exception 'This ticket is already listed for resale.';
   end if;
 
-  select e.status, e.event_start_date
-    into v_event_status, v_event_start
+  select e.status, e.event_start_date, e.title, tt.tier_name
+    into v_event_status, v_event_start, v_event_title, v_tier_name
     from public.ticket_tiers tt
     join public.events e on e.event_id = tt.event_id
     where tt.tier_id = v_ticket.tier_id;
@@ -93,6 +95,19 @@ begin
     set ticket_status = 'listed'
     where ticket_id = p_ticket_id;
 
+  -- Tell the seller the listing is live (the app also shows a confirmation
+  -- screen, but this is the record they can come back to).
+  insert into public.notifications (user_id, title, message, type, channel)
+  values (
+    v_user_id,
+    'Ticket Listed for Resale',
+    format(
+      'Your %s ticket for %s is now listed on the Resale Market for PHP %s. The listing closes automatically 24 hours before the event.',
+      v_tier_name, v_event_title, to_char(v_price, 'FM999,999,990.00')
+    ),
+    'resale', 'in_app'
+  );
+
   return v_listing;
 end;
 $$;
@@ -111,6 +126,7 @@ as $$
 declare
   v_user_id uuid := auth.uid();
   v_listing_id uuid;
+  v_event_title text;
 begin
   if v_user_id is null then
     raise exception 'You need to be signed in to cancel a listing.';
@@ -137,6 +153,23 @@ begin
     where ticket_id = p_ticket_id
       and owner_id = v_user_id
       and ticket_status = 'listed';
+
+  select e.title into v_event_title
+    from public.tickets t
+    join public.ticket_tiers tt on tt.tier_id = t.tier_id
+    join public.events e        on e.event_id = tt.event_id
+    where t.ticket_id = p_ticket_id;
+
+  insert into public.notifications (user_id, title, message, type, channel)
+  values (
+    v_user_id,
+    'Resale Listing Canceled',
+    format(
+      'You took your ticket for %s off the Resale Market. It is valid again and ready to use.',
+      coalesce(v_event_title, 'the event')
+    ),
+    'resale', 'in_app'
+  );
 end;
 $$;
 

@@ -69,14 +69,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
     if (ticket == null) return;
 
-    // Simulate the resale completing: the ticket leaves the seller's
-    // wallet (ownership has transferred to the buyer), and the event is
-    // recorded as one the seller has already resold, so FairTix's
-    // one-ticket-per-account purchase limit blocks them from buying
-    // another ticket for the same event afterward.
-    sampleMyTickets.removeWhere((t) => t.id == ticket!.id);
-    soldTicketEventIds.add(ticket.event.id);
-
     if (!mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute(

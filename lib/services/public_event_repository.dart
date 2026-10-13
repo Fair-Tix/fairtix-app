@@ -122,7 +122,7 @@ class PublicEventRepository {
       venue: row['venue'] as String,
       dateLabel: dateLabel,
       eventDateTime: startDate,
-      priceLabel: cheapest == null ? 'TBA' : formatPeso(withPlatformFee(cheapest.price, kPrimaryPlatformFeeRate)),
+      priceLabel: cheapest == null ? 'TBA' : formatPeso(cheapest.price),
       accentColor: _colorForEvent(eventId),
       description: row['description'] as String?,
       tiers: tiers,

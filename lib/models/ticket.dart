@@ -27,6 +27,7 @@ class Ticket {
     this.status = TicketStatus.valid,
     this.resalePrice,
     this.purchasePrice,
+    this.listingId,
   });
 
   final String id;
@@ -45,6 +46,11 @@ class Ticket {
   /// this, so the UI does too. Null for tickets built without a database
   /// row, in which case the tier's current price is used.
   final double? purchasePrice;
+
+  /// `resale_listings.listing_id`, set only for a ticket shown in the Resale
+  /// Market (see [Ticket.fromMarketRow]). It's what a buyer passes to
+  /// `buy_resale_listing`. Null for the signed-in user's own tickets.
+  final String? listingId;
 
   /// The "original price" the resale band is measured against.
   double get originalPrice => purchasePrice ?? tier.price;
@@ -65,6 +71,7 @@ class Ticket {
       status: status ?? this.status,
       resalePrice: resalePrice ?? this.resalePrice,
       purchasePrice: purchasePrice,
+      listingId: listingId,
     );
   }
 
@@ -101,7 +108,7 @@ class Ticket {
       venue: eventRow['venue'] as String,
       dateLabel: dateLabel,
       eventDateTime: startDate,
-      priceLabel: formatPeso(withPlatformFee(tier.price, kPrimaryPlatformFeeRate)),
+      priceLabel: formatPeso(tier.price),
       accentColor: _colorForId(eventRow['event_id'] as String),
     );
 
@@ -121,6 +128,50 @@ class Ticket {
       status: (resalePrice != null && isLive) ? TicketStatus.listed : dbStatus,
       resalePrice: resalePrice,
       purchasePrice: (row['purchase_price'] as num?)?.toDouble(),
+    );
+  }
+
+  /// Builds a [Ticket] for the Resale Market from one row of the
+  /// `get_resale_market()` database function (see
+  /// supabase/resale_purchase.sql). It is somebody else's ticket, so:
+  ///  - [qrToken] is empty on purpose (the server never sends it);
+  ///  - [ownerName] is the seller's first name;
+  ///  - [id] is the ticket id and [listingId] is what buying needs.
+  factory Ticket.fromMarketRow(Map<String, dynamic> row) {
+    final startDate = DateTime.parse(row['event_start_date'] as String);
+    final endDateRaw = row['event_end_date'] as String?;
+    final isMulti = row['event_type'] == 'multi_day';
+    final dateLabel = isMulti && endDateRaw != null
+        ? '${_formatShortDate(startDate)} – ${_formatShortDate(DateTime.parse(endDateRaw))}'
+        : _formatShortDate(startDate);
+
+    final tier = TicketTier(
+      id: row['tier_id'] as String,
+      name: row['tier_name'] as String,
+      seatingLabel: 'General Admission',
+      price: (row['tier_price'] as num).toDouble(),
+    );
+
+    final event = EventSummary(
+      id: row['event_id'] as String,
+      title: row['event_title'] as String,
+      venue: row['venue'] as String,
+      dateLabel: dateLabel,
+      eventDateTime: startDate,
+      priceLabel: formatPeso(tier.price),
+      accentColor: _colorForId(row['event_id'] as String),
+    );
+
+    return Ticket(
+      id: row['ticket_id'] as String,
+      listingId: row['listing_id'] as String,
+      event: event,
+      tier: tier,
+      ownerName: (row['seller_name'] as String?) ?? 'A verified seller',
+      qrToken: '',
+      status: TicketStatus.listed,
+      resalePrice: (row['listing_price'] as num).toDouble(),
+      purchasePrice: (row['original_price'] as num?)?.toDouble(),
     );
   }
 

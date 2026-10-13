@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../../data/sample_resale_listings.dart';
 import '../../data/sample_tickets.dart';
 import '../../models/ticket.dart';
 import '../../navigation/tab_index_notifier.dart';
+import '../../services/resale_repository.dart';
 import '../../services/ticket_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/market_listing_card.dart';
@@ -26,10 +26,16 @@ class _ResaleMarketScreenState extends State<ResaleMarketScreen> {
   String _selectedCategory = 'All';
   String _searchQuery = '';
 
+  /// Other users' active listings, from the `get_resale_market()` database
+  /// function. Empty until the first load finishes.
+  List<Ticket> _market = [];
+  bool _marketLoading = true;
+  String? _marketError;
+
   @override
   void initState() {
     super.initState();
-    _refreshMyListings();
+    _refresh();
     mainShellTabIndex.addListener(_onTabChanged);
   }
 
@@ -43,7 +49,14 @@ class _ResaleMarketScreenState extends State<ResaleMarketScreen> {
   // runs once. Reload whenever the user switches back to it (e.g. via
   // "View Listing" after listing a ticket) so new listings show up.
   void _onTabChanged() {
-    if (mainShellTabIndex.value == 2) _refreshMyListings();
+    if (mainShellTabIndex.value == 2) _refresh();
+  }
+
+  /// Reloads the user's own wallet (for "My Listed Tickets" and the purchase
+  /// limit check) and the market. Each part fails on its own: a market error
+  /// is shown in the market section, and a wallet error leaves what's there.
+  Future<void> _refresh() async {
+    await Future.wait([_refreshMyListings(), _refreshMarket()]);
   }
 
   Future<void> _refreshMyListings() async {
@@ -55,23 +68,33 @@ class _ResaleMarketScreenState extends State<ResaleMarketScreen> {
     }
   }
 
-  // TODO: `sampleResaleListings` (other people's listings, below) is still
-  // in-memory demo data. "My listed tickets" now comes from the real wallet.
-  // Replace with a live query against RESALE_LISTINGS once the resale
-  // backend is wired up. Category chips are currently cosmetic only —
-  // sample events don't carry a category field yet.
+  Future<void> _refreshMarket() async {
+    if (mounted) setState(() => _marketError = null);
+    try {
+      final market = await ResaleRepository.instance.fetchMarket();
+      if (!mounted) return;
+      setState(() => _market = market);
+    } on ResaleException catch (e) {
+      if (!mounted) return;
+      setState(() => _marketError = e.message);
+    } finally {
+      if (mounted) setState(() => _marketLoading = false);
+    }
+  }
+
+  // Category chips are currently cosmetic only — events don't carry a
+  // category field yet.
   //
   // Listings whose event has passed the 24-hour resale-closing window are
-  // excluded here entirely, mirroring the study's rule that active
-  // listings automatically close 24 hours before the event and any
-  // unsold ticket is returned to its owner — an expired listing simply
-  // shouldn't still be visible in the market.
+  // excluded here as well as on the server, mirroring the study's rule that
+  // active listings automatically close 24 hours before the event and any
+  // unsold ticket is returned to its owner.
   List<Ticket> get _myListings => TicketRepository.instance.tickets
       .where((t) => t.status == TicketStatus.listed && !t.event.isResaleWindowClosed)
       .toList();
 
   List<Ticket> get _marketListings {
-    final active = sampleResaleListings.where((t) => !t.event.isResaleWindowClosed);
+    final active = _market.where((t) => !t.event.isResaleWindowClosed);
     if (_searchQuery.isEmpty) return active.toList();
     final query = _searchQuery.toLowerCase();
     return active.where((t) => t.event.title.toLowerCase().contains(query)).toList();
@@ -85,9 +108,13 @@ class _ResaleMarketScreenState extends State<ResaleMarketScreen> {
 
   void _buyListing(Ticket listing) {
     if (isPurchaseLimitReached(listing.event.id)) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => ResaleCheckoutScreen(listing: listing)),
-    );
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => ResaleCheckoutScreen(listing: listing)))
+        // Back from checkout: the listing is gone if it was bought, and the
+        // new ticket changes the purchase-limit state of the cards.
+        .then((_) {
+      if (mounted) _refresh();
+    });
   }
 
   @override
@@ -98,7 +125,10 @@ class _ResaleMarketScreenState extends State<ResaleMarketScreen> {
     return Scaffold(
       backgroundColor: AppColors.pageBackground,
       body: SafeArea(
-        child: SingleChildScrollView(
+        child: RefreshIndicator(
+          onRefresh: _refresh,
+          child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -173,11 +203,34 @@ class _ResaleMarketScreenState extends State<ResaleMarketScreen> {
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.accentPurple, letterSpacing: 0.6),
                     ),
                     const SizedBox(height: 10),
-                    if (marketListings.isEmpty)
+                    if (_marketLoading)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 30),
+                        child: Center(child: CircularProgressIndicator(color: AppColors.accentPurple)),
+                      )
+                    else if (_marketError != null)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Center(
+                          child: Column(
+                            children: [
+                              Text(_marketError!, textAlign: TextAlign.center, style: AppTextStyles.bodyMuted),
+                              const SizedBox(height: 10),
+                              TextButton(onPressed: _refreshMarket, child: const Text('Try again')),
+                            ],
+                          ),
+                        ),
+                      )
+                    else if (marketListings.isEmpty)
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 30),
                         child: Center(
-                          child: Text('No resale tickets match your search.', style: AppTextStyles.bodyMuted),
+                          child: Text(
+                            _searchQuery.isEmpty
+                                ? 'No tickets are listed for resale right now.'
+                                : 'No resale tickets match your search.',
+                            style: AppTextStyles.bodyMuted,
+                          ),
                         ),
                       )
                     else
@@ -188,6 +241,7 @@ class _ResaleMarketScreenState extends State<ResaleMarketScreen> {
                           )),
                   ],
           ),
+        ),
         ),
       ),
     );

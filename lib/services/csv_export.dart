@@ -47,6 +47,17 @@ Future<bool> saveCsvFile({
   return path != null;
 }
 
+/// Guards a text cell against spreadsheet formula injection: text that
+/// starts with = + - @ gets a leading apostrophe, so Excel or Sheets can't
+/// run a user-supplied name or event title as a formula. Non-text values
+/// (numbers, null) pass through unchanged.
+Object? csvSafe(Object? value) {
+  if (value is String && value.isNotEmpty && '=+-@'.contains(value[0])) {
+    return "'$value";
+  }
+  return value;
+}
+
 /// Turns [rows] (first row = header) into CSV text, quoting any cell that
 /// contains a comma, quote, or line break.
 String toCsv(List<List<Object?>> rows) {

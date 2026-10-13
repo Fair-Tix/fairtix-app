@@ -77,6 +77,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     sampleMyTickets.removeWhere((t) => t.id == ticket!.id);
     soldTicketEventIds.add(ticket.event.id);
 
+    if (!mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => TicketSoldScreen(

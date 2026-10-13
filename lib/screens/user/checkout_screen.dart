@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/event.dart';
 import '../../models/ticket.dart';
+import '../../services/notification_repository.dart';
 import '../../services/public_event_repository.dart';
 import '../../services/ticket_repository.dart';
 import '../../services/transaction_repository.dart';
@@ -161,6 +162,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       // Also reload the event catalogue so ticket_tiers.remaining_quantity
       // (just decremented server-side) shows its new value everywhere.
       unawaited(PublicEventRepository.instance.refresh());
+      // The purchase trigger (supabase/purchase_notification.sql) has already
+      // written the "Ticket Purchased" notification; pull it in so the
+      // dashboard's unread dot shows it without opening Notifications first.
+      // Errors are swallowed: the Notifications screen reloads on its own.
+      unawaited(NotificationRepository.instance.refresh().catchError((_) {}));
 
       if (!mounted) return;
       Navigator.of(context).pushReplacement(

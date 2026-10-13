@@ -111,6 +111,49 @@ class OrganizerEvent {
     this.supportingDocumentUrls = const [],
   });
 
+  /// Formats a start/end date pair given as "M/D/YYYY" (or "MM/DD/YYYY")
+  /// strings, the format [date] is stored in, for display:
+  /// "Apr 15, 2026" (single day), "Apr 15-17, 2026" (same month),
+  /// "Apr 30 - May 2, 2026" (same year), or both full dates when the years
+  /// differ. A multi-day pair whose end equals its start shows just one
+  /// date. Input that can't be parsed is returned unchanged.
+  ///
+  /// Not used by the screens yet, so what organizers see is unchanged.
+  static String formatDateRange(String start, String end, bool isMultiDay) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+
+    ({int month, int day, int year})? parse(String raw) {
+      final parts = raw.trim().split('/');
+      if (parts.length != 3) return null;
+      final month = int.tryParse(parts[0]);
+      final day = int.tryParse(parts[1]);
+      final year = int.tryParse(parts[2]);
+      if (month == null || day == null || year == null) return null;
+      if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+      return (month: month, day: day, year: year);
+    }
+
+    String full(({int month, int day, int year}) d) =>
+        '${months[d.month - 1]} ${d.day}, ${d.year}';
+
+    final s = parse(start);
+    if (s == null) return start;
+    if (!isMultiDay) return full(s);
+
+    final e = parse(end);
+    if (e == null || (e.year == s.year && e.month == s.month && e.day == s.day)) {
+      return full(s);
+    }
+    if (e.year != s.year) return '${full(s)} - ${full(e)}';
+    if (e.month != s.month) {
+      return '${months[s.month - 1]} ${s.day} - ${months[e.month - 1]} ${e.day}, ${s.year}';
+    }
+    return '${months[s.month - 1]} ${s.day}-${e.day}, ${s.year}';
+  }
+
   int get ticketsSold => tiers.fold(0, (sum, t) => sum + t.sold);
   int get ticketsTotal => tiers.fold(0, (sum, t) => sum + t.quantity);
   double get grossRevenue => tiers.fold(0.0, (sum, t) => sum + t.grossRevenue);

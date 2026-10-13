@@ -163,11 +163,20 @@ begin
     v_result := 'wrong_event';
   elsif v_ticket.ticket_status = 'used' or v_ticket.qr_status = 'used' then
     v_result := 'already_used';
+  elsif v_ticket.ticket_status = 'canceled' or v_ticket.qr_status = 'invalidated' then
+    -- Canceled by an event cancellation (refund_functions.sql) or otherwise
+    -- invalidated: never admit it, even though the event id matches.
+    v_result := 'invalid';
   else
     v_result := 'valid';
     update public.tickets
       set ticket_status = 'used', qr_status = 'used', used_at = now()
       where ticket_id = v_ticket.ticket_id;
+    -- A ticket scanned in while still listed for resale is used now, so take
+    -- it off the market (otherwise a used ticket could still be sold).
+    update public.resale_listings
+      set listing_status = 'canceled'
+      where ticket_id = v_ticket.ticket_id and listing_status = 'active';
   end if;
 
   insert into public.qr_scan_logs (ticket_id, session_id, scan_result, device_info)

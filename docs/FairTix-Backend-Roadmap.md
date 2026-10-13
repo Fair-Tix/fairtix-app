@@ -371,6 +371,75 @@ reviewing it):
   (organizer login, event repository, etc.) rather than introducing a
   one-off realtime channel just for this.
 
+## Progress update (session 7 — audit of QA items 1–13, code review only)
+
+Nothing below has been run on a device or through `flutter analyze`; this
+is a read-through of the code and SQL. "Coded" means the code path exists
+and reads correctly, not that it has been tested.
+
+**SQL run order** (each file is safe to re-run unless noted):
+`schema.sql` → `policies.sql` → `purchase_functions.sql` →
+`checkout_guard.sql` → `purchase_notification.sql` →
+`revenue_functions.sql` → *(optional, only if old test purchases exist:
+`fee_model_migration.sql`, then re-run the backfill block of
+`revenue_functions.sql`)* → `refund_functions.sql` →
+`report_functions.sql` → `resale_functions.sql` →
+`scanner_functions.sql` → `security_patch.sql`.
+
+**Item status found in code**
+- ✅ 1 duplicate email: `register()` checks the empty `identities` list
+  Supabase returns for an existing confirmed email.
+- ✅ 2 activation notice: `notify_verification_change` trigger in
+  `schema.sql`.
+- ✅ 3 failed payment issues no ticket: `purchase_ticket` removed; tickets
+  only come from `fulfill_ticket_purchase` after `paymongo-verify` /
+  `paymongo-webhook` confirm the link is paid. Needs `PAYMONGO_SECRET_KEY`.
+- ✅ 4 remaining quantity: decremented inside `_do_ticket_purchase`.
+- ✅ 5 purchase notification: **already done** —
+  `purchase_notification.sql` (trigger on `transactions` insert). This
+  session also made `checkout_screen.dart` refresh notifications right
+  after a purchase so the dashboard unread dot updates.
+- ✅ 6 wallet status, 7 screenshot block (Android `FLAG_SECURE` in
+  `MainActivity.kt`, iOS not covered), 8 offline QR cache, 9–10 resale
+  listing (needs `resale_functions.sql`).
+- ✅ 11 refund log, 12 fees per plan (8/9/10%), 13 reports: Revenue &
+  Reports screen reads the new RPCs; CSV export via `csv_export.dart`.
+
+**Fixed this session**
+- `scan_ticket` admitted canceled / QR-invalidated tickets (a refunded
+  ticket would have scanned `valid`) and left a scanned ticket's resale
+  listing active. Both fixed in `scanner_functions.sql` (re-run it).
+- New `security_patch.sql`: drops the direct client INSERT policies on
+  `tickets` and `transactions` (any signed-in user could create a free
+  ticket through the API); adds the missing `org_subs_insert_own` /
+  `org_subs_update_own_or_admin` policies (without them an organizer cannot
+  save a plan, so every organizer falls back to the 10% fee);
+  revokes `reissue_ticket_qr` from `authenticated` (any owner could reset a
+  used/canceled ticket to valid).
+
+**Open — needs a decision or work**
+- ⚠️ Refunds are manual in the code (`admin_process_refund`, "Mark
+  Processed" button, nothing calls PayMongo). The manuscript says refunds
+  are automatic with no admin action. Either change the manuscript or
+  auto-mark refunds processed in `create_refunds_on_event_cancel`.
+- ⚠️ Admin Events & Tickets (`admin-events-tickets.dart`) still reads the
+  signed-in organizer's `EventRepository`, so an admin sees no events, and
+  its cancel button is local-only (no refunds). Only the organizer's
+  cancel flow is persisted.
+- ⚠️ Resale purchase is not built (no transfer / reissue / 5% fee), so
+  revenue totals contain primary-sale fees only, and a refund goes to the
+  original buyer, not a later holder.
+- ⚠️ Revenue & Reports: "Daily Revenue", "Revenue Breakdown" and
+  "Monthly Breakdown" panels are still placeholders; Attendance and
+  Resale Activity exports say "not available yet".
+- ⚠️ `events.supporting_document_urls` and the `event_documents` bucket
+  are used by `event_repository.dart` but defined in no SQL file here. If
+  you created them in the dashboard, add them to `schema.sql` /
+  `policies.sql` so a fresh project matches.
+- ⚠️ `csv_export.dart` imports `dart:io` (fine for the web build, would
+  not compile with `--wasm`) and uses `FilePicker.saveFile(bytes:)`;
+  confirm the web download actually fires.
+
 ## Phase 1 — Real Login/Register for all three portals (Supabase Auth)
 
 This replaces the three hardcoded test-account services

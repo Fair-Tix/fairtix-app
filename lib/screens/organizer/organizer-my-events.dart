@@ -203,7 +203,7 @@ class _OrganizerMyEventsScreenState extends State<OrganizerMyEventsScreen> {
                 width: 36,
                 height: 36,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const Icon(
+                errorBuilder: (_, _, _) => const Icon(
                   Icons.image_outlined,
                   size: 18,
                   color: AppColors.primaryPurple,

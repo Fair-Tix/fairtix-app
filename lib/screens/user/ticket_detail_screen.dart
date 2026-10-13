@@ -31,6 +31,12 @@ class TicketDetailScreen extends StatefulWidget {
 class _TicketDetailScreenState extends State<TicketDetailScreen> {
   Ticket get ticket => widget.ticket;
 
+  /// The QR is only shown while the ticket can still get someone in: valid,
+  /// or listed for resale (still the owner's until someone buys it). A used
+  /// or canceled ticket is rejected at the door anyway, so showing a
+  /// scannable code for it would only confuse the holder and the staff.
+  bool get _isQrActive => ticket.status == TicketStatus.valid || ticket.status == TicketStatus.listed;
+
   bool _isCancelingListing = false;
 
   @override
@@ -201,24 +207,27 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
                   const SizedBox(height: 22),
                   const DashedDivider(),
                   const SizedBox(height: 24),
-                  const Center(
-                    child: Text(
-                      'SCAN TO ENTER',
-                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: AppColors.accentPurple, letterSpacing: 1.2),
+                  if (_isQrActive) ...[
+                    const Center(
+                      child: Text(
+                        'SCAN TO ENTER',
+                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: AppColors.accentPurple, letterSpacing: 1.2),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 18),
-                  Center(
-                    child: _TicketQrCode(qrToken: ticket.qrToken, size: 200),
-                  ),
-                  const SizedBox(height: 18),
-                  const Center(
-                    child: Text(
-                      'This QR code is unique to your account. Do not share.',
-                      textAlign: TextAlign.center,
-                      style: AppTextStyles.bodyMuted,
+                    const SizedBox(height: 18),
+                    Center(
+                      child: _TicketQrCode(qrToken: ticket.qrToken, size: 200),
                     ),
-                  ),
+                    const SizedBox(height: 18),
+                    const Center(
+                      child: Text(
+                        'This QR code is unique to your account. Do not share.',
+                        textAlign: TextAlign.center,
+                        style: AppTextStyles.bodyMuted,
+                      ),
+                    ),
+                  ] else
+                    _InactiveQrNotice(status: ticket.status),
                 ],
               ),
             ),
@@ -266,6 +275,49 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
           onPressed: null,
         );
     }
+  }
+}
+
+/// Shown in place of the QR code when the ticket is used or canceled.
+class _InactiveQrNotice extends StatelessWidget {
+  const _InactiveQrNotice({required this.status});
+
+  final TicketStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final isUsed = status == TicketStatus.used;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+      decoration: BoxDecoration(
+        color: AppColors.inputFillLight,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.inputBorderLight),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            isUsed ? Icons.check_circle_outline_rounded : Icons.block_rounded,
+            size: 44,
+            color: AppColors.textMuted,
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'QR code no longer active',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textDark),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            isUsed
+                ? 'This ticket was already scanned at the event entrance.'
+                : 'This ticket was canceled, so it can no longer be used to enter.',
+            textAlign: TextAlign.center,
+            style: AppTextStyles.bodyMuted,
+          ),
+        ],
+      ),
+    );
   }
 }
 

@@ -146,13 +146,19 @@ begin
     raise exception 'That link and PIN are invalid or have expired.';
   end if;
 
-  select t.*, tt.tier_name, tt.event_id
-    into v_ticket, v_tier_name, v_ticket_event_id
+  select t.*
+    into v_ticket
     from public.tickets t
-    join public.ticket_tiers tt on tt.tier_id = t.tier_id
     where t.qr_code_token = p_qr_code_token;
 
-  if not found then
+  if found then
+    select tt.tier_name, tt.event_id
+      into v_tier_name, v_ticket_event_id
+      from public.ticket_tiers tt
+      where tt.tier_id = v_ticket.tier_id;
+  end if;
+
+  if v_ticket.ticket_id is null then
     -- No matching ticket at all — nothing to log a scan against (
     -- qr_scan_logs.ticket_id is not-null), so just report the result.
     return query select 'invalid'::text, v_event_title, null::text;

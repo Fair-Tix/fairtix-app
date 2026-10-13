@@ -220,6 +220,15 @@ class AdminResaleService {
 
   /// Newest first.
   Future<List<ResaleListingEntry>> fetchListings() async {
+    // Close any listing that has passed its 24-hour cutoff first, so the
+    // admin never sees (or tries to remove) a listing that should already be
+    // expired. Housekeeping only: a failure here must not block the list.
+    try {
+      await Supabase.instance.client.rpc('expire_resale_listings');
+    } catch (_) {
+      // Ignored on purpose.
+    }
+
     try {
       final rows = await Supabase.instance.client
           .from('resale_listings')

@@ -120,9 +120,28 @@ class TicketRepository {
     );
   }
 
+  /// Closes any resale listing whose event is now within 24 hours of
+  /// starting (listing -> expired, ticket -> valid again) so the wallet below
+  /// never shows a stale "listed" ticket. Done in the database
+  /// (supabase/resale_functions.sql); the app just asks for it to run.
+  ///
+  /// Failures are ignored on purpose: this is housekeeping, and it must never
+  /// stop the wallet from loading — e.g. before resale_functions.sql has been
+  /// run on this project, or when offline.
+  Future<void> _expireDueListings() async {
+    try {
+      await Supabase.instance.client.rpc('expire_resale_listings');
+    } catch (_) {
+      // Ignored; see above.
+    }
+  }
+
   Future<_FetchResult> _fetchFromServer(
     String userId,
   ) async {
+    // Must come first so the ticket query below already sees the result.
+    await _expireDueListings();
+
     final rawRows = await Supabase.instance.client
         .from('tickets')
         .select('''

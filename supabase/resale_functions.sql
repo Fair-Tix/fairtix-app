@@ -153,3 +153,90 @@ create policy "resale_listings_write_admin_only"
   on public.resale_listings for all
   using (public.is_admin())
   with check (public.is_admin());
+
+-- ── expire_resale_listings ─────────────────────────────────────────────────────────────
+-- Manuscript: all active resale listings close automatically 24 hours before
+-- an event day starts, and unsold tickets go back to their original owners
+-- in a valid, usable state (for multi-day events each day closes on its own,
+-- since every day is its own event row).
+--
+-- list_ticket_for_resale already refuses NEW listings after the cutoff; this
+-- closes the ones that were still active when it passed:
+--   listing_status -> 'expired'
+--   ticket_status  -> 'valid' (only if it is still 'listed')
+--   the seller gets an in-app notification
+--
+-- It takes no input and only touches listings that are genuinely past their
+-- cutoff, and running it repeatedly changes nothing, so it is safe for any
+-- signed-in user to call. The app calls it whenever the wallet (and the
+-- admin resale list) loads. For expiry that does not depend on someone opening
+-- the app, also schedule it with pg_cron (see the end of this file).
+-- Returns how many listings it expired.
+create or replace function public.expire_resale_listings()
+returns int
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  v_count int;
+begin
+  with due as (
+    select rl.listing_id, rl.ticket_id, rl.seller_id, e.title as event_title
+    from public.resale_listings rl
+    join public.tickets t       on t.ticket_id = rl.ticket_id
+    join public.ticket_tiers tt on tt.tier_id = t.tier_id
+    join public.events e        on e.event_id = tt.event_id
+    where rl.listing_status = 'active'
+      -- Same cutoff list_ticket_for_resale uses: event_start_date is a plain
+      -- date, read as midnight Philippine time, minus 24 hours.
+      and now() > ((e.event_start_date::timestamp at time zone 'Asia/Manila') - interval '24 hours')
+    for update of rl
+  ),
+  expired as (
+    update public.resale_listings rl
+       set listing_status = 'expired'
+      from due
+     where rl.listing_id = due.listing_id
+    returning rl.ticket_id, rl.seller_id, due.event_title
+  ),
+  released as (
+    update public.tickets t
+       set ticket_status = 'valid'
+      from expired
+     where t.ticket_id = expired.ticket_id
+       and t.ticket_status = 'listed'
+    returning t.ticket_id
+  ),
+  notified as (
+    insert into public.notifications (user_id, title, message, type, channel)
+    select
+      expired.seller_id,
+      'Resale Listing Expired',
+      format(
+        'Your resale listing for %s expired because resale closes 24 hours before the event. Your ticket is valid again and ready to use.',
+        expired.event_title
+      ),
+      'resale', 'in_app'
+    from expired
+    returning notification_id
+  )
+  select count(*) into v_count from expired;
+
+  return v_count;
+end;
+$$;
+
+revoke all on function public.expire_resale_listings() from public, anon;
+grant execute on function public.expire_resale_listings() to authenticated;
+
+-- OPTIONAL — run it on a schedule so listings expire even if nobody opens the
+-- app. Needs the pg_cron extension: Dashboard -> Database -> Extensions ->
+-- enable "pg_cron", then run this once (not part of the re-runnable setup
+-- above, so it is commented out):
+--
+--   select cron.schedule(
+--     'expire-resale-listings', '*/10 * * * *',
+--     $cron$ select public.expire_resale_listings(); $cron$
+--   );
+--
+-- To remove it later:  select cron.unschedule('expire-resale-listings');

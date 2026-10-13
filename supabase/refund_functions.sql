@@ -60,31 +60,22 @@ begin
   if new.status = 'canceled' and old.status is distinct from 'canceled' then
 
     -- A multi-day parent being canceled covers its generated day-children.
-    -- The CTE returns only the refunds actually created (a repeat cancel
-    -- inserts none), so each buyer is notified exactly once per refund.
-    with created as (
-      insert into public.refunds (transaction_id, ticket_id, buyer_id, event_id, amount)
-      select tr.transaction_id, tr.ticket_id, tr.buyer_id, e.event_id, tr.amount
-      from public.transactions tr
-      join public.tickets t       on t.ticket_id = tr.ticket_id
-      join public.ticket_tiers tt on tt.tier_id = t.tier_id
-      join public.events e        on e.event_id = tt.event_id
-      where (e.event_id = new.event_id or e.parent_event_id = new.event_id)
-        and tr.transaction_type = 'purchase'
-        and tr.status = 'completed'
-        and t.ticket_status <> 'used'
-      on conflict (transaction_id) do nothing
-      returning buyer_id, amount
-    )
-    insert into public.notifications (user_id, title, message, type, channel)
-    select
-      c.buyer_id,
-      'Event Canceled',
-      format('%s has been canceled. A refund of PHP %s will be processed for your ticket.',
-             new.title, to_char(c.amount, 'FM999,999,990.00')),
-      'ticket',
-      'in_app'
-    from created c;
+    -- ON CONFLICT means a repeat cancel creates no second refund. No
+    -- notification is sent here: the existing notify_on_event_canceled trigger
+    -- (trg_notify_event_canceled) already tells the organizer and every holder,
+    -- and trg_notify_transaction sends "Refund issued" when the admin
+    -- processes the refund, so adding one here would send it twice.
+    insert into public.refunds (transaction_id, ticket_id, buyer_id, event_id, amount)
+    select tr.transaction_id, tr.ticket_id, tr.buyer_id, e.event_id, tr.amount
+    from public.transactions tr
+    join public.tickets t       on t.ticket_id = tr.ticket_id
+    join public.ticket_tiers tt on tt.tier_id = t.tier_id
+    join public.events e        on e.event_id = tt.event_id
+    where (e.event_id = new.event_id or e.parent_event_id = new.event_id)
+      and tr.transaction_type = 'purchase'
+      and tr.status = 'completed'
+      and t.ticket_status <> 'used'
+    on conflict (transaction_id) do nothing;
 
     -- Cancel any active resale listings for the event's tickets...
     update public.resale_listings rl

@@ -95,18 +95,9 @@ begin
     set ticket_status = 'listed'
     where ticket_id = p_ticket_id;
 
-  -- Tell the seller the listing is live (the app also shows a confirmation
-  -- screen, but this is the record they can come back to).
-  insert into public.notifications (user_id, title, message, type, channel)
-  values (
-    v_user_id,
-    'Ticket Listed for Resale',
-    format(
-      'Your %s ticket for %s is now listed on the Resale Market for PHP %s. The listing closes automatically 24 hours before the event.',
-      v_tier_name, v_event_title, to_char(v_price, 'FM999,999,990.00')
-    ),
-    'resale', 'in_app'
-  );
+  -- No notification here: the existing notify_on_resale_listing trigger
+  -- (trg_notify_resale_listing) already tells the seller when a listing is
+  -- inserted, so inserting one here as well would send it twice.
 
   return v_listing;
 end;

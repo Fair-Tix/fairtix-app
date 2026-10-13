@@ -218,30 +218,11 @@ begin
          escrow_status = 'released'
    where listing_id = v_listing.listing_id;
 
-  -- 5. Tell both sides.
-  insert into public.notifications (user_id, title, message, type, channel)
-  values
-    (
-      v_listing.seller_id,
-      'Ticket Sold',
-      format(
-        'Your %s ticket for %s sold for PHP %s. After FairTix''s 5%% resale fee you receive PHP %s. The QR code has moved to the buyer.',
-        v_tier_name, v_event_title,
-        to_char(v_listing.listing_price, 'FM999,999,990.00'),
-        to_char(v_listing.listing_price - v_fee, 'FM999,999,990.00')
-      ),
-      'resale', 'in_app'
-    ),
-    (
-      v_buyer_id,
-      'Resale Ticket Purchased',
-      format(
-        'You bought a %s ticket for %s for PHP %s. It is in your wallet with a new QR code.',
-        v_tier_name, v_event_title,
-        to_char(v_listing.listing_price, 'FM999,999,990.00')
-      ),
-      'resale', 'in_app'
-    );
+  -- 5. No notifications here: the existing notify_on_transaction trigger
+  --    (trg_notify_transaction) already tells the seller ("Your ticket was
+  --    sold") and the buyer ("Resale ticket purchased") when the 'resale'
+  --    transaction above is inserted as completed. Adding them here too
+  --    would send each one twice.
 
   select * into v_ticket from public.tickets where ticket_id = v_ticket.ticket_id;
   return v_ticket;

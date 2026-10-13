@@ -3,9 +3,12 @@ import 'package:flutter/material.dart';
 import '../../services/admin_auth_service.dart';
 import '../organizer/app_colors.dart';
 import 'admin-dashboard.dart';
+import 'admin-route.dart';
 
 class AdminLoginScreen extends StatefulWidget {
-  const AdminLoginScreen({super.key});
+  const AdminLoginScreen({super.key, this.initialErrorText});
+
+  final String? initialErrorText;
 
   @override
   State<AdminLoginScreen> createState() => _AdminLoginScreenState();
@@ -18,6 +21,12 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
   bool _obscurePassword = true;
   bool _isSubmitting = false;
   String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _errorText = widget.initialErrorText;
+  }
 
   @override
   void dispose() {
@@ -40,10 +49,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
         password: _passwordController.text,
       );
       if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
-      );
+      adminPushReplacement(context, const AdminDashboardScreen());
     } on AdminAuthException catch (error) {
       if (mounted) setState(() => _errorText = error.message);
     } finally {
@@ -124,7 +130,10 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
             if (AdminAuthService.debugCredentialsHint.isNotEmpty) ...[
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF3F0FF),
                   borderRadius: BorderRadius.circular(8),

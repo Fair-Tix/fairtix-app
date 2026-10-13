@@ -38,6 +38,7 @@ class TicketTier {
   });
 
   double get grossRevenue => price * sold;
+  int get remaining => quantity - sold;
 
   TicketTier copyWith({String? name, double? price, int? quantity, int? sold}) {
     return TicketTier(
@@ -96,6 +97,10 @@ class OrganizerEvent {
   /// (`public.events.supporting_document_urls`).
   final List<String> supportingDocumentUrls;
 
+  /// For a multi-day parent: how many live (non-canceled) days it has, so
+  /// roll-up tier figures can be shown per day. 0 for single-day events.
+  final int dayCount;
+
   const OrganizerEvent({
     required this.id,
     required this.name,
@@ -109,6 +114,7 @@ class OrganizerEvent {
     this.dayNumber,
     this.bannerUrl,
     this.supportingDocumentUrls = const [],
+    this.dayCount = 0,
   });
 
   /// Formats a start/end date pair given as "M/D/YYYY" (or "MM/DD/YYYY")
@@ -157,6 +163,7 @@ class OrganizerEvent {
   int get ticketsSold => tiers.fold(0, (sum, t) => sum + t.sold);
   int get ticketsTotal => tiers.fold(0, (sum, t) => sum + t.quantity);
   double get grossRevenue => tiers.fold(0.0, (sum, t) => sum + t.grossRevenue);
+  int get ticketsRemaining => ticketsTotal - ticketsSold;
   String get soldLabel => '$ticketsSold / $ticketsTotal';
   bool get isMultiDay => span == EventSpan.multiDay;
 
@@ -169,6 +176,7 @@ class OrganizerEvent {
     List<TicketTier>? tiers,
     String? bannerUrl,
     List<String>? supportingDocumentUrls,
+    int? dayCount,
   }) {
     return OrganizerEvent(
       id: id,
@@ -184,6 +192,7 @@ class OrganizerEvent {
       bannerUrl: bannerUrl ?? this.bannerUrl,
       supportingDocumentUrls:
           supportingDocumentUrls ?? this.supportingDocumentUrls,
+      dayCount: dayCount ?? this.dayCount,
     );
   }
 }

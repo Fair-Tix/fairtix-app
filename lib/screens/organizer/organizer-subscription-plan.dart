@@ -38,9 +38,24 @@ class _OrganizerSubscriptionPlanScreenState
             padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
             child: Column(
               children: [
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: FairTixLogo(fontSize: 22),
+                Row(
+                  children: [
+                    // Back button: shown whenever there is a screen to go back
+                    // to (viewing/managing the plan from Profile). On first-time
+                    // onboarding this is the root, so nothing is shown.
+                    if (Navigator.of(context).canPop()) ...[
+                      IconButton(
+                        tooltip: 'Back',
+                        onPressed: () => Navigator.of(context).maybePop(),
+                        icon: const Icon(
+                          Icons.arrow_back_rounded,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    const FairTixLogo(fontSize: 22),
+                  ],
                 ),
                 const SizedBox(height: 40),
                 const Text(
@@ -119,7 +134,8 @@ class _OrganizerSubscriptionPlanScreenState
     price: '\u20B1299',
     features: const [
       'Up to 3 events/month',
-      'Max 500 tickets/event',
+      'Max 500 tickets/event day',
+      'Multi-day events up to 3 days',
       '8% platform fee/ticket',
       'Unlimited scanner sessions',
     ],
@@ -131,7 +147,8 @@ class _OrganizerSubscriptionPlanScreenState
     price: '\u20B1699',
     features: const [
       'Up to 9 events/month',
-      'Max 5,000 tickets/event',
+      'Max 5,000 tickets/event day',
+      'Multi-day events up to 14 days',
       '9% platform fee/ticket',
       'Unlimited scanner sessions',
       'CSV export & analytics',
@@ -146,6 +163,7 @@ class _OrganizerSubscriptionPlanScreenState
     features: const [
       'Unlimited events',
       'Unlimited ticket capacity',
+      'Unlimited multi-day length',
       '10% platform fee/ticket',
       'Unlimited scanner sessions',
       'CSV export & enhanced analytics',

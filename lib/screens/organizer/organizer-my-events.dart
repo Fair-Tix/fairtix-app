@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'app_colors.dart';
 import '../../models/organizer_event.dart';
 import '../../services/event_repository.dart';
@@ -235,8 +236,28 @@ class _OrganizerMyEventsScreenState extends State<OrganizerMyEventsScreen> {
             ],
           ),
         ),
-        DataCell(Text(e.date, style: AppTextStyles.body)),
-        DataCell(Text(e.venue, style: AppTextStyles.body)),
+        DataCell(
+          Text(
+            e.date,
+            style: AppTextStyles.body,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        DataCell(
+          Tooltip(
+            message: e.venue,
+            child: SizedBox(
+              width: 260,
+              child: Text(
+                e.venue,
+                style: AppTextStyles.body,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ),
         DataCell(Text(e.soldLabel, style: AppTextStyles.label)),
         DataCell(
           Container(

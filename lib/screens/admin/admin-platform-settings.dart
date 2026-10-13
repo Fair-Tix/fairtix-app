@@ -66,7 +66,7 @@ class _AdminPlatformSettingsScreenState
     };
     final page = pages[index];
     if (page != null) {
-      Navigator.pushReplacement(context, adminPageRoute(page));
+      adminPushReplacement(context, page);
     }
   }
 
@@ -109,11 +109,7 @@ class _AdminPlatformSettingsScreenState
     if (!mounted || shouldLogout != true) return;
 
     AdminAuthService.instance.logout();
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
-      (route) => false,
-    );
+    adminPushAndRemoveUntil(context, const AdminLoginScreen());
   }
 
   @override
@@ -658,29 +654,35 @@ class _AdminLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
     children: [
       Container(
-        width: 20,
-        height: 20,
+        width: 22,
+        height: 22,
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           color: AppColors.primaryPurple,
           borderRadius: BorderRadius.circular(5),
         ),
         child: const Icon(
-          Icons.confirmation_number,
+          Icons.confirmation_number_outlined,
           color: Colors.white,
-          size: 13,
+          size: 14,
         ),
       ),
-      const SizedBox(width: 7),
+      const SizedBox(width: 6),
       const Text(
         'FairTix',
         style: TextStyle(
-          color: AppColors.primaryPurple,
-          fontSize: 14,
+          fontSize: 16,
           fontWeight: FontWeight.w800,
           fontStyle: FontStyle.italic,
         ),
+      ),
+      const SizedBox(width: 3),
+      const Text(
+        'ADMIN',
+        style: TextStyle(fontSize: 8, color: AppColors.textGray),
       ),
     ],
   );

@@ -393,9 +393,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return _panel(
       title: 'Pending Organizer Applications${pending.isEmpty ? '' : ' (${pending.length})'}',
       action: 'View All',
-      onAction: () => Navigator.pushReplacement(
+      onAction: () => adminPushReplacement(
         context,
-        adminPageRoute(const AdminOrganizerApplicationsScreen()),
+        const AdminOrganizerApplicationsScreen(),
       ),
       child: body,
     );
@@ -457,9 +457,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       title: 'Recent Fraud Alerts${open.isEmpty ? '' : ' (${open.length} open)'}',
       action: 'View All',
       alertAction: true,
-      onAction: () => Navigator.pushReplacement(
+      onAction: () => adminPushReplacement(
         context,
-        adminPageRoute(const AdminFraudAlertsScreen()),
+        const AdminFraudAlertsScreen(),
       ),
       child: body,
     );

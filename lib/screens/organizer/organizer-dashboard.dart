@@ -47,8 +47,8 @@ class _OrganizerDashboardScreenState extends State<OrganizerDashboardScreen> {
     final screenWidth = MediaQuery.of(context).size.width;
     final isNarrow = screenWidth < 720;
     final events = EventRepository.instance.events;
-    final organizationName =
-        OrganizerSession.instance.account?.organizationName ?? 'Organizer';
+    final organizerName =
+        OrganizerSession.instance.account?.fullName ?? 'Organizer';
 
     return OrganizerScaffold(
       pageTitle: 'Organizer Dashboard',
@@ -72,7 +72,7 @@ class _OrganizerDashboardScreenState extends State<OrganizerDashboardScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('Welcome back,', style: AppTextStyles.bodyGray),
-                        Text(organizationName, style: AppTextStyles.h1),
+                        Text(organizerName, style: AppTextStyles.h1),
                       ],
                     ),
                     Row(
@@ -336,8 +336,28 @@ class _OrganizerDashboardScreenState extends State<OrganizerDashboardScreen> {
             ],
           ),
         ),
-        DataCell(Text(event.date, style: AppTextStyles.body)),
-        DataCell(Text(event.venue, style: AppTextStyles.body)),
+        DataCell(
+          Text(
+            event.date,
+            style: AppTextStyles.body,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        DataCell(
+          Tooltip(
+            message: event.venue,
+            child: SizedBox(
+              width: 260,
+              child: Text(
+                event.venue,
+                style: AppTextStyles.body,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ),
         DataCell(Text(event.soldLabel, style: AppTextStyles.label)),
         DataCell(
           Container(

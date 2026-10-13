@@ -28,7 +28,22 @@ class OrganizerSubscriptionConfirmedScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const FairTixLogo(fontSize: 24),
+                  Row(
+                    children: [
+                      if (Navigator.of(context).canPop()) ...[
+                        IconButton(
+                          tooltip: 'Back',
+                          onPressed: () => Navigator.of(context).maybePop(),
+                          icon: const Icon(
+                            Icons.arrow_back_rounded,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      const FairTixLogo(fontSize: 24),
+                    ],
+                  ),
                   Center(
                     child: Container(
                       width: 130,

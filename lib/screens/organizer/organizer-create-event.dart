@@ -3,11 +3,13 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+
 import 'app_colors.dart';
 import '../../models/organizer_event.dart';
 import '../../services/event_repository.dart';
 import 'organizer-scaffold.dart';
 import 'organizer-event-created.dart';
+import 'organizer-form-widgets.dart';
 
 class TicketTierInput {
   final TextEditingController nameController;
@@ -75,6 +77,15 @@ class _OrganizerCreateEventScreenState
   String? _formError;
   bool _isSubmitting = false;
 
+  // Per-field warnings, keyed by field ('name', 'venue', 'start', 'end',
+  // 'documents', 'tiers', 'tier<i>.name' / '.price' / '.quantity'). A
+  // warning is cleared as soon as the organizer edits that field.
+  final Map<String, String> _errors = {};
+
+  void _clearError(String key) {
+    if (_errors.containsKey(key)) setState(() => _errors.remove(key));
+  }
+
   @override
   void dispose() {
     _eventNameController.dispose();
@@ -118,7 +129,10 @@ class _OrganizerCreateEventScreenState
         .map((f) => PickedDocument(bytes: f.bytes!, fileName: f.name))
         .toList();
     if (picked.isEmpty) return;
-    setState(() => _documents.addAll(picked));
+    setState(() {
+      _documents.addAll(picked);
+      _errors.remove('documents');
+    });
   }
 
   /// Uploads whatever banner/documents were picked for the just-created
@@ -162,74 +176,91 @@ class _OrganizerCreateEventScreenState
     setState(() {
       _tiers[index].dispose();
       _tiers.removeAt(index);
+      _errors.removeWhere((k, _) => k.startsWith('tier'));
     });
   }
 
-  bool _validate() {
-    if (_eventNameController.text.trim().isEmpty ||
-        _venueController.text.trim().isEmpty) {
-      setState(() => _formError = 'Event name and venue are required.');
-      return false;
+  /// Validates every field and records a warning under each bad one.
+  /// [forPublish] additionally requires venue, tiers and supporting
+  /// documents (drafts only need a name and date).
+  bool _validate({bool forPublish = true}) {
+    final errors = <String, String>{};
+    final today = DateUtils.dateOnly(DateTime.now());
+
+    if (_eventNameController.text.trim().isEmpty) {
+      errors['name'] = 'Event name is required.';
     }
-    if (_span == EventSpan.singleDay) {
-      if (_startDate == null) {
-        setState(() => _formError = 'Pick a date for the event.');
-        return false;
-      }
-    } else {
-      if (_startDate == null || _endDate == null) {
-        setState(() => _formError = 'Pick both a start date and an end date.');
-        return false;
-      }
-      if (!_endDate!.isAfter(_startDate!)) {
-        setState(
-          () => _formError = 'The end date must be after the start date.',
-        );
-        return false;
-      }
+    if (_startDate == null) {
+      errors['start'] = _span == EventSpan.singleDay
+          ? 'Pick a date for the event.'
+          : 'Pick a start date.';
+    } else if (DateUtils.dateOnly(_startDate!).isBefore(today)) {
+      errors['start'] = 'Event dates cannot be in the past.';
     }
-    for (final tier in _tiers) {
-      if (tier.nameController.text.trim().isEmpty ||
-          tier.priceController.text.trim().isEmpty ||
-          tier.quantityController.text.trim().isEmpty) {
-        setState(
-          () =>
-              _formError = 'Fill in every ticket tier, or remove unused ones.',
-        );
-        return false;
-      }
-      if (double.tryParse(tier.priceController.text.trim()) == null ||
-          int.tryParse(tier.quantityController.text.trim()) == null) {
-        setState(
-          () => _formError = 'Ticket price and quantity must be valid numbers.',
-        );
-        return false;
+    if (_span == EventSpan.multiDay) {
+      if (_endDate == null) {
+        errors['end'] = 'Pick an end date.';
+      } else if (DateUtils.dateOnly(_endDate!).isBefore(today)) {
+        errors['end'] = 'Event dates cannot be in the past.';
+      } else if (_startDate != null && !_endDate!.isAfter(_startDate!)) {
+        errors['end'] = 'End date must be after the start date.';
       }
     }
-    setState(() => _formError = null);
-    return true;
+
+    if (forPublish) {
+      if (_venueController.text.trim().isEmpty) {
+        errors['venue'] = 'Search and pick a venue.';
+      }
+      if (_documents.isEmpty) {
+        errors['documents'] = 'Upload at least one supporting document (venue contract, permit, etc.).';
+      }
+      if (_tiers.isEmpty) {
+        errors['tiers'] = 'Add at least one ticket tier.';
+      }
+      for (var i = 0; i < _tiers.length; i++) {
+        final tier = _tiers[i];
+        if (tier.nameController.text.trim().isEmpty) {
+          errors['tier$i.name'] = 'Choose a tier.';
+        }
+        final price = double.tryParse(tier.priceController.text.trim());
+        if (tier.priceController.text.trim().isEmpty) {
+          errors['tier$i.price'] = 'Price is required.';
+        } else if (price == null || price < 0) {
+          errors['tier$i.price'] = 'Enter a valid price.';
+        }
+        final qty = int.tryParse(tier.quantityController.text.trim());
+        if (tier.quantityController.text.trim().isEmpty) {
+          errors['tier$i.quantity'] = 'Quantity is required.';
+        } else if (qty == null || qty <= 0) {
+          errors['tier$i.quantity'] = 'Enter a whole number above 0.';
+        }
+      }
+      final names = _tiers
+          .map((t) => t.nameController.text.trim().toLowerCase())
+          .where((n) => n.isNotEmpty)
+          .toList();
+      for (var i = 0; i < _tiers.length; i++) {
+        final n = _tiers[i].nameController.text.trim().toLowerCase();
+        if (n.isNotEmpty && names.where((x) => x == n).length > 1) {
+          errors['tier$i.name'] = 'Each tier must have a different name.';
+        }
+      }
+    }
+
+    setState(() {
+      _errors
+        ..clear()
+        ..addAll(errors);
+      _formError = errors.isEmpty
+          ? null
+          : 'Please fix the ${errors.length} highlighted '
+                'field${errors.length == 1 ? '' : 's'} below.';
+    });
+    return errors.isEmpty;
   }
 
   Future<void> _saveDraft() async {
-    if (_eventNameController.text.trim().isEmpty) {
-      setState(
-        () =>
-            _formError = 'Give your event a name before saving it as a draft.',
-      );
-      return;
-    }
-    if (_startDate == null) {
-      setState(() => _formError = 'Pick a date before saving it as a draft.');
-      return;
-    }
-    if (_span == EventSpan.multiDay &&
-        (_endDate == null || !_endDate!.isAfter(_startDate!))) {
-      setState(
-        () => _formError =
-            'Pick a valid end date (after the start date) before saving.',
-      );
-      return;
-    }
+    if (!_validate(forPublish: false)) return;
     setState(() {
       _isSubmitting = true;
       _formError = null;
@@ -327,15 +358,16 @@ class _OrganizerCreateEventScreenState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           isWide
-              ? IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(flex: 2, child: _leftColumn()),
-                      const SizedBox(width: 24),
-                      Expanded(flex: 1, child: _rightColumn()),
-                    ],
-                  ),
+              // No IntrinsicHeight here: the form contains autocomplete /
+              // dropdown overlays whose intrinsic-size pass can stall layout
+              // (this is what made the Manage page hang on drafts).
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 2, child: _leftColumn()),
+                    const SizedBox(width: 24),
+                    Expanded(flex: 1, child: _rightColumn()),
+                  ],
                 )
               : Column(
                   children: [
@@ -418,7 +450,15 @@ class _OrganizerCreateEventScreenState
     required TextEditingController controller,
     required ValueChanged<DateTime> onPicked,
     required DateTime firstDate,
+    String? errorKey,
   }) {
+    final today = DateUtils.dateOnly(DateTime.now());
+    final requestedFirstDate = DateUtils.dateOnly(firstDate);
+    final pickerFirstDate = requestedFirstDate.isBefore(today)
+        ? today
+        : requestedFirstDate;
+    final initialDate = pickerFirstDate;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -431,15 +471,19 @@ class _OrganizerCreateEventScreenState
           onTap: () async {
             final date = await showDatePicker(
               context: context,
-              initialDate: firstDate,
-              firstDate: DateTime(2024),
-              lastDate: DateTime(2030),
+              initialDate: initialDate,
+              firstDate: pickerFirstDate,
+              lastDate: DateTime(today.year + 10, today.month, today.day),
             );
-            if (date != null) onPicked(date);
+            if (date != null) {
+              onPicked(date);
+              if (errorKey != null) _clearError(errorKey);
+            }
           },
           decoration: InputDecoration(
             hintText: 'Select Date',
             hintStyle: AppTextStyles.bodyGray,
+            errorText: errorKey == null ? null : _errors[errorKey],
             prefixIcon: const Icon(
               Icons.calendar_today_outlined,
               size: 18,
@@ -478,6 +522,8 @@ class _OrganizerCreateEventScreenState
                 label: 'Event Name *',
                 hint: 'e.g. BINI Signals World Tour',
                 controller: _eventNameController,
+                errorText: _errors['name'],
+                onChanged: (_) => _clearError('name'),
               ),
               const SizedBox(height: 18),
               const Text('Event Duration *', style: AppTextStyles.label),
@@ -555,6 +601,7 @@ class _OrganizerCreateEventScreenState
                         });
                       },
                       firstDate: DateTime.now(),
+                      errorKey: 'start',
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -570,31 +617,24 @@ class _OrganizerCreateEventScreenState
                               });
                             },
                             firstDate: _startDate ?? DateTime.now(),
+                            errorKey: 'end',
                           )
-                        : AppTextField(
-                            label: 'Venue *',
-                            hint: 'Arena, Hotel, or Stadium',
+                        : VenueDropdownField(
                             controller: _venueController,
-                            prefixIcon: const Icon(
-                              Icons.location_on_outlined,
-                              size: 18,
-                              color: AppColors.textGray,
-                            ),
+                            enabled: !_isSubmitting,
+                            errorText: _errors['venue'],
+                            onChanged: (_) => _clearError('venue'),
                           ),
                   ),
                 ],
               ),
               if (_span == EventSpan.multiDay) ...[
                 const SizedBox(height: 18),
-                AppTextField(
-                  label: 'Venue *',
-                  hint: 'Arena, Hotel, or Stadium',
+                VenueDropdownField(
                   controller: _venueController,
-                  prefixIcon: const Icon(
-                    Icons.location_on_outlined,
-                    size: 18,
-                    color: AppColors.textGray,
-                  ),
+                  enabled: !_isSubmitting,
+                  errorText: _errors['venue'],
+                  onChanged: (_) => _clearError('venue'),
                 ),
               ],
               const SizedBox(height: 18),
@@ -634,7 +674,7 @@ class _OrganizerCreateEventScreenState
         ),
         const SizedBox(height: 20),
         _card(
-          title: 'Ticket Tiers',
+          title: 'Define Ticket Tiers & Prices',
           headerTrailing: TextButton.icon(
             onPressed: _addTier,
             icon: const Icon(
@@ -643,7 +683,7 @@ class _OrganizerCreateEventScreenState
               color: AppColors.primaryPurple,
             ),
             label: const Text(
-              '+ Add New Tier',
+              'Add New Tier',
               style: TextStyle(
                 color: AppColors.primaryPurple,
                 fontWeight: FontWeight.w600,
@@ -651,55 +691,62 @@ class _OrganizerCreateEventScreenState
             ),
           ),
           child: Column(
-            children: List.generate(_tiers.length, (index) {
-              final tier = _tiers[index];
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: AppTextField(
-                        label: 'Tier Name',
-                        hint: 'VIP Standing',
-                        controller: tier.nameController,
+            children: [
+              FieldWarning(_errors['tiers']),
+              ...List.generate(_tiers.length, (index) {
+                final tier = _tiers[index];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: TierNameDropdown(
+                          controller: tier.nameController,
+                          errorText: _errors['tier$index.name'],
+                          onChanged: (_) => _clearError('tier$index.name'),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 2,
-                      child: AppTextField(
-                        label: 'Price (\u20B1)',
-                        hint: '2500',
-                        controller: tier.priceController,
-                        keyboardType: TextInputType.number,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: AppTextField(
+                          label: 'Price (\u20B1)',
+                          hint: '2500',
+                          controller: tier.priceController,
+                          keyboardType: TextInputType.number,
+                          errorText: _errors['tier$index.price'],
+                          onChanged: (_) => _clearError('tier$index.price'),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 2,
-                      child: AppTextField(
-                        label: 'Quantity',
-                        hint: '200',
-                        controller: tier.quantityController,
-                        keyboardType: TextInputType.number,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: AppTextField(
+                          label: 'Quantity',
+                          hint: '200',
+                          controller: tier.quantityController,
+                          keyboardType: TextInputType.number,
+                          errorText: _errors['tier$index.quantity'],
+                          onChanged: (_) => _clearError('tier$index.quantity'),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      onPressed: _tiers.length > 1
-                          ? () => _removeTier(index)
-                          : null,
-                      icon: const Icon(
-                        Icons.delete_outline,
-                        color: AppColors.dangerRed,
+                      const SizedBox(width: 8),
+                      IconButton(
+                        onPressed: _tiers.length > 1
+                            ? () => _removeTier(index)
+                            : null,
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          color: AppColors.dangerRed,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              );
-            }),
+                    ],
+                  ),
+                );
+              }),
+            ],
           ),
         ),
       ],
@@ -781,13 +828,13 @@ class _OrganizerCreateEventScreenState
         ),
         const SizedBox(height: 20),
         _card(
-          title: 'Supporting Documents',
+          title: 'Supporting Documents *',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (_documents.isEmpty)
                 Text(
-                  'No documents uploaded yet.',
+                  'Required to publish: venue contract, permit, or other proof.',
                   style: AppTextStyles.bodyGray.copyWith(fontSize: 12),
                 )
               else
@@ -837,6 +884,7 @@ class _OrganizerCreateEventScreenState
                 onPressed: _isSubmitting ? null : _pickDocuments,
                 height: 48,
               ),
+              FieldWarning(_errors['documents']),
             ],
           ),
         ),
@@ -859,17 +907,32 @@ class _OrganizerCreateEventScreenState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final titleWidget = Text(
                 title,
                 style: AppTextStyles.h3.copyWith(
                   color: AppColors.primaryPurple,
                 ),
-              ),
-              ?headerTrailing,
-            ],
+              );
+              if (headerTrailing == null) return titleWidget;
+              if (constraints.maxWidth < 440) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    titleWidget,
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: headerTrailing,
+                    ),
+                  ],
+                );
+              }
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [titleWidget, headerTrailing],
+              );
+            },
           ),
           const SizedBox(height: 18),
           child,

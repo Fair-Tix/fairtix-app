@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
 import '../../models/organizer_event.dart';
@@ -5,13 +7,73 @@ import '../../services/event_repository.dart';
 import 'organizer-scaffold.dart';
 import 'organizer-revenue-report.dart';
 
-/// TODO(backend): "Resale Flags" and tier-level sales breakdowns depend on
-/// the Resale Listings / QR Scan Logs collections (see Chapter III Data
-/// Dictionary), which don't exist yet in this prototype. Once wired in,
-/// replace the empty states below with real aggregates instead of adding
-/// more sample numbers here.
-class OrganizerAnalyticsSalesScreen extends StatelessWidget {
+/// Sales overview for the signed-in organizer.
+///
+/// Loads fresh data on open, then keeps itself current: a Supabase realtime
+/// listener on `ticket_tiers` refreshes after every purchase/refund, with a
+/// 20-second poll as a safety net (e.g. if realtime isn't enabled on the
+/// table). Per-tier sold / remaining / revenue come from
+/// `ticket_tiers.total_quantity - remaining_quantity`, which
+/// `_do_ticket_purchase` decrements on each sale.
+///
+/// TODO(backend): "Resale Flags" depend on resale/scan data and stay as an
+/// empty state until those are wired in.
+class OrganizerAnalyticsSalesScreen extends StatefulWidget {
   const OrganizerAnalyticsSalesScreen({super.key});
+
+  @override
+  State<OrganizerAnalyticsSalesScreen> createState() =>
+      _OrganizerAnalyticsSalesScreenState();
+}
+
+class _OrganizerAnalyticsSalesScreenState
+    extends State<OrganizerAnalyticsSalesScreen> {
+  bool _isLoading = true;
+  String? _loadError;
+  VoidCallback? _stopListening;
+  Timer? _poll;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    try {
+      _stopListening = EventRepository.instance.listenForSales(_silentReload);
+    } catch (_) {
+      // Realtime unavailable - the poll below still keeps the numbers fresh.
+    }
+    _poll = Timer.periodic(const Duration(seconds: 20), (_) => _silentReload());
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    _stopListening?.call();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
+    try {
+      await EventRepository.instance.refresh();
+    } on EventRepositoryException catch (e) {
+      _loadError = e.message;
+    }
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+  }
+
+  Future<void> _silentReload() async {
+    try {
+      await EventRepository.instance.refresh();
+    } on EventRepositoryException {
+      return;
+    }
+    if (mounted) setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -50,7 +112,21 @@ class OrganizerAnalyticsSalesScreen extends StatelessWidget {
         label: const Text('Revenue Report',
             style: TextStyle(color: AppColors.primaryPurple)),
       ),
-      body: Column(
+      body: _isLoading
+          ? const Padding(
+              padding: EdgeInsets.all(48),
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+            )
+          : _loadError != null
+          ? Column(
+              children: [
+                Text(_loadError!,
+                    style: const TextStyle(color: AppColors.dangerRed)),
+                const SizedBox(height: 12),
+                OutlinedButton(onPressed: _load, child: const Text('Retry')),
+              ],
+            )
+          : Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           LayoutBuilder(
@@ -97,11 +173,89 @@ class OrganizerAnalyticsSalesScreen extends StatelessWidget {
             },
           ),
           const SizedBox(height: 20),
+          _inventoryCard(events),
+          const SizedBox(height: 20),
           _salesByTierCard(tierSales),
           const SizedBox(height: 20),
           _alertsCard(),
         ],
       ),
+    );
+  }
+
+  /// Per-event, per-tier table: tickets sold, remaining and revenue.
+  Widget _inventoryCard(List<OrganizerEvent> events) {
+    final rows = events.where((e) => e.tiers.isNotEmpty).toList();
+    return _card(
+      title: 'Ticket Sales & Inventory',
+      child: rows.isEmpty
+          ? _emptyRow('No ticket tiers yet. Create an event to see sales here.')
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final e in rows) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6, top: 4),
+                    child: Text(
+                      e.isMultiDay
+                          ? '${e.name}  \u2022  all ${e.dayCount} day${e.dayCount == 1 ? '' : 's'}'
+                          : e.name,
+                      style: AppTextStyles.label,
+                    ),
+                  ),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
+                      headingRowHeight: 38,
+                      dataRowMinHeight: 38,
+                      dataRowMaxHeight: 42,
+                      columns: const [
+                        DataColumn(label: Text('TIER')),
+                        DataColumn(label: Text('PRICE'), numeric: true),
+                        DataColumn(label: Text('SOLD'), numeric: true),
+                        DataColumn(label: Text('REMAINING'), numeric: true),
+                        DataColumn(label: Text('REVENUE'), numeric: true),
+                      ],
+                      rows: [
+                        for (final t in e.tiers)
+                          DataRow(cells: [
+                            DataCell(Text(t.name)),
+                            DataCell(Text('\u20B1${t.price.toStringAsFixed(0)}')),
+                            DataCell(Text('${t.sold} / ${t.quantity}')),
+                            DataCell(Text(
+                              '${t.remaining}',
+                              style: TextStyle(
+                                color: t.remaining == 0
+                                    ? AppColors.dangerRed
+                                    : AppColors.textDark,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            )),
+                            DataCell(Text(
+                                '\u20B1${t.grossRevenue.toStringAsFixed(0)}')),
+                          ]),
+                        DataRow(cells: [
+                          const DataCell(Text('Total',
+                              style: TextStyle(fontWeight: FontWeight.w800))),
+                          const DataCell(Text('')),
+                          DataCell(Text('${e.ticketsSold} / ${e.ticketsTotal}',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w800))),
+                          DataCell(Text('${e.ticketsRemaining}',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w800))),
+                          DataCell(Text(
+                              '\u20B1${e.grossRevenue.toStringAsFixed(0)}',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w800))),
+                        ]),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ],
+            ),
     );
   }
 

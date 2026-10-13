@@ -44,14 +44,11 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
   ];
 
   static const _roleFilters = ['All', 'Buyer', 'Organizer', 'Admin'];
-  static const _verificationFilters = ['All', 'Pending', 'Verified', 'Rejected'];
 
   List<AdminUserSummary> _users = [];
   bool _isLoading = true;
   String? _loadError;
-
   String _roleFilter = 'All';
-  String _verificationFilter = 'All';
   String _searchQuery = '';
 
   @override
@@ -66,7 +63,9 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
       _loadError = null;
     });
     try {
-      final users = await AdminUserService.instance.fetchUsers();
+      final users = await AdminUserService.instance.fetchUsers(
+        onlyApproved: true,
+      );
       if (!mounted) return;
       setState(() {
         _users = users;
@@ -84,10 +83,6 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
   List<AdminUserSummary> get _filteredUsers {
     return _users.where((u) {
       if (_roleFilter != 'All' && u.role != _roleFilter.toLowerCase()) {
-        return false;
-      }
-      if (_verificationFilter != 'All' &&
-          u.idVerificationStatus != _verificationFilter.toLowerCase()) {
         return false;
       }
       if (_searchQuery.trim().isNotEmpty) {
@@ -142,22 +137,33 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
   }
 
   Future<void> _toggleAccountStatus(AdminUserSummary user) async {
-    final nextStatus = user.accountStatus == 'suspended' ? 'active' : 'suspended';
+    final nextStatus = user.accountStatus == 'suspended'
+        ? 'active'
+        : 'suspended';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(nextStatus == 'suspended' ? 'Suspend account?' : 'Reactivate account?'),
+        title: Text(
+          nextStatus == 'suspended'
+              ? 'Suspend account?'
+              : 'Reactivate account?',
+        ),
         content: Text(
           nextStatus == 'suspended'
               ? '${user.fullName} will not be able to log in until reactivated.'
               : '${user.fullName} will be able to log in again.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(
-              backgroundColor: nextStatus == 'suspended' ? AppColors.dangerRed : AppColors.successGreen,
+              backgroundColor: nextStatus == 'suspended'
+                  ? AppColors.dangerRed
+                  : AppColors.successGreen,
             ),
             child: Text(nextStatus == 'suspended' ? 'Suspend' : 'Reactivate'),
           ),
@@ -167,7 +173,10 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
     if (confirmed != true) return;
 
     try {
-      await AdminUserService.instance.setAccountStatus(userId: user.id, status: nextStatus);
+      await AdminUserService.instance.setAccountStatus(
+        userId: user.id,
+        status: nextStatus,
+      );
       await _loadUsers();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -175,15 +184,16 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
       );
     } on AdminUserServiceException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
   static String _roleLabel(String role) => switch (role) {
-        'organizer' => 'Organizer',
-        'admin' => 'Admin',
-        _ => 'Buyer',
-      };
+    'organizer' => 'Organizer',
+    'admin' => 'Admin',
+    _ => 'Buyer',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -213,7 +223,8 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
   }
 
   Widget _buildSidebar(BuildContext context) {
-    final currentEmail = AdminSession.instance.currentEmail ?? 'admin@fairtix.com';
+    final currentEmail =
+        AdminSession.instance.currentEmail ?? 'admin@fairtix.com';
 
     return Container(
       color: const Color(0xFFF3F1FD),
@@ -243,7 +254,11 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
                   const CircleAvatar(
                     radius: 15,
                     backgroundColor: Color(0xFFE8E6F1),
-                    child: Icon(Icons.person, size: 17, color: AppColors.textGray),
+                    child: Icon(
+                      Icons.person,
+                      size: 17,
+                      color: AppColors.textGray,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -253,14 +268,21 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
                         const Text('Admin', style: AppTextStyles.label),
                         Text(
                           currentEmail,
-                          style: const TextStyle(color: AppColors.textGray, fontSize: 9),
+                          style: const TextStyle(
+                            color: AppColors.textGray,
+                            fontSize: 9,
+                          ),
                         ),
                       ],
                     ),
                   ),
                   IconButton(
                     onPressed: () => _logout(context),
-                    icon: const Icon(Icons.logout, size: 17, color: AppColors.textGray),
+                    icon: const Icon(
+                      Icons.logout,
+                      size: 17,
+                      color: AppColors.textGray,
+                    ),
                     tooltip: 'Log out',
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
@@ -287,7 +309,7 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
     };
     final page = pages[index];
     if (page != null) {
-      Navigator.pushReplacement(context, adminPageRoute(page));
+      adminPushReplacement(context, page);
     }
   }
 
@@ -317,8 +339,15 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
               onChanged: (v) => setState(() => _searchQuery = v),
               decoration: InputDecoration(
                 hintText: 'Search users, events...',
-                hintStyle: const TextStyle(color: Color(0xFFA6A9B7), fontSize: 10),
-                prefixIcon: const Icon(Icons.search, size: 16, color: Color(0xFFA6A9B7)),
+                hintStyle: const TextStyle(
+                  color: Color(0xFFA6A9B7),
+                  fontSize: 10,
+                ),
+                prefixIcon: const Icon(
+                  Icons.search,
+                  size: 16,
+                  color: Color(0xFFA6A9B7),
+                ),
                 filled: true,
                 fillColor: const Color(0xFFF3F3F6),
                 contentPadding: EdgeInsets.zero,
@@ -330,7 +359,11 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
             ),
           ),
           const SizedBox(width: 16),
-          const Icon(Icons.notifications_none, size: 19, color: AppColors.textGray),
+          const Icon(
+            Icons.notifications_none,
+            size: 19,
+            color: AppColors.textGray,
+          ),
           const SizedBox(width: 14),
           const CircleAvatar(
             radius: 14,
@@ -357,7 +390,9 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
       children: [
         Row(
           children: [
-            const Expanded(child: Text('User Accounts', style: AppTextStyles.h2)),
+            const Expanded(
+              child: Text('User Accounts', style: AppTextStyles.h2),
+            ),
             IconButton(
               onPressed: _isLoading ? null : _loadUsers,
               icon: const Icon(Icons.refresh, size: 18),
@@ -372,7 +407,11 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
             color: Colors.white,
             borderRadius: BorderRadius.circular(9),
             boxShadow: const [
-              BoxShadow(color: Color(0x08000000), blurRadius: 8, offset: Offset(0, 3)),
+              BoxShadow(
+                color: Color(0x08000000),
+                blurRadius: 8,
+                offset: Offset(0, 3),
+              ),
             ],
           ),
           child: Wrap(
@@ -380,13 +419,18 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
             runSpacing: 10,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              const Text('Role:', style: TextStyle(color: AppColors.textGray, fontSize: 10)),
-              _filterMenu(_roleFilter, _roleFilters, (v) => setState(() => _roleFilter = v)),
-              const Text('Verification:', style: TextStyle(color: AppColors.textGray, fontSize: 10)),
+              const Text(
+                'Role:',
+                style: TextStyle(color: AppColors.textGray, fontSize: 10),
+              ),
               _filterMenu(
-                _verificationFilter,
-                _verificationFilters,
-                (v) => setState(() => _verificationFilter = v),
+                _roleFilter,
+                _roleFilters,
+                (v) => setState(() => _roleFilter = v),
+              ),
+              const Text(
+                'Showing approved, registered users only',
+                style: TextStyle(color: AppColors.textGray, fontSize: 10),
               ),
             ],
           ),
@@ -403,17 +447,26 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
             children: [
               if (isWide)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   color: const Color(0xFFFBFBFD),
                   child: const Row(
                     children: [
-                      Expanded(flex: 2, child: Text('USER DETAILS', style: _headerStyle)),
+                      Expanded(
+                        flex: 2,
+                        child: Text('USER DETAILS', style: _headerStyle),
+                      ),
                       Expanded(child: Text('EMAIL', style: _headerStyle)),
                       Expanded(child: Text('ROLE', style: _headerStyle)),
                       Expanded(child: Text('VERIFIED', style: _headerStyle)),
                       Expanded(child: Text('JOINED', style: _headerStyle)),
                       Expanded(child: Text('STATUS', style: _headerStyle)),
-                      SizedBox(width: 150, child: Text('ACTIONS', style: _headerStyle)),
+                      SizedBox(
+                        width: 150,
+                        child: Text('ACTIONS', style: _headerStyle),
+                      ),
                     ],
                   ),
                 ),
@@ -421,16 +474,27 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
               if (_isLoading)
                 const Padding(
                   padding: EdgeInsets.all(32),
-                  child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+                  child: Center(
+                    child: CircularProgressIndicator(strokeWidth: 2.4),
+                  ),
                 )
               else if (_loadError != null)
                 Padding(
                   padding: const EdgeInsets.all(24),
                   child: Column(
                     children: [
-                      Text(_loadError!, style: const TextStyle(color: AppColors.dangerRed, fontSize: 12)),
+                      Text(
+                        _loadError!,
+                        style: const TextStyle(
+                          color: AppColors.dangerRed,
+                          fontSize: 12,
+                        ),
+                      ),
                       const SizedBox(height: 10),
-                      OutlinedButton(onPressed: _loadUsers, child: const Text('Retry')),
+                      OutlinedButton(
+                        onPressed: _loadUsers,
+                        child: const Text('Retry'),
+                      ),
                     ],
                   ),
                 )
@@ -439,7 +503,8 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
               else
                 Column(
                   children: [
-                    for (final user in filtered) _UserRow(user: user, isWide: isWide, screen: this),
+                    for (final user in filtered)
+                      _UserRow(user: user, isWide: isWide, screen: this),
                   ],
                 ),
               const Divider(height: 1),
@@ -449,7 +514,10 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
                   children: [
                     Text(
                       'Showing ${filtered.length} of ${_users.length} accounts',
-                      style: const TextStyle(color: AppColors.textGray, fontSize: 10),
+                      style: const TextStyle(
+                        color: AppColors.textGray,
+                        fontSize: 10,
+                      ),
                     ),
                   ],
                 ),
@@ -461,12 +529,17 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
     );
   }
 
-  Widget _filterMenu(String value, List<String> options, ValueChanged<String> onChanged) {
+  Widget _filterMenu(
+    String value,
+    List<String> options,
+    ValueChanged<String> onChanged,
+  ) {
     return PopupMenuButton<String>(
       initialValue: value,
       onSelected: onChanged,
       itemBuilder: (context) => [
-        for (final option in options) PopupMenuItem(value: option, child: Text(option)),
+        for (final option in options)
+          PopupMenuItem(value: option, child: Text(option)),
       ],
       child: Container(
         height: 30,
@@ -480,7 +553,11 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
           children: [
             Text(value, style: const TextStyle(fontSize: 10)),
             const SizedBox(width: 14),
-            const Icon(Icons.keyboard_arrow_down, size: 14, color: AppColors.textGray),
+            const Icon(
+              Icons.keyboard_arrow_down,
+              size: 14,
+              color: AppColors.textGray,
+            ),
           ],
         ),
       ),
@@ -494,26 +571,36 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
         title: const Text('Log out?'),
         content: const Text('Are you sure you want to Log Out?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Log out')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Log out'),
+          ),
         ],
       ),
     );
     if (confirmed == true && context.mounted) {
       AdminAuthService.instance.logout();
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
-        (route) => false,
-      );
+      adminPushAndRemoveUntil(context, const AdminLoginScreen());
     }
   }
 }
 
-const _headerStyle = TextStyle(color: AppColors.textGray, fontSize: 9, fontWeight: FontWeight.w700);
+const _headerStyle = TextStyle(
+  color: AppColors.textGray,
+  fontSize: 9,
+  fontWeight: FontWeight.w700,
+);
 
 class _UserRow extends StatelessWidget {
-  const _UserRow({required this.user, required this.isWide, required this.screen});
+  const _UserRow({
+    required this.user,
+    required this.isWide,
+    required this.screen,
+  });
 
   final AdminUserSummary user;
   final bool isWide;
@@ -523,14 +610,21 @@ class _UserRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final verifiedBadge = _StatusBadge.verification(user.idVerificationStatus);
     final statusBadge = _StatusBadge.account(user.accountStatus);
-    final joined = user.createdAt != null ? formatFriendlyDate(user.createdAt!) : '\u2014';
+    final joined = user.createdAt != null
+        ? formatFriendlyDate(user.createdAt!)
+        : '\u2014';
 
     final actions = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         TextButton(
-          onPressed: user.hasReviewableDocuments ? () => screen._reviewUser(user) : null,
-          style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 6), minimumSize: Size.zero),
+          onPressed: user.canReview
+              ? () => screen._reviewUser(user)
+              : null,
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            minimumSize: Size.zero,
+          ),
           child: Text(
             user.idVerificationStatus == 'pending' ? 'Review' : 'View',
             style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
@@ -541,7 +635,9 @@ class _UserRow extends StatelessWidget {
           style: TextButton.styleFrom(
             padding: const EdgeInsets.symmetric(horizontal: 6),
             minimumSize: Size.zero,
-            foregroundColor: user.accountStatus == 'suspended' ? AppColors.successGreen : AppColors.dangerRed,
+            foregroundColor: user.accountStatus == 'suspended'
+                ? AppColors.successGreen
+                : AppColors.dangerRed,
           ),
           child: Text(
             user.accountStatus == 'suspended' ? 'Reactivate' : 'Suspend',
@@ -554,7 +650,9 @@ class _UserRow extends StatelessWidget {
     if (!isWide) {
       return Container(
         padding: const EdgeInsets.all(14),
-        decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.borderLight))),
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: AppColors.borderLight)),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -564,8 +662,20 @@ class _UserRow extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(user.fullName, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
-                      Text(user.email, style: const TextStyle(fontSize: 10.5, color: AppColors.textGray)),
+                      Text(
+                        user.fullName,
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        user.email,
+                        style: const TextStyle(
+                          fontSize: 10.5,
+                          color: AppColors.textGray,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -575,11 +685,20 @@ class _UserRow extends StatelessWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                Text(_AdminAccountsScreenState._roleLabel(user.role), style: const TextStyle(fontSize: 10.5)),
+                Text(
+                  _AdminAccountsScreenState._roleLabel(user.role),
+                  style: const TextStyle(fontSize: 10.5),
+                ),
                 const SizedBox(width: 10),
                 statusBadge,
                 const Spacer(),
-                Text(joined, style: const TextStyle(fontSize: 10, color: AppColors.textGray)),
+                Text(
+                  joined,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: AppColors.textGray,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 6),
@@ -591,7 +710,9 @@ class _UserRow extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.borderLight))),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
+      ),
       child: Row(
         children: [
           Expanded(
@@ -599,16 +720,44 @@ class _UserRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(user.fullName, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                Text(
+                  user.fullName,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
                 if (user.username.isNotEmpty)
-                  Text('@${user.username}', style: const TextStyle(fontSize: 10.5, color: AppColors.textGray)),
+                  Text(
+                    '@${user.username}',
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      color: AppColors.textGray,
+                    ),
+                  ),
               ],
             ),
           ),
-          Expanded(child: Text(user.email, style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis)),
-          Expanded(child: Text(_AdminAccountsScreenState._roleLabel(user.role), style: const TextStyle(fontSize: 11))),
+          Expanded(
+            child: Text(
+              user.email,
+              style: const TextStyle(fontSize: 11),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              _AdminAccountsScreenState._roleLabel(user.role),
+              style: const TextStyle(fontSize: 11),
+            ),
+          ),
           Expanded(child: verifiedBadge),
-          Expanded(child: Text(joined, style: const TextStyle(fontSize: 10.5, color: AppColors.textGray))),
+          Expanded(
+            child: Text(
+              joined,
+              style: const TextStyle(fontSize: 10.5, color: AppColors.textGray),
+            ),
+          ),
           Expanded(child: statusBadge),
           SizedBox(width: 150, child: actions),
         ],
@@ -618,7 +767,11 @@ class _UserRow extends StatelessWidget {
 }
 
 class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.label, required this.color, required this.bgColor});
+  const _StatusBadge({
+    required this.label,
+    required this.color,
+    required this.bgColor,
+  });
 
   final String label;
   final Color color;
@@ -627,22 +780,46 @@ class _StatusBadge extends StatelessWidget {
   factory _StatusBadge.verification(String status) {
     switch (status) {
       case 'verified':
-        return const _StatusBadge(label: 'Verified', color: AppColors.successGreen, bgColor: AppColors.successGreenBg);
+        return const _StatusBadge(
+          label: 'Verified',
+          color: AppColors.successGreen,
+          bgColor: AppColors.successGreenBg,
+        );
       case 'rejected':
-        return const _StatusBadge(label: 'Rejected', color: AppColors.dangerRed, bgColor: AppColors.dangerRedBg);
+        return const _StatusBadge(
+          label: 'Rejected',
+          color: AppColors.dangerRed,
+          bgColor: AppColors.dangerRedBg,
+        );
       default:
-        return const _StatusBadge(label: 'Pending', color: AppColors.warningOrange, bgColor: AppColors.warningOrangeBg);
+        return const _StatusBadge(
+          label: 'Pending',
+          color: AppColors.warningOrange,
+          bgColor: AppColors.warningOrangeBg,
+        );
     }
   }
 
   factory _StatusBadge.account(String status) {
     switch (status) {
       case 'suspended':
-        return const _StatusBadge(label: 'Suspended', color: AppColors.dangerRed, bgColor: AppColors.dangerRedBg);
+        return const _StatusBadge(
+          label: 'Suspended',
+          color: AppColors.dangerRed,
+          bgColor: AppColors.dangerRedBg,
+        );
       case 'deactivated':
-        return const _StatusBadge(label: 'Deactivated', color: AppColors.textGray, bgColor: Color(0xFFF3F4F6));
+        return const _StatusBadge(
+          label: 'Deactivated',
+          color: AppColors.textGray,
+          bgColor: Color(0xFFF3F4F6),
+        );
       default:
-        return const _StatusBadge(label: 'Active', color: AppColors.successGreen, bgColor: AppColors.successGreenBg);
+        return const _StatusBadge(
+          label: 'Active',
+          color: AppColors.successGreen,
+          bgColor: AppColors.successGreenBg,
+        );
     }
   }
 
@@ -650,10 +827,17 @@ class _StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(999)),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(999),
+      ),
       child: Text(
         label,
-        style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w700),
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
@@ -663,44 +847,64 @@ class _EmptyAccounts extends StatelessWidget {
   const _EmptyAccounts();
   @override
   Widget build(BuildContext context) => const Padding(
-        padding: EdgeInsets.all(32),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.people_outline, size: 36, color: Color(0xFFD9D7E4)),
-              SizedBox(height: 10),
-              Text('No matching accounts', style: TextStyle(color: AppColors.textGray, fontSize: 12)),
-              SizedBox(height: 4),
-              Text(
-                'Try a different filter or check back once users register.',
-                style: TextStyle(color: Color(0xFFA6A9B7), fontSize: 10),
-              ),
-            ],
+    padding: EdgeInsets.all(32),
+    child: Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.people_outline, size: 36, color: Color(0xFFD9D7E4)),
+          SizedBox(height: 10),
+          Text(
+            'No matching accounts',
+            style: TextStyle(color: AppColors.textGray, fontSize: 12),
           ),
-        ),
-      );
+          SizedBox(height: 4),
+          Text(
+            'Try a different filter or check back once users register.',
+            style: TextStyle(color: Color(0xFFA6A9B7), fontSize: 10),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _AdminLogo extends StatelessWidget {
   const _AdminLogo();
   @override
   Widget build(BuildContext context) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 22,
-            height: 22,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(color: AppColors.primaryPurple, borderRadius: BorderRadius.circular(5)),
-            child: const Icon(Icons.confirmation_number_outlined, color: Colors.white, size: 14),
-          ),
-          const SizedBox(width: 6),
-          const Text('FairTix', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, fontStyle: FontStyle.italic)),
-          const SizedBox(width: 3),
-          const Text('ADMIN', style: TextStyle(fontSize: 8, color: AppColors.textGray)),
-        ],
-      );
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        width: 22,
+        height: 22,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: AppColors.primaryPurple,
+          borderRadius: BorderRadius.circular(5),
+        ),
+        child: const Icon(
+          Icons.confirmation_number_outlined,
+          color: Colors.white,
+          size: 14,
+        ),
+      ),
+      const SizedBox(width: 6),
+      const Text(
+        'FairTix',
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w800,
+          fontStyle: FontStyle.italic,
+        ),
+      ),
+      const SizedBox(width: 3),
+      const Text(
+        'ADMIN',
+        style: TextStyle(fontSize: 8, color: AppColors.textGray),
+      ),
+    ],
+  );
 }
 
 class _SidebarItem extends StatelessWidget {
@@ -709,7 +913,12 @@ class _SidebarItem extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
-  const _SidebarItem({required this.icon, required this.label, required this.selected, required this.onTap});
+  const _SidebarItem({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -725,7 +934,11 @@ class _SidebarItem extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
             child: Row(
               children: [
-                Icon(icon, size: 16, color: selected ? Colors.white : AppColors.textDark),
+                Icon(
+                  icon,
+                  size: 16,
+                  color: selected ? Colors.white : AppColors.textDark,
+                ),
                 const SizedBox(width: 9),
                 Expanded(
                   child: Text(

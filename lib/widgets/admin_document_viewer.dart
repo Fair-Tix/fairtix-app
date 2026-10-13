@@ -84,14 +84,19 @@ class _AdminReviewDialogState extends State<_AdminReviewDialog> {
   /// [onApprove]/[onReject] — approving/rejecting someone's identity
   /// verification is a one-way decision, so this is a deliberate second
   /// step rather than a single tap.
-  Future<void> _confirmAndAct(_ReviewAction kind, Future<void> Function()? action) async {
+  Future<void> _confirmAndAct(
+    _ReviewAction kind,
+    Future<void> Function()? action,
+  ) async {
     if (action == null || _isActing) return;
 
     final isApprove = kind == _ReviewAction.approve;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(isApprove ? 'Approve verification?' : 'Reject verification?'),
+        title: Text(
+          isApprove ? 'Approve verification?' : 'Reject verification?',
+        ),
         content: Text(
           isApprove
               ? "Are you sure you want to approve this user's identity verification?"
@@ -105,7 +110,9 @@ class _AdminReviewDialogState extends State<_AdminReviewDialog> {
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
             style: FilledButton.styleFrom(
-              backgroundColor: isApprove ? AppColors.successGreen : AppColors.dangerRed,
+              backgroundColor: isApprove
+                  ? AppColors.successGreen
+                  : AppColors.dangerRed,
             ),
             child: Text(isApprove ? 'Approve' : 'Reject'),
           ),
@@ -124,9 +131,8 @@ class _AdminReviewDialogState extends State<_AdminReviewDialog> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isActing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Something went wrong: $e')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Something went wrong: $e')));
       return;
     }
     if (!mounted) return;
@@ -165,11 +171,29 @@ class _AdminReviewDialogState extends State<_AdminReviewDialog> {
                           ),
                         );
                       }
+                      if (widget.currentStatus == 'pending' &&
+                          widget.documents.every(
+                            (document) => document.path == null,
+                          )) {
+                        return const Padding(
+                          padding: EdgeInsets.only(bottom: 16),
+                          child: Text(
+                            'No documents have been uploaded. Approve only if '
+                            'you have verified this application another way.',
+                            style: TextStyle(
+                              color: AppColors.warningOrange,
+                              fontSize: 12.5,
+                            ),
+                          ),
+                        );
+                      }
                       // Side-by-side once there's room for two tiles plus
                       // spacing without squeezing them illegibly narrow;
                       // stacked (the original behavior) on tighter/mobile
                       // widths so nothing gets cut off.
-                      final isWide = constraints.maxWidth >= 420 && widget.documents.length > 1;
+                      final isWide =
+                          constraints.maxWidth >= 420 &&
+                          widget.documents.length > 1;
                       if (isWide) {
                         final tileWidth = (constraints.maxWidth - 14) / 2;
                         return Wrap(
@@ -177,7 +201,10 @@ class _AdminReviewDialogState extends State<_AdminReviewDialog> {
                           runSpacing: 14,
                           children: [
                             for (final doc in widget.documents)
-                              SizedBox(width: tileWidth, child: _DocumentTile(doc: doc)),
+                              SizedBox(
+                                width: tileWidth,
+                                child: _DocumentTile(doc: doc),
+                              ),
                           ],
                         );
                       }
@@ -203,7 +230,12 @@ class _AdminReviewDialogState extends State<_AdminReviewDialog> {
                         label: _isActing ? 'Please wait...' : 'Reject',
                         borderColor: AppColors.dangerRed,
                         textColor: AppColors.dangerRed,
-                        onPressed: _isActing ? null : () => _confirmAndAct(_ReviewAction.reject, widget.onReject),
+                        onPressed: _isActing
+                            ? null
+                            : () => _confirmAndAct(
+                                _ReviewAction.reject,
+                                widget.onReject,
+                              ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -211,7 +243,12 @@ class _AdminReviewDialogState extends State<_AdminReviewDialog> {
                       child: PrimaryButton(
                         label: _isActing ? 'Please wait...' : 'Approve',
                         color: AppColors.successGreen,
-                        onPressed: _isActing ? null : () => _confirmAndAct(_ReviewAction.approve, widget.onApprove),
+                        onPressed: _isActing
+                            ? null
+                            : () => _confirmAndAct(
+                                _ReviewAction.approve,
+                                widget.onApprove,
+                              ),
                       ),
                     ),
                   ],
@@ -219,7 +256,9 @@ class _AdminReviewDialogState extends State<_AdminReviewDialog> {
               else
                 OutlineButtonWidget(
                   label: 'Close',
-                  onPressed: _isActing ? null : () => Navigator.of(context).pop(),
+                  onPressed: _isActing
+                      ? null
+                      : () => Navigator.of(context).pop(),
                 ),
             ],
           ),
@@ -291,13 +330,18 @@ class _DocumentTileState extends State<_DocumentTile> {
                 if (snapshot.connectionState != ConnectionState.done) {
                   return const SizedBox(
                     height: 120,
-                    child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+                    child: Center(
+                      child: CircularProgressIndicator(strokeWidth: 2.4),
+                    ),
                   );
                 }
                 if (snapshot.hasError || !snapshot.hasData) {
                   return const Text(
                     'Could not load this document.',
-                    style: TextStyle(color: AppColors.dangerRed, fontSize: 12.5),
+                    style: TextStyle(
+                      color: AppColors.dangerRed,
+                      fontSize: 12.5,
+                    ),
                   );
                 }
                 final url = snapshot.data!;
@@ -313,21 +357,32 @@ class _DocumentTileState extends State<_DocumentTile> {
                             height: 220,
                             width: double.infinity,
                             fit: BoxFit.contain,
-                            errorBuilder: (context, error, stackTrace) => const Padding(
-                              padding: EdgeInsets.all(12),
-                              child: Text(
-                                'Could not display this image.',
-                                style: TextStyle(color: AppColors.dangerRed, fontSize: 12.5),
-                              ),
-                            ),
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Padding(
+                                  padding: EdgeInsets.all(12),
+                                  child: Text(
+                                    'Could not display this image.',
+                                    style: TextStyle(
+                                      color: AppColors.dangerRed,
+                                      fontSize: 12.5,
+                                    ),
+                                  ),
+                                ),
                           ),
                           Positioned(
                             right: 6,
                             bottom: 6,
                             child: Container(
                               padding: const EdgeInsets.all(5),
-                              decoration: const BoxDecoration(color: Colors.black45, shape: BoxShape.circle),
-                              child: const Icon(Icons.zoom_in, size: 16, color: Colors.white),
+                              decoration: const BoxDecoration(
+                                color: Colors.black45,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.zoom_in,
+                                size: 16,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ],
@@ -340,12 +395,19 @@ class _DocumentTileState extends State<_DocumentTile> {
                 // of trying to render it.
                 return Row(
                   children: [
-                    const Icon(Icons.description_outlined, color: AppColors.primaryPurple, size: 20),
+                    const Icon(
+                      Icons.description_outlined,
+                      color: AppColors.primaryPurple,
+                      size: 20,
+                    ),
                     const SizedBox(width: 8),
                     const Expanded(
                       child: Text(
                         'Document file (not previewable in-app).',
-                        style: TextStyle(fontSize: 12.5, color: AppColors.textDark),
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.textDark,
+                        ),
                       ),
                     ),
                     TextButton.icon(
@@ -354,13 +416,18 @@ class _DocumentTileState extends State<_DocumentTile> {
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('Link copied — paste into your browser (valid 1 hour).'),
+                              content: Text(
+                                'Link copied — paste into your browser (valid 1 hour).',
+                              ),
                             ),
                           );
                         }
                       },
                       icon: const Icon(Icons.copy, size: 14),
-                      label: const Text('Copy Link', style: TextStyle(fontSize: 12)),
+                      label: const Text(
+                        'Copy Link',
+                        style: TextStyle(fontSize: 12),
+                      ),
                     ),
                   ],
                 );

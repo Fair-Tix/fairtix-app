@@ -35,7 +35,8 @@ enum AdminNavItem {
 
 Widget _pageFor(AdminNavItem item) => switch (item) {
   AdminNavItem.dashboard => const AdminDashboardScreen(),
-  AdminNavItem.organizerApplications => const AdminOrganizerApplicationsScreen(),
+  AdminNavItem.organizerApplications =>
+    const AdminOrganizerApplicationsScreen(),
   AdminNavItem.accounts => const AdminAccountsScreen(),
   AdminNavItem.eventsTickets => const AdminEventsTicketsScreen(),
   AdminNavItem.resaleMonitoring => const AdminResaleMonitoringScreen(),
@@ -129,7 +130,10 @@ class _TopBar extends StatelessWidget {
           ),
           if (isWide) ...[
             const SizedBox(width: 8),
-            Text(email, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+            Text(
+              email,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+            ),
           ],
         ],
       ),
@@ -162,11 +166,7 @@ class _Sidebar extends StatelessWidget {
     );
     if (confirmed != true || !context.mounted) return;
     AdminAuthService.instance.logout();
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
-      (route) => false,
-    );
+    adminPushAndRemoveUntil(context, const AdminLoginScreen());
   }
 
   @override
@@ -191,7 +191,7 @@ class _Sidebar extends StatelessWidget {
                 selected: item == active,
                 onTap: () {
                   if (item == active) return;
-                  Navigator.pushReplacement(context, adminPageRoute(_pageFor(item)));
+                  adminPushReplacement(context, _pageFor(item));
                 },
               ),
             const Spacer(),
@@ -203,7 +203,11 @@ class _Sidebar extends StatelessWidget {
                   const CircleAvatar(
                     radius: 15,
                     backgroundColor: Color(0xFFE8E6F1),
-                    child: Icon(Icons.person, size: 17, color: AppColors.textGray),
+                    child: Icon(
+                      Icons.person,
+                      size: 17,
+                      color: AppColors.textGray,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -214,14 +218,21 @@ class _Sidebar extends StatelessWidget {
                         Text(
                           email,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: AppColors.textGray, fontSize: 9),
+                          style: const TextStyle(
+                            color: AppColors.textGray,
+                            fontSize: 9,
+                          ),
                         ),
                       ],
                     ),
                   ),
                   IconButton(
                     onPressed: () => _logout(context),
-                    icon: const Icon(Icons.logout, size: 17, color: AppColors.textGray),
+                    icon: const Icon(
+                      Icons.logout,
+                      size: 17,
+                      color: AppColors.textGray,
+                    ),
                     tooltip: 'Log out',
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
@@ -251,15 +262,26 @@ class _AdminLogo extends StatelessWidget {
           color: AppColors.primaryPurple,
           borderRadius: BorderRadius.circular(5),
         ),
-        child: const Icon(Icons.confirmation_number_outlined, color: Colors.white, size: 14),
+        child: const Icon(
+          Icons.confirmation_number_outlined,
+          color: Colors.white,
+          size: 14,
+        ),
       ),
       const SizedBox(width: 6),
       const Text(
         'FairTix',
-        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, fontStyle: FontStyle.italic),
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w800,
+          fontStyle: FontStyle.italic,
+        ),
       ),
       const SizedBox(width: 3),
-      const Text('ADMIN', style: TextStyle(fontSize: 8, color: AppColors.textGray)),
+      const Text(
+        'ADMIN',
+        style: TextStyle(fontSize: 8, color: AppColors.textGray),
+      ),
     ],
   );
 }
@@ -290,7 +312,11 @@ class _SidebarItem extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
           child: Row(
             children: [
-              Icon(icon, size: 16, color: selected ? Colors.white : AppColors.textDark),
+              Icon(
+                icon,
+                size: 16,
+                color: selected ? Colors.white : AppColors.textDark,
+              ),
               const SizedBox(width: 9),
               Expanded(
                 child: Text(

@@ -32,6 +32,50 @@ class AdminAuthService {
   /// account anymore; sign in with a Supabase-seeded admin account.
   static const String debugCredentialsHint = '';
 
+  /// Rehydrates the in-memory admin session from Supabase's persisted auth
+  /// session when an admin deep link is opened after a browser refresh.
+  Future<bool> restoreSession() async {
+    final client = Supabase.instance.client;
+    final authUser = client.auth.currentUser;
+    if (authUser == null) {
+      AdminSession.instance.signOut();
+      return false;
+    }
+
+    final Map<String, dynamic>? row;
+    try {
+      row = await client
+          .from('users')
+          .select()
+          .eq('id', authUser.id)
+          .maybeSingle();
+    } on PostgrestException catch (e) {
+      throw AdminAuthException(
+        'Could not restore your admin session: ${e.message}',
+      );
+    }
+
+    if (row == null || row['role'] != 'admin') {
+      AdminSession.instance.signOut();
+      return false;
+    }
+
+    final accountStatus = row['account_status'] as String? ?? 'active';
+    if (accountStatus != 'active') {
+      AdminSession.instance.signOut();
+      await client.auth.signOut();
+      return false;
+    }
+
+    AdminSession.instance.signIn(
+      (row['email'] as String?) ?? authUser.email ?? '',
+      memberSince: row['created_at'] != null
+          ? DateTime.tryParse(row['created_at'] as String)
+          : null,
+    );
+    return true;
+  }
+
   Future<void> login({required String email, required String password}) async {
     final normalizedEmail = email.trim().toLowerCase();
 

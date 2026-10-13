@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/admin_session.dart';
+import '../../services/admin_user_service.dart';
 import '../organizer/app_colors.dart';
 import 'admin-accounts.dart';
 import 'admin-events-tickets.dart';
@@ -44,19 +45,38 @@ class _AdminAnnouncementScreenState extends State<AdminAnnouncementScreen> {
 
   void _onMessageChanged() => setState(() {});
 
+  /// Delivers the announcement as an in-app notification to every verified,
+  /// active buyer and organizer (the `send_announcement` RPC, see
+  /// supabase/organizer_event_functions.sql), then reports how many people
+  /// received it.
   Future<void> _sendAnnouncement() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() => _isSending = true);
-    await Future<void>.delayed(const Duration(milliseconds: 500));
-    if (!mounted) return;
-    setState(() => _isSending = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Announcement sending will be connected to Firebase soon.',
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final count = await AdminUserService.instance.sendAnnouncement(
+        subject: _subjectController.text.trim(),
+        message: _messageController.text.trim(),
+        audience: 'all',
+      );
+      if (!mounted) return;
+      _subjectController.clear();
+      _messageController.clear();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            count == 0
+                ? 'No eligible users to notify yet.'
+                : 'Announcement sent to $count user${count == 1 ? '' : 's'}.',
+          ),
         ),
-      ),
-    );
+      );
+    } on AdminUserServiceException catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+    }
   }
 
   @override
@@ -111,65 +131,65 @@ class _AdminAnnouncementScreenState extends State<AdminAnnouncementScreen> {
             _SidebarItem(
               icon: Icons.business_outlined,
               label: 'Organizer Applications',
-              onTap: () => Navigator.pushReplacement(
+              onTap: () => adminPushReplacement(
                 context,
-                adminPageRoute(const AdminOrganizerApplicationsScreen()),
+                const AdminOrganizerApplicationsScreen(),
               ),
             ),
             _SidebarItem(
               icon: Icons.people_outline,
               label: 'Accounts',
-              onTap: () => Navigator.pushReplacement(
+              onTap: () => adminPushReplacement(
                 context,
-                adminPageRoute(const AdminAccountsScreen()),
+                const AdminAccountsScreen(),
               ),
             ),
             _SidebarItem(
               icon: Icons.calendar_today_outlined,
               label: 'Events & Tickets',
-              onTap: () => Navigator.pushReplacement(
+              onTap: () => adminPushReplacement(
                 context,
-                adminPageRoute(const AdminEventsTicketsScreen()),
+                const AdminEventsTicketsScreen(),
               ),
             ),
             _SidebarItem(
               icon: Icons.swap_vert_rounded,
               label: 'Resale Monitoring',
-              onTap: () => Navigator.pushReplacement(
+              onTap: () => adminPushReplacement(
                 context,
-                adminPageRoute(const AdminResaleMonitoringScreen()),
+                const AdminResaleMonitoringScreen(),
               ),
             ),
             _SidebarItem(
               icon: Icons.shield_outlined,
               label: 'Fraud Alerts',
-              onTap: () => Navigator.pushReplacement(
+              onTap: () => adminPushReplacement(
                 context,
-                adminPageRoute(const AdminFraudAlertsScreen()),
+                const AdminFraudAlertsScreen(),
               ),
             ),
             _SidebarItem(
               icon: Icons.bar_chart_rounded,
               label: 'Revenue & Reports',
-              onTap: () => Navigator.pushReplacement(
+              onTap: () => adminPushReplacement(
                 context,
-                adminPageRoute(const AdminRevenueReportsScreen()),
+                const AdminRevenueReportsScreen(),
               ),
             ),
             _SidebarItem(
               icon: Icons.settings_outlined,
               label: 'Platform Settings',
-              onTap: () => Navigator.pushReplacement(
+              onTap: () => adminPushReplacement(
                 context,
-                adminPageRoute(const AdminPlatformSettingsScreen()),
+                const AdminPlatformSettingsScreen(),
               ),
             ),
             _SidebarItem(
               icon: Icons.person_outline,
               label: 'Profile',
-              onTap: () => Navigator.pushReplacement(
+              onTap: () => adminPushReplacement(
                 context,
-                adminPageRoute(const AdminProfileScreen()),
+                const AdminProfileScreen(),
               ),
             ),
             const Spacer(),
@@ -492,11 +512,7 @@ class _AdminAnnouncementScreenState extends State<AdminAnnouncementScreen> {
       ),
     );
     if (!mounted || shouldLogout != true) return;
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
-      (route) => false,
-    );
+    adminPushAndRemoveUntil(context, const AdminLoginScreen());
   }
 }
 

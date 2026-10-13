@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import 'app_colors.dart';
 import '../../models/organizer_event.dart';
 import '../../services/event_repository.dart';
 import 'organizer-scaffold.dart';
 import 'organizer-event-edited.dart';
+import 'organizer-form-widgets.dart';
 import 'organizer-my-events.dart';
 
 class EditTierInput {
@@ -12,9 +16,9 @@ class EditTierInput {
   final TextEditingController quantityController;
 
   EditTierInput({String name = '', String price = '', String quantity = ''})
-      : nameController = TextEditingController(text: name),
-        priceController = TextEditingController(text: price),
-        quantityController = TextEditingController(text: quantity);
+    : nameController = TextEditingController(text: name),
+      priceController = TextEditingController(text: price),
+      quantityController = TextEditingController(text: quantity);
 
   void dispose() {
     nameController.dispose();
@@ -39,33 +43,104 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
   late final TextEditingController _venueController;
   late final TextEditingController _descriptionController;
 
-  late List<EditTierInput> _tiers;
+  List<EditTierInput> _tiers = [];
   OrganizerEvent? _event;
   String? _formError;
+  bool _isLoading = true;
+  bool _isSaving = false;
+  final Map<String, String> _errors = {};
+
+  void _clearError(String key) {
+    if (_errors.containsKey(key)) setState(() => _errors.remove(key));
+  }
 
   @override
   void initState() {
     super.initState();
-    _event = EventRepository.instance.getById(widget.eventId);
+    _eventNameController = TextEditingController();
+    _dateController = TextEditingController();
+    _venueController = TextEditingController();
+    _descriptionController = TextEditingController();
+    _load();
+  }
 
-    _eventNameController = TextEditingController(text: _event?.name ?? '');
-    _dateController = TextEditingController(text: _event?.date ?? '');
-    _venueController = TextEditingController(text: _event?.venue ?? '');
-    _descriptionController =
-        TextEditingController(text: _event?.description ?? '');
+  /// Use the current event snapshot immediately when Manage is opened from a
+  /// list that has already loaded it. A cold load is bounded and has a retry
+  /// state so a slow backend cannot leave the editor stuck on its spinner.
+  Future<void> _load() async {
+    final cachedEvent = EventRepository.instance.getById(widget.eventId);
+    if (cachedEvent != null) {
+      _populateEvent(cachedEvent);
+      setState(() {
+        _isLoading = false;
+        _formError = null;
+      });
+      return;
+    }
 
-    final tiers = _event?.tiers ?? const [];
-    _tiers = tiers.isEmpty
+    setState(() {
+      _isLoading = true;
+      _formError = null;
+    });
+    try {
+      await EventRepository.instance.refresh().timeout(
+        const Duration(seconds: 15),
+      );
+    } on EventRepositoryException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _formError = e.message;
+        _isLoading = false;
+      });
+      return;
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() {
+        _formError = 'Loading this event took too long. Please try again.';
+        _isLoading = false;
+      });
+      return;
+    } on Exception catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _formError = 'Could not load this event: $e';
+        _isLoading = false;
+      });
+      return;
+    }
+    if (!mounted) return;
+    final event = EventRepository.instance.getById(widget.eventId);
+    if (event != null) _populateEvent(event);
+    setState(() {
+      _formError = event == null ? 'This event could not be found.' : null;
+      _isLoading = false;
+    });
+  }
+
+  void _populateEvent(OrganizerEvent event) {
+    for (final t in _tiers) {
+      t.dispose();
+    }
+    _event = event;
+    _eventNameController.text = event.name;
+    _dateController.text = event.date;
+    _venueController.text = event.venue;
+    _descriptionController.text = event.description;
+    _tiers = event.tiers.isEmpty
         ? [EditTierInput()]
-        : tiers
-            .map((t) => EditTierInput(
-                  name: t.name,
-                  price: t.price % 1 == 0
-                      ? t.price.toStringAsFixed(0)
-                      : t.price.toString(),
-                  quantity: t.quantity.toString(),
-                ))
-            .toList();
+        : event.tiers.map((t) {
+            // Multi-day parents roll their days up; show the per-day figure.
+            final perDay = (event.isMultiDay && event.dayCount > 0)
+                ? t.quantity ~/ event.dayCount
+                : t.quantity;
+            return EditTierInput(
+              name: t.name,
+              price: t.price % 1 == 0
+                  ? t.price.toStringAsFixed(0)
+                  : t.price.toString(),
+              quantity: perDay.toString(),
+            );
+          }).toList();
   }
 
   @override
@@ -92,24 +167,36 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
   }
 
   bool _validate() {
-    if (_eventNameController.text.trim().isEmpty ||
-        _dateController.text.trim().isEmpty ||
-        _venueController.text.trim().isEmpty) {
-      setState(() => _formError =
-          'Event name, date & time, and venue are required.');
-      return false;
+    final errors = <String, String>{};
+    if (_eventNameController.text.trim().isEmpty) {
+      errors['name'] = 'Event name is required.';
     }
-    for (final tier in _tiers) {
-      if (tier.nameController.text.trim().isEmpty ||
-          double.tryParse(tier.priceController.text.trim()) == null ||
-          int.tryParse(tier.quantityController.text.trim()) == null) {
-        setState(() => _formError =
-            'Fill in a valid name, price, and quantity for every ticket tier.');
-        return false;
+    if (_venueController.text.trim().isEmpty) {
+      errors['venue'] = 'Search and pick a venue.';
+    }
+    for (var i = 0; i < _tiers.length; i++) {
+      final t = _tiers[i];
+      if (t.nameController.text.trim().isEmpty) {
+        errors['tier$i.name'] = 'Choose a tier.';
+      }
+      final price = double.tryParse(t.priceController.text.trim());
+      if (price == null || price < 0) {
+        errors['tier$i.price'] = 'Enter a valid price.';
+      }
+      final qty = int.tryParse(t.quantityController.text.trim());
+      if (qty == null || qty <= 0) {
+        errors['tier$i.quantity'] = 'Whole number above 0.';
       }
     }
-    setState(() => _formError = null);
-    return true;
+    setState(() {
+      _errors
+        ..clear()
+        ..addAll(errors);
+      _formError = errors.isEmpty
+          ? null
+          : 'Please fix the highlighted field${errors.length == 1 ? '' : 's'}.';
+    });
+    return errors.isEmpty;
   }
 
   void _confirmDelete() {
@@ -118,8 +205,9 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Event?'),
         content: const Text(
-          'This action cannot be undone. All ticket sales data associated '
-          'with this event will be permanently removed.',
+          'This action cannot be undone. Events that already have ticket '
+          'sales cannot be deleted - cancel them instead so buyers are '
+          'refunded.',
         ),
         actions: [
           TextButton(
@@ -127,29 +215,38 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               final eventName = _event?.name ?? 'This event';
-              EventRepository.instance.deleteEvent(widget.eventId);
+              final messenger = ScaffoldMessenger.of(context);
+              final navigator = Navigator.of(context);
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
+              try {
+                await EventRepository.instance.deleteEvent(widget.eventId);
+              } on EventRepositoryException catch (e) {
+                messenger.showSnackBar(SnackBar(content: Text(e.message)));
+                return;
+              }
+              messenger.showSnackBar(
                 SnackBar(content: Text('"$eventName" has been deleted.')),
               );
-              Navigator.pushReplacement(
-                context,
+              if (!navigator.mounted) return;
+              navigator.pushReplacement(
                 MaterialPageRoute(
                   builder: (_) => const OrganizerMyEventsScreen(),
                 ),
               );
             },
-            child: const Text('Delete',
-                style: TextStyle(color: AppColors.dangerRed)),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: AppColors.dangerRed),
+            ),
           ),
         ],
       ),
     );
   }
 
-  void _saveChanges() {
+  Future<void> _saveChanges({bool publish = false}) async {
     if (_event == null) {
       Navigator.pop(context);
       return;
@@ -157,25 +254,37 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
     if (!_validate()) return;
 
     final updatedTiers = _tiers
-        .map((t) => TicketTier(
-              name: t.nameController.text.trim(),
-              price: double.parse(t.priceController.text.trim()),
-              quantity: int.parse(t.quantityController.text.trim()),
-              sold: _event!.tiers
-                  .where((existing) => existing.name == t.nameController.text.trim())
-                  .fold(0, (sum, existing) => sum + existing.sold),
-            ))
+        .map(
+          (t) => TicketTier(
+            name: t.nameController.text.trim(),
+            price: double.parse(t.priceController.text.trim()),
+            quantity: int.parse(t.quantityController.text.trim()),
+          ),
+        )
         .toList();
 
     final updated = _event!.copyWith(
       name: _eventNameController.text.trim(),
-      date: _dateController.text.trim(),
       venue: _venueController.text.trim(),
       description: _descriptionController.text.trim(),
       tiers: updatedTiers,
     );
-    EventRepository.instance.updateEvent(updated);
 
+    setState(() {
+      _isSaving = true;
+      _formError = null;
+    });
+    try {
+      await EventRepository.instance.updateEvent(updated, publish: publish);
+    } on EventRepositoryException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _formError = e.message;
+        _isSaving = false;
+      });
+      return;
+    }
+    if (!mounted) return;
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
@@ -186,6 +295,42 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const OrganizerScaffold(
+        pageTitle: 'Edit Event',
+        activeItem: OrganizerNavItem.myEvents,
+        body: Padding(
+          padding: EdgeInsets.all(48),
+          child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+        ),
+      );
+    }
+    if (_event == null && _formError != null) {
+      return OrganizerScaffold(
+        pageTitle: 'Edit Event',
+        activeItem: OrganizerNavItem.myEvents,
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.error_outline,
+                size: 40,
+                color: AppColors.dangerRed,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _formError!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AppColors.dangerRed),
+              ),
+              const SizedBox(height: 16),
+              OutlineButtonWidget(label: 'Retry', onPressed: _load),
+            ],
+          ),
+        ),
+      );
+    }
     if (_event == null) {
       return OrganizerScaffold(
         pageTitle: 'Edit Event',
@@ -194,11 +339,16 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline,
-                  size: 40, color: AppColors.textGray),
+              const Icon(
+                Icons.error_outline,
+                size: 40,
+                color: AppColors.textGray,
+              ),
               const SizedBox(height: 12),
-              const Text('This event could not be found.',
-                  style: AppTextStyles.h3),
+              const Text(
+                'This event could not be found.',
+                style: AppTextStyles.h3,
+              ),
               const SizedBox(height: 16),
               OutlineButtonWidget(
                 label: 'Back to My Events',
@@ -216,7 +366,7 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
     }
 
     final screenWidth = MediaQuery.of(context).size.width;
-    final isWide = screenWidth > 1000;
+    final isWide = screenWidth >= 1400;
 
     return OrganizerScaffold(
       pageTitle: 'Edit Event',
@@ -225,15 +375,13 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           isWide
-              ? IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(flex: 2, child: _leftColumn()),
-                      const SizedBox(width: 24),
-                      Expanded(flex: 1, child: _rightColumn()),
-                    ],
-                  ),
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 2, child: _leftColumn()),
+                    const SizedBox(width: 24),
+                    Expanded(flex: 1, child: _rightColumn()),
+                  ],
                 )
               : Column(
                   children: [
@@ -253,36 +401,96 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
             ),
           ],
           const SizedBox(height: 28),
-          Row(
-            children: [
-              OutlineButtonWidget(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final deleteButton = OutlineButtonWidget(
                 label: 'Delete Event',
                 borderColor: AppColors.dangerRed,
                 textColor: AppColors.dangerRed,
                 height: 48,
                 onPressed: _confirmDelete,
-              ),
-              const Spacer(),
-              TextButton(
+              );
+              final cancelButton = TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel Changes',
-                    style: TextStyle(color: AppColors.textDark)),
-              ),
-              const SizedBox(width: 12),
-              ElevatedButton(
-                onPressed: _saveChanges,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryPurple,
-                  foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+                child: const Text(
+                  'Cancel Changes',
+                  style: TextStyle(color: AppColors.textDark),
+                ),
+              );
+              final draftButton = OutlinedButton(
+                onPressed: _isSaving ? null : () => _saveChanges(),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primaryPurple,
+                  side: const BorderSide(color: AppColors.primaryPurple),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 22,
+                    vertical: 14,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                child: const Text('Update Event'),
-              ),
-            ],
+                child: const Text('Save Draft'),
+              );
+              final saveButton = ElevatedButton(
+                onPressed: _isSaving
+                    ? null
+                    : () => _saveChanges(
+                        publish: _event!.status == EventStatus.draft,
+                      ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryPurple,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 22,
+                    vertical: 14,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: _isSaving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        _event!.status == EventStatus.draft
+                            ? 'Publish Event'
+                            : 'Update Event',
+                      ),
+              );
+              final trailingButtons = [
+                cancelButton,
+                if (_event!.status == EventStatus.draft) draftButton,
+                saveButton,
+              ];
+              if (constraints.maxWidth < 760) {
+                return Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    SizedBox(width: 150, child: deleteButton),
+                    ...trailingButtons,
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  SizedBox(width: 150, child: deleteButton),
+                  const Spacer(),
+                  for (var i = 0; i < trailingButtons.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 12),
+                    trailingButtons[i],
+                  ],
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -302,30 +510,47 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
                 label: 'Event Name *',
                 hint: 'e.g. BINI Signals World Tour',
                 controller: _eventNameController,
+                errorText: _errors['name'],
+                onChanged: (_) => _clearError('name'),
               ),
               const SizedBox(height: 18),
-              Row(
-                children: [
-                  Expanded(
-                    child: AppTextField(
-                      label: 'Date & Time *',
-                      hint: 'Select Date',
-                      controller: _dateController,
-                      prefixIcon: const Icon(Icons.calendar_today_outlined,
-                          size: 18, color: AppColors.textGray),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final dateField = AppTextField(
+                    label: 'Date (locked)',
+                    hint: '',
+                    controller: _dateController,
+                    enabled: false,
+                    prefixIcon: const Icon(
+                      Icons.calendar_today_outlined,
+                      size: 18,
+                      color: AppColors.textGray,
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: AppTextField(
-                      label: 'Venue *',
-                      hint: 'Arena, Hotel, or Stadium',
-                      controller: _venueController,
-                      prefixIcon: const Icon(Icons.location_on_outlined,
-                          size: 18, color: AppColors.textGray),
-                    ),
-                  ),
-                ],
+                  );
+                  final venueField = VenueDropdownField(
+                    controller: _venueController,
+                    enabled: !_isSaving,
+                    errorText: _errors['venue'],
+                    onChanged: (_) => _clearError('venue'),
+                  );
+                  if (constraints.maxWidth < 680) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        dateField,
+                        const SizedBox(height: 16),
+                        venueField,
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      Expanded(child: dateField),
+                      const SizedBox(width: 16),
+                      Expanded(child: venueField),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 18),
               Column(
@@ -343,13 +568,15 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
                       contentPadding: const EdgeInsets.all(16),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide:
-                            const BorderSide(color: AppColors.borderLight),
+                        borderSide: const BorderSide(
+                          color: AppColors.borderLight,
+                        ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide:
-                            const BorderSide(color: AppColors.borderLight),
+                        borderSide: const BorderSide(
+                          color: AppColors.borderLight,
+                        ),
                       ),
                     ),
                   ),
@@ -360,14 +587,20 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
         ),
         const SizedBox(height: 20),
         _card(
-          title: 'Ticket Tiers',
+          title: 'Define Ticket Tiers & Prices',
           headerTrailing: TextButton.icon(
             onPressed: _addTier,
-            icon: const Icon(Icons.add, size: 16, color: AppColors.primaryPurple),
+            icon: const Icon(
+              Icons.add,
+              size: 16,
+              color: AppColors.primaryPurple,
+            ),
             label: const Text(
-              '+ Add New Tier',
+              'Add New Tier',
               style: TextStyle(
-                  color: AppColors.primaryPurple, fontWeight: FontWeight.w600),
+                color: AppColors.primaryPurple,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
           child: Column(
@@ -375,45 +608,69 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
               final tier = _tiers[index];
               return Padding(
                 padding: const EdgeInsets.only(bottom: 16),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: AppTextField(
-                        label: 'Tier Name',
-                        hint: 'Tier name',
-                        controller: tier.nameController,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final tierField = TierNameDropdown(
+                      controller: tier.nameController,
+                      errorText: _errors['tier$index.name'],
+                      onChanged: (_) => _clearError('tier$index.name'),
+                    );
+                    final priceField = AppTextField(
+                      label: 'Price (\u20B1)',
+                      hint: '0',
+                      controller: tier.priceController,
+                      keyboardType: TextInputType.number,
+                      errorText: _errors['tier$index.price'],
+                      onChanged: (_) => _clearError('tier$index.price'),
+                    );
+                    final quantityField = AppTextField(
+                      label: 'Quantity',
+                      hint: '0',
+                      controller: tier.quantityController,
+                      keyboardType: TextInputType.number,
+                      errorText: _errors['tier$index.quantity'],
+                      onChanged: (_) => _clearError('tier$index.quantity'),
+                    );
+                    final removeButton = IconButton(
+                      onPressed: _tiers.length > 1
+                          ? () => _removeTier(index)
+                          : null,
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: AppColors.dangerRed,
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 2,
-                      child: AppTextField(
-                        label: 'Price (\u20B1)',
-                        hint: '0',
-                        controller: tier.priceController,
-                        keyboardType: TextInputType.number,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 2,
-                      child: AppTextField(
-                        label: 'Quantity',
-                        hint: '0',
-                        controller: tier.quantityController,
-                        keyboardType: TextInputType.number,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      onPressed:
-                          _tiers.length > 1 ? () => _removeTier(index) : null,
-                      icon: const Icon(Icons.delete_outline,
-                          color: AppColors.dangerRed),
-                    ),
-                  ],
+                    );
+                    if (constraints.maxWidth < 680) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          tierField,
+                          const SizedBox(height: 12),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Expanded(child: priceField),
+                              const SizedBox(width: 12),
+                              Expanded(child: quantityField),
+                              removeButton,
+                            ],
+                          ),
+                        ],
+                      );
+                    }
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(flex: 3, child: tierField),
+                        const SizedBox(width: 12),
+                        Expanded(flex: 2, child: priceField),
+                        const SizedBox(width: 12),
+                        Expanded(flex: 2, child: quantityField),
+                        const SizedBox(width: 8),
+                        removeButton,
+                      ],
+                    );
+                  },
                 ),
               );
             }),
@@ -438,7 +695,11 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
                   width: double.infinity,
                   color: AppColors.primaryPurple.withValues(alpha: 0.15),
                   alignment: Alignment.center,
-                  child: const Icon(Icons.image, size: 48, color: Colors.white70),
+                  child: const Icon(
+                    Icons.image,
+                    size: 48,
+                    color: Colors.white70,
+                  ),
                 ),
               ),
               Positioned.fill(
@@ -450,7 +711,8 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text(
-                              'Banner image upload is not connected yet.'),
+                            'Banner image upload is not connected yet.',
+                          ),
                         ),
                       );
                     },
@@ -478,7 +740,10 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
         _card(
           title: 'Supporting Documents',
           child: Text(
-            'No supporting documents uploaded yet.',
+            (_event?.supportingDocumentUrls.isEmpty ?? true)
+                ? 'No supporting documents uploaded yet.'
+                : '${_event!.supportingDocumentUrls.length} document'
+                      '${_event!.supportingDocumentUrls.length == 1 ? '' : 's'} on file.',
             style: AppTextStyles.bodyGray.copyWith(fontSize: 12),
           ),
         ),
@@ -501,15 +766,32 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final titleWidget = Text(
                 title,
-                style: AppTextStyles.h3.copyWith(color: AppColors.primaryPurple),
-              ),
-              ?headerTrailing,
-            ],
+                style: AppTextStyles.h3.copyWith(
+                  color: AppColors.primaryPurple,
+                ),
+              );
+              if (headerTrailing == null) return titleWidget;
+              if (constraints.maxWidth < 440) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    titleWidget,
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: headerTrailing,
+                    ),
+                  ],
+                );
+              }
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [titleWidget, headerTrailing],
+              );
+            },
           ),
           const SizedBox(height: 18),
           child,

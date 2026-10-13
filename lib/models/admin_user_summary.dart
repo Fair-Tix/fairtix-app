@@ -73,4 +73,6 @@ class AdminUserSummary {
   bool get hasReviewableDocuments => role == 'organizer'
       ? (venueProofUrl != null || eventPermitUrl != null)
       : (idDocumentUrl != null || selfiePhotoUrl != null);
+
+  bool get canReview => idVerificationStatus == 'pending' || hasReviewableDocuments;
 }

@@ -193,7 +193,7 @@ class _AdminOrganizerApplicationsScreenState
                   };
                   final page = pages[index];
                   if (page != null) {
-                    Navigator.pushReplacement(context, adminPageRoute(page));
+                    adminPushReplacement(context, page);
                   }
                 },
               ),
@@ -395,11 +395,7 @@ class _AdminOrganizerApplicationsScreenState
     );
     if (!mounted || shouldLogout != true) return;
     AdminAuthService.instance.logout();
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
-      (route) => false,
-    );
+    adminPushAndRemoveUntil(context, const AdminLoginScreen());
   }
 }
 
@@ -449,7 +445,7 @@ class _ApplicationRowWide extends StatelessWidget {
           Expanded(child: Text(submitted, style: const TextStyle(fontSize: 10.5, color: AppColors.textGray))),
           Expanded(
             child: TextButton(
-              onPressed: applicant.hasReviewableDocuments ? () => screen._reviewApplication(applicant) : null,
+              onPressed: applicant.canReview ? () => screen._reviewApplication(applicant) : null,
               style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero, alignment: Alignment.centerLeft),
               child: Text(
                 applicant.idVerificationStatus == 'pending' ? 'Review' : 'View',
@@ -502,7 +498,7 @@ class _ApplicationRowCompact extends StatelessWidget {
           Text('Applied $submitted', style: const TextStyle(fontSize: 10, color: AppColors.textGray)),
           const SizedBox(height: 8),
           TextButton(
-            onPressed: applicant.hasReviewableDocuments ? () => screen._reviewApplication(applicant) : null,
+            onPressed: applicant.canReview ? () => screen._reviewApplication(applicant) : null,
             style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero, alignment: Alignment.centerLeft),
             child: Text(
               applicant.idVerificationStatus == 'pending' ? 'Review Application' : 'View Documents',

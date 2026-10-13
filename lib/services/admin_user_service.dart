@@ -25,11 +25,20 @@ class AdminUserService {
 
   /// Fetches all `public.users` rows, optionally filtered to one [role]
   /// ('buyer' | 'organizer' | 'admin'), newest first.
-  Future<List<AdminUserSummary>> fetchUsers({String? role}) async {
+  ///
+  /// When [onlyApproved] is true, only accounts an admin has already approved
+  /// (`id_verification_status = 'verified'`) are returned - the Accounts list
+  /// should show approved, registered users only; pending/rejected sign-ups
+  /// belong in the review queues instead.
+  Future<List<AdminUserSummary>> fetchUsers({
+    String? role,
+    bool onlyApproved = false,
+  }) async {
     try {
-      final query = Supabase.instance.client.from('users').select();
-      final rows = await (role != null ? query.eq('role', role) : query)
-          .order('created_at', ascending: false);
+      var query = Supabase.instance.client.from('users').select();
+      if (role != null) query = query.eq('role', role);
+      if (onlyApproved) query = query.eq('id_verification_status', 'verified');
+      final rows = await query.order('created_at', ascending: false);
       return (rows as List)
           .map((row) => AdminUserSummary.fromRow(row as Map<String, dynamic>))
           .toList();
@@ -52,7 +61,9 @@ class AdminUserService {
           .from(bucket)
           .createSignedUrl(path, expiresInSeconds);
     } on StorageException catch (e) {
-      throw AdminUserServiceException('Could not load that document: ${e.message}');
+      throw AdminUserServiceException(
+        'Could not load that document: ${e.message}',
+      );
     }
   }
 
@@ -63,15 +74,29 @@ class AdminUserService {
   Future<void> setIdVerificationStatus({
     required String userId,
     required String status,
+    String? reason,
   }) async {
     assert(status == 'verified' || status == 'rejected' || status == 'pending');
     try {
-      await Supabase.instance.client
-          .from('users')
-          .update({'id_verification_status': status})
-          .eq('id', userId);
+      if (status == 'pending') {
+        await Supabase.instance.client
+            .from('users')
+            .update({'id_verification_status': status})
+            .eq('id', userId);
+        return;
+      }
+      // approve / reject go through the admin_review_account RPC so the
+      // account is updated AND the person is notified in the same
+      // transaction (organizers can't be notified by a plain table update:
+      // `notifications` inserts are admin-RPC only).
+      await Supabase.instance.client.rpc(
+        'admin_review_account',
+        params: {'p_user_id': userId, 'p_status': status, 'p_reason': reason},
+      );
     } on PostgrestException catch (e) {
-      throw AdminUserServiceException('Could not update verification status: ${e.message}');
+      throw AdminUserServiceException(
+        'Could not update verification status: ${e.message}',
+      );
     }
   }
 
@@ -80,12 +105,17 @@ class AdminUserService {
     required String userId,
     required String status,
   }) async {
-    assert(status == 'active' || status == 'suspended' || status == 'deactivated');
+    assert(
+      status == 'active' || status == 'suspended' || status == 'deactivated',
+    );
     // Suspending yourself would lock you out of the portal (login now blocks
     // non-active accounts), and with only one admin there'd be nobody left to
     // undo it.
-    if (status != 'active' && Supabase.instance.client.auth.currentUser?.id == userId) {
-      throw const AdminUserServiceException('You cannot suspend or deactivate your own account.');
+    if (status != 'active' &&
+        Supabase.instance.client.auth.currentUser?.id == userId) {
+      throw const AdminUserServiceException(
+        'You cannot suspend or deactivate your own account.',
+      );
     }
     try {
       await Supabase.instance.client
@@ -93,7 +123,32 @@ class AdminUserService {
           .update({'account_status': status})
           .eq('id', userId);
     } on PostgrestException catch (e) {
-      throw AdminUserServiceException('Could not update account status: ${e.message}');
+      throw AdminUserServiceException(
+        'Could not update account status: ${e.message}',
+      );
+    }
+  }
+
+  /// Sends a platform-wide in-app announcement via the `send_announcement`
+  /// RPC. [audience] is 'all', 'buyers' or 'organizers'. Returns how many
+  /// users were notified.
+  Future<int> sendAnnouncement({
+    required String subject,
+    required String message,
+    String audience = 'all',
+  }) async {
+    try {
+      final count = await Supabase.instance.client.rpc(
+        'send_announcement',
+        params: {
+          'p_subject': subject,
+          'p_message': message,
+          'p_audience': audience,
+        },
+      );
+      return (count as num?)?.toInt() ?? 0;
+    } on PostgrestException catch (e) {
+      throw AdminUserServiceException(e.message);
     }
   }
 }

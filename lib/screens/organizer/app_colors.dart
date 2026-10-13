@@ -209,6 +209,14 @@ class AppTextField extends StatelessWidget {
   final TextInputType? keyboardType;
   final bool enabled;
 
+  /// Inline warning shown under the field (red border + message). Null = no
+  /// warning. Used by the Create/Edit Event forms to flag each bad field.
+  final String? errorText;
+
+  /// Called on every edit — lets forms clear a field's warning as soon as the
+  /// user starts fixing it.
+  final ValueChanged<String>? onChanged;
+
   const AppTextField({
     super.key,
     required this.label,
@@ -218,6 +226,8 @@ class AppTextField extends StatelessWidget {
     this.prefixIcon,
     this.keyboardType,
     this.enabled = true,
+    this.errorText,
+    this.onChanged,
   });
 
   @override
@@ -232,10 +242,20 @@ class AppTextField extends StatelessWidget {
           obscureText: obscureText,
           keyboardType: keyboardType,
           enabled: enabled,
+          onChanged: onChanged,
           style: AppTextStyles.body,
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: AppTextStyles.bodyGray,
+            errorText: errorText,
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppColors.dangerRed),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppColors.dangerRed),
+            ),
             prefixIcon: prefixIcon,
             filled: true,
             fillColor: enabled ? Colors.white : const Color(0xFFF3F4F6),

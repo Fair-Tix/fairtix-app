@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'app_colors.dart';
 import '../../services/organizer_session.dart';
 import 'organizer-dashboard.dart';
@@ -46,24 +47,17 @@ class OrganizerScaffold extends StatelessWidget {
     final isWide = screenWidth > 900;
 
     final account = OrganizerSession.instance.account;
-    final resolvedName = organizerName ?? account?.organizationName ?? 'Organizer';
+    final resolvedName = organizerName ?? account?.fullName ?? 'Organizer';
     final resolvedRole = organizerRole ?? 'Organizer Account';
     final resolvedInitial = avatarInitial ?? account?.avatarInitial ?? '?';
 
     return Scaffold(
       backgroundColor: AppColors.pageBackground,
-      drawer: isWide
-          ? null
-          : Drawer(
-              child: _Sidebar(activeItem: activeItem),
-            ),
+      drawer: isWide ? null : Drawer(child: _Sidebar(activeItem: activeItem)),
       body: Row(
         children: [
           if (isWide)
-            SizedBox(
-              width: 260,
-              child: _Sidebar(activeItem: activeItem),
-            ),
+            SizedBox(width: 260, child: _Sidebar(activeItem: activeItem)),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -118,9 +112,7 @@ class _TopBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 24),
       decoration: const BoxDecoration(
         color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: AppColors.borderLight),
-        ),
+        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
       ),
       child: Row(
         children: [
@@ -138,10 +130,7 @@ class _TopBar extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (trailing != null) ...[
-            trailing!,
-            const SizedBox(width: 16),
-          ],
+          if (trailing != null) ...[trailing!, const SizedBox(width: 16)],
           const NotificationBell(),
           const SizedBox(width: 8),
           if (isWide) ...[
@@ -149,7 +138,10 @@ class _TopBar extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(organizerName, style: AppTextStyles.label),
-                Text(organizerRole, style: AppTextStyles.bodyGray.copyWith(fontSize: 12)),
+                Text(
+                  organizerRole,
+                  style: AppTextStyles.bodyGray.copyWith(fontSize: 12),
+                ),
               ],
             ),
             const SizedBox(width: 12),
@@ -208,7 +200,9 @@ class _Sidebar extends StatelessWidget {
               label: 'Browse Events',
               isActive: false,
               onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const AllEventsScreen(readOnly: true)),
+                MaterialPageRoute(
+                  builder: (_) => const AllEventsScreen(readOnly: true),
+                ),
               ),
             ),
             _NavTile(
@@ -233,9 +227,7 @@ class _Sidebar extends StatelessWidget {
                 filled: true,
                 onTap: () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Support is coming soon.'),
-                    ),
+                    const SnackBar(content: Text('Support is coming soon.')),
                   );
                 },
               ),
@@ -296,7 +288,9 @@ class _NavTile extends StatelessWidget {
       child: Material(
         color: isActive
             ? AppColors.sidebarActive
-            : (filled ? Colors.white.withValues(alpha: 0.08) : Colors.transparent),
+            : (filled
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.transparent),
         borderRadius: BorderRadius.circular(10),
         child: InkWell(
           borderRadius: BorderRadius.circular(10),

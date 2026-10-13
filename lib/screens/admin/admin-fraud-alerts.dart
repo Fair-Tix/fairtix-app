@@ -1,18 +1,20 @@
 import 'package:flutter/material.dart';
 
-import '../../services/admin_session.dart';
+import '../../services/admin_resale_service.dart';
+import '../../services/admin_user_service.dart';
+import '../../services/csv_export.dart';
+import '../../widgets/admin_shell.dart';
+import '../../widgets/admin_widgets.dart';
 import '../organizer/app_colors.dart';
-import 'admin-accounts.dart';
-import 'admin-dashboard.dart';
-import 'admin-events-tickets.dart';
-import 'admin-login.dart';
-import 'admin-organizer-applications.dart';
-import 'admin-resale-monitoring.dart';
-import 'admin-revenue-reports.dart';
-import 'admin-route.dart';
-import 'admin-platform-settings.dart';
-import 'admin-profile.dart';
 
+/// The fraud / price-flag review queue.
+///
+/// Alerts are created by the database, not the app: the
+/// `on_resale_listing_flag` trigger (supabase/fraud_alerts.sql) raises a
+/// "near-floor price" or "rapid relisting" alert whenever a resale listing
+/// is created. This screen lets an admin work through them: mark one as
+/// being reviewed, resolve or dismiss it with a note, take the listing off
+/// the market, or suspend the account involved.
 class AdminFraudAlertsScreen extends StatefulWidget {
   const AdminFraudAlertsScreen({super.key});
 
@@ -21,541 +23,539 @@ class AdminFraudAlertsScreen extends StatefulWidget {
 }
 
 class _AdminFraudAlertsScreenState extends State<AdminFraudAlertsScreen> {
+  static const _filters = ['All', 'System-Flagged', 'Organizer-Flagged', 'Resolved'];
+
+  List<FraudAlertEntry> _alerts = const [];
+  bool _isLoading = true;
+  String? _loadError;
   String _filter = 'All';
 
-  static const _items = [
-    (Icons.grid_view_rounded, 'Dashboard'),
-    (Icons.business_outlined, 'Organizer Applications'),
-    (Icons.people_outline, 'Accounts'),
-    (Icons.calendar_today_outlined, 'Events & Tickets'),
-    (Icons.swap_vert_rounded, 'Resale Monitoring'),
-    (Icons.shield_outlined, 'Fraud Alerts'),
-    (Icons.bar_chart_rounded, 'Revenue & Reports'),
-    (Icons.settings_outlined, 'Platform Settings'),
-    (Icons.person_outline, 'Profile'),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
 
-  void _navigate(int index) {
-    final pages = <int, Widget>{
-      0: const AdminDashboardScreen(),
-      1: const AdminOrganizerApplicationsScreen(),
-      2: const AdminAccountsScreen(),
-      3: const AdminEventsTicketsScreen(),
-      4: const AdminResaleMonitoringScreen(),
-      6: const AdminRevenueReportsScreen(),
-      7: const AdminPlatformSettingsScreen(),
-      8: const AdminProfileScreen(),
-    };
-    final page = pages[index];
-    if (page != null) {
-      Navigator.pushReplacement(context, adminPageRoute(page));
+  Future<void> _load({bool showSpinner = true}) async {
+    if (showSpinner) {
+      setState(() {
+        _isLoading = true;
+        _loadError = null;
+      });
     }
+    try {
+      final alerts = await AdminResaleService.instance.fetchAlerts();
+      if (!mounted) return;
+      setState(() {
+        _alerts = alerts;
+        _isLoading = false;
+        _loadError = null;
+      });
+    } on AdminResaleException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadError = e.message;
+        _isLoading = false;
+      });
+    }
+  }
+
+  bool _matches(FraudAlertEntry a, String filter) => switch (filter) {
+    'System-Flagged' => a.isSystem,
+    'Organizer-Flagged' => !a.isSystem,
+    'Resolved' => a.isClosed,
+    _ => true,
+  };
+
+  List<FraudAlertEntry> get _filtered => _alerts.where((a) => _matches(a, _filter)).toList();
+
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _review(FraudAlertEntry alert) async {
+    final changed = await showDialog<bool>(
+      context: context,
+      builder: (context) => _AlertReviewDialog(alert: alert),
+    );
+    if (changed == true) {
+      await _load(showSpinner: false);
+      _toast('Alert updated.');
+    }
+  }
+
+  Future<void> _exportCsv() async {
+    final rows = _filtered;
+    if (rows.isEmpty) {
+      _toast('There are no fraud alerts to export.');
+      return;
+    }
+    final csv = toCsv([
+      [
+        'Alert ID', 'Type', 'Source', 'Flagged User', 'Email', 'Event', 'Severity',
+        'Status', 'Created', 'Reviewed', 'Resolution Note', 'Details',
+      ],
+      for (final a in rows)
+        [
+          a.id,
+          a.typeLabel,
+          a.sourceLabel,
+          csvSafe(a.userName ?? ''),
+          csvSafe(a.userEmail ?? ''),
+          csvSafe(a.eventTitle ?? ''),
+          a.severityLabel,
+          a.statusLabel,
+          a.createdAt.toIso8601String(),
+          a.reviewedAt?.toIso8601String() ?? '',
+          csvSafe(a.resolutionNote ?? ''),
+          csvSafe(a.details),
+        ],
+    ]);
+    final saved = await saveCsvFile(
+      fileName: 'fairtix-fraud-alerts-${formatIsoDate(DateTime.now())}.csv',
+      csv: csv,
+    );
+    _toast(saved ? 'Fraud alert log exported.' : 'Export canceled.');
   }
 
   @override
   Widget build(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width >= 900;
-    return Scaffold(
-      backgroundColor: const Color(0xFFF9F9FC),
-      drawer: isWide ? null : Drawer(child: _buildSidebar()),
-      body: Row(
-        children: [
-          if (isWide) SizedBox(width: 180, child: _buildSidebar()),
-          Expanded(
-            child: Column(
-              children: [
-                _buildTopBar(isWide),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.all(isWide ? 18 : 14),
-                    child: _buildContent(isWide),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return AdminShell(
+      active: AdminNavItem.fraudAlerts,
+      title: 'Fraud Alerts',
+      body: _buildBody(),
     );
   }
 
-  Widget _buildSidebar() {
-    final currentEmail =
-        AdminSession.instance.currentEmail ?? 'admin@fairtix.com';
+  Widget _buildBody() {
+    final open = _alerts.where((a) => !a.isClosed).length;
+    final filtered = _filtered;
 
-    return Container(
-      color: const Color(0xFFF3F1FD),
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 18, 12, 18),
-              child: _AdminLogo(),
-            ),
-            const Divider(height: 1, color: AppColors.borderLight),
-            const SizedBox(height: 14),
-            for (var index = 0; index < _items.length; index++)
-              _SidebarItem(
-                icon: _items[index].$1,
-                label: _items[index].$2,
-                selected: index == 5,
-                onTap: () => _navigate(index),
-              ),
-            const Spacer(),
-            const Divider(height: 1, color: AppColors.borderLight),
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                children: [
-                  const CircleAvatar(
-                    radius: 15,
-                    backgroundColor: Color(0xFFE8E6F1),
-                    child: Icon(
-                      Icons.person,
-                      size: 17,
-                      color: AppColors.textGray,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Admin', style: AppTextStyles.label),
-                        Text(
-                          currentEmail,
-                          style: const TextStyle(
-                            color: AppColors.textGray,
-                            fontSize: 9,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: _confirmLogout,
-                    icon: const Icon(
-                      Icons.logout,
-                      size: 17,
-                      color: AppColors.textGray,
-                    ),
-                    tooltip: 'Log out',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTopBar(bool isWide) {
-    return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 18),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
-      ),
-      child: Row(
-        children: [
-          if (!isWide)
-            Builder(
-              builder: (context) => IconButton(
-                icon: const Icon(Icons.menu, size: 20),
-                onPressed: () => Scaffold.of(context).openDrawer(),
-              ),
-            ),
-          const Text('Fraud Alerts', style: AppTextStyles.label),
-          const Spacer(),
-          SizedBox(
-            width: isWide ? 270 : 130,
-            height: 32,
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Search users, events...',
-                hintStyle: const TextStyle(
-                  color: Color(0xFFA6A9B7),
-                  fontSize: 10,
-                ),
-                prefixIcon: const Icon(
-                  Icons.search,
-                  size: 16,
-                  color: Color(0xFFA6A9B7),
-                ),
-                filled: true,
-                fillColor: const Color(0xFFF3F3F6),
-                contentPadding: EdgeInsets.zero,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
-          const Icon(
-            Icons.notifications_none,
-            size: 19,
-            color: AppColors.textGray,
-          ),
-          const SizedBox(width: 14),
-          const CircleAvatar(
-            radius: 14,
-            backgroundColor: Color(0xFFE8E6F1),
-            child: Icon(Icons.person, size: 16, color: AppColors.textGray),
-          ),
-          if (isWide) ...[
-            const SizedBox(width: 8),
-            Text(
-              AdminSession.instance.currentEmail ?? 'admin@fairtix.com',
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-            ),
-            const Icon(Icons.keyboard_arrow_down, size: 16),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildContent(bool isWide) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (isWide)
-          Row(
-            children: [
-              const Expanded(
-                child: Text('Fraud Alerts', style: AppTextStyles.h2),
+        Row(
+          children: [
+            const Expanded(child: Text('Fraud Alerts', style: AppTextStyles.h2)),
+            Text(
+              '$open open alert${open == 1 ? '' : 's'}',
+              style: TextStyle(
+                color: open > 0 ? AppColors.dangerRed : AppColors.textGray,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
               ),
-              Text(
-                '0 open alerts',
-                style: TextStyle(
-                  color: AppColors.dangerRed,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                ),
+            ),
+            IconButton(
+              onPressed: _isLoading ? null : _load,
+              icon: const Icon(Icons.refresh, size: 18),
+              tooltip: 'Refresh',
+            ),
+            OutlinedButton.icon(
+              onPressed: _isLoading ? null : _exportCsv,
+              icon: const Icon(Icons.download_outlined, size: 14),
+              label: const Text('Export Log', style: TextStyle(fontSize: 11)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primaryPurple,
+                side: const BorderSide(color: AppColors.primaryPurple),
               ),
-              const SizedBox(width: 18),
-              _buildExportButton(),
-            ],
-          )
-        else
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
             children: [
-              const Text('Fraud Alerts', style: AppTextStyles.h2),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      '0 open alerts',
-                      style: TextStyle(
-                        color: AppColors.dangerRed,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+              for (final filter in _filters) ...[
+                ChoiceChip(
+                  label: Text(
+                    '$filter  ${_alerts.where((a) => _matches(a, filter)).length}',
+                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
                   ),
-                  _buildExportButton(),
-                ],
-              ),
+                  selected: _filter == filter,
+                  onSelected: (_) => setState(() => _filter = filter),
+                  selectedColor: AppColors.primaryPurple,
+                  labelStyle: TextStyle(
+                    color: _filter == filter ? Colors.white : AppColors.textDark,
+                  ),
+                  side: BorderSide(
+                    color: _filter == filter ? AppColors.primaryPurple : AppColors.borderLight,
+                  ),
+                  showCheckmark: false,
+                ),
+                const SizedBox(width: 10),
+              ],
             ],
           ),
+        ),
         const SizedBox(height: 18),
-        _buildFilters(),
-        const SizedBox(height: 18),
-        _buildAlertsTable(isWide),
+        AdminCard(
+          child: _isLoading
+              ? const Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+                )
+              : _loadError != null
+              ? AdminErrorBox(message: _loadError!, onRetry: _load)
+              : _buildTable(filtered),
+        ),
       ],
     );
   }
 
-  Widget _buildExportButton() {
-    return SizedBox(
-      height: 32,
-      child: FilledButton.icon(
-        onPressed: () => _showMessage('Fraud alert log exported.'),
-        icon: const Icon(Icons.download_outlined, size: 14),
-        label: const Text('Export Log', style: TextStyle(fontSize: 10)),
-        style: FilledButton.styleFrom(
-          backgroundColor: AppColors.primaryPurple,
-          foregroundColor: Colors.white,
-          minimumSize: const Size(105, 32),
-          fixedSize: const Size(105, 32),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFilters() {
-    const filters = [
-      ('All', '0'),
-      ('System-Flagged', '0'),
-      ('Organizer-Flagged', '0'),
-      ('Resolved', '0'),
-    ];
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          for (final filter in filters) ...[
-            ChoiceChip(
-              label: Text(
-                '${filter.$1}  ${filter.$2}',
-                style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              selected: _filter == filter.$1,
-              onSelected: (_) => setState(() => _filter = filter.$1),
-              selectedColor: AppColors.primaryPurple,
-              labelStyle: TextStyle(
-                color: _filter == filter.$1 ? Colors.white : AppColors.textDark,
-              ),
-              side: BorderSide(
-                color: _filter == filter.$1
-                    ? AppColors.primaryPurple
-                    : AppColors.borderLight,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(5),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              showCheckmark: false,
-            ),
-            const SizedBox(width: 10),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAlertsTable(bool isWide) {
-    const alerts = <Map<String, String>>[];
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.borderLight),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x08000000),
-            blurRadius: 8,
-            offset: Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          if (isWide) _buildHeader(),
-          if (alerts.isEmpty)
-            SizedBox(
-              height: 250,
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+  Widget _buildTable(List<FraudAlertEntry> filtered) {
+    if (filtered.isEmpty) {
+      return AdminEmptyState(
+        icon: Icons.shield_outlined,
+        title: _alerts.isEmpty ? 'No fraud alerts yet' : 'No $_filter alerts',
+        hint: _alerts.isEmpty
+            ? 'Alerts appear here automatically when a resale listing is flagged.'
+            : 'Try a different filter.',
+      );
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 820;
+        return Column(
+          children: [
+            if (wide)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(18, 12, 14, 10),
+                child: Row(
                   children: [
-                    const Icon(
-                      Icons.shield_outlined,
-                      size: 42,
-                      color: Color(0xFFD9D7E4),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'No fraud alerts yet',
-                      style: TextStyle(
-                        color: AppColors.textGray,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      _filter == 'All'
-                          ? 'Fraud alerts will appear here when activity is flagged.'
-                          : 'No $_filter alerts yet.',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Color(0xFFA6A9B7),
-                        fontSize: 10,
-                      ),
-                    ),
+                    Expanded(child: Text('ALERT ID', style: adminHeaderStyle)),
+                    Expanded(flex: 2, child: Text('TYPE', style: adminHeaderStyle)),
+                    Expanded(child: Text('SOURCE', style: adminHeaderStyle)),
+                    Expanded(flex: 2, child: Text('FLAGGED USER', style: adminHeaderStyle)),
+                    Expanded(flex: 2, child: Text('TIMESTAMP', style: adminHeaderStyle)),
+                    Expanded(child: Text('SEVERITY', style: adminHeaderStyle)),
+                    Expanded(child: Text('STATUS', style: adminHeaderStyle)),
+                    SizedBox(width: 70, child: Text('ACTION', style: adminHeaderStyle)),
                   ],
                 ),
               ),
-            ),
-          _buildFooter(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeader() => const Padding(
-    padding: EdgeInsets.fromLTRB(18, 10, 14, 10),
-    child: Row(
-      children: [
-        Expanded(child: Text('ALERT ID', style: _headerStyle)),
-        Expanded(child: Text('TYPE', style: _headerStyle)),
-        Expanded(child: Text('SOURCE', style: _headerStyle)),
-        Expanded(child: Text('FLAGGED USER', style: _headerStyle)),
-        Expanded(child: Text('TIMESTAMP', style: _headerStyle)),
-        Expanded(child: Text('SEVERITY', style: _headerStyle)),
-        Expanded(child: Text('STATUS', style: _headerStyle)),
-        Expanded(child: Text('ACTION', style: _headerStyle)),
-      ],
-    ),
-  );
-
-  Widget _buildFooter() => const Padding(
-    padding: EdgeInsets.all(14),
-    child: Row(
-      children: [
-        Text(
-          'Showing 0 of 0 alerts',
-          style: TextStyle(color: AppColors.textGray, fontSize: 10),
-        ),
-        Spacer(),
-        Icon(Icons.chevron_left, size: 17, color: Color(0xFFD9D7E4)),
-        SizedBox(width: 12),
-        Text(
-          '1',
-          style: TextStyle(
-            color: AppColors.primaryPurple,
-            fontWeight: FontWeight.w700,
-            fontSize: 11,
-          ),
-        ),
-        SizedBox(width: 12),
-        Icon(Icons.chevron_right, size: 17, color: Color(0xFFD9D7E4)),
-      ],
-    ),
-  );
-
-  void _showMessage(String message) => ScaffoldMessenger.of(
-    context,
-  ).showSnackBar(SnackBar(content: Text(message)));
-
-  Future<void> _confirmLogout() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Log out?'),
-        content: const Text('Are you sure you want to Log Out?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Log out'),
-          ),
-        ],
-      ),
-    );
-    if (!mounted || confirmed != true) return;
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
-      (route) => false,
-    );
-  }
-}
-
-const _headerStyle = TextStyle(
-  color: AppColors.textGray,
-  fontSize: 9,
-  fontWeight: FontWeight.w700,
-);
-
-class _AdminLogo extends StatelessWidget {
-  const _AdminLogo();
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Container(
-        width: 22,
-        height: 22,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: AppColors.primaryPurple,
-          borderRadius: BorderRadius.circular(5),
-        ),
-        child: const Icon(
-          Icons.confirmation_number_outlined,
-          color: Colors.white,
-          size: 14,
-        ),
-      ),
-      const SizedBox(width: 6),
-      const Text(
-        'FairTix',
-        style: TextStyle(
-          color: AppColors.primaryPurple,
-          fontSize: 16,
-          fontWeight: FontWeight.w800,
-          fontStyle: FontStyle.italic,
-        ),
-      ),
-    ],
-  );
-}
-
-class _SidebarItem extends StatelessWidget {
-  const _SidebarItem({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-    child: Material(
-      color: selected ? AppColors.primaryPurple : Colors.transparent,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                size: 16,
-                color: selected ? Colors.white : AppColors.textDark,
-              ),
-              const SizedBox(width: 9),
-              Expanded(
+            const Divider(height: 1),
+            for (final alert in filtered) _AlertRow(alert: alert, wide: wide, onReview: () => _review(alert)),
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: Align(
+                alignment: Alignment.centerLeft,
                 child: Text(
-                  label,
-                  style: TextStyle(
-                    color: selected ? Colors.white : AppColors.textDark,
-                    fontSize: 10,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  'Showing ${filtered.length} of ${_alerts.length} alerts',
+                  style: const TextStyle(color: AppColors.textGray, fontSize: 10),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+AdminBadge _severityBadge(FraudAlertEntry a) => switch (a.severity) {
+  'high' => AdminBadge.danger(a.severityLabel),
+  'low' => AdminBadge.neutral(a.severityLabel),
+  _ => AdminBadge.warning(a.severityLabel),
+};
+
+AdminBadge _alertStatusBadge(FraudAlertEntry a) => switch (a.status) {
+  'reviewing' => AdminBadge.info(a.statusLabel),
+  'resolved' => AdminBadge.success(a.statusLabel),
+  'dismissed' => AdminBadge.neutral(a.statusLabel),
+  _ => AdminBadge.warning(a.statusLabel),
+};
+
+class _AlertRow extends StatelessWidget {
+  const _AlertRow({required this.alert, required this.wide, required this.onReview});
+
+  final FraudAlertEntry alert;
+  final bool wide;
+  final VoidCallback onReview;
+
+  @override
+  Widget build(BuildContext context) {
+    final reviewButton = TextButton(
+      onPressed: onReview,
+      style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 6), minimumSize: Size.zero),
+      child: Text(
+        alert.isClosed ? 'View' : 'Review',
+        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+      ),
+    );
+    final user = alert.userName ?? 'Unknown user';
+
+    final content = wide
+        ? Padding(
+            padding: const EdgeInsets.fromLTRB(18, 12, 14, 12),
+            child: Row(
+              children: [
+                Expanded(child: Text(alert.shortId, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700))),
+                Expanded(flex: 2, child: Text(alert.typeLabel, style: const TextStyle(fontSize: 11))),
+                Expanded(child: Text(alert.sourceLabel, style: const TextStyle(fontSize: 11))),
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(user, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                      if (alert.eventTitle != null)
+                        Text(alert.eventTitle!, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, color: AppColors.textGray)),
+                    ],
                   ),
+                ),
+                Expanded(flex: 2, child: Text(formatAdminDateTime(alert.createdAt), style: const TextStyle(fontSize: 10.5, color: AppColors.textGray))),
+                Expanded(child: Align(alignment: Alignment.centerLeft, child: _severityBadge(alert))),
+                Expanded(child: Align(alignment: Alignment.centerLeft, child: _alertStatusBadge(alert))),
+                SizedBox(width: 70, child: reviewButton),
+              ],
+            ),
+          )
+        : Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: Text('${alert.typeLabel}  \u2022  ${alert.shortId}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                    _severityBadge(alert),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text('$user${alert.eventTitle != null ? ' \u2022 ${alert.eventTitle}' : ''}', style: const TextStyle(fontSize: 11)),
+                const SizedBox(height: 3),
+                Row(
+                  children: [
+                    _alertStatusBadge(alert),
+                    const SizedBox(width: 8),
+                    Text(formatAdminDateTime(alert.createdAt), style: const TextStyle(fontSize: 10, color: AppColors.textGray)),
+                  ],
+                ),
+                reviewButton,
+              ],
+            ),
+          );
+    return Container(
+      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.borderLight))),
+      child: content,
+    );
+  }
+}
+
+/// Review dialog for one alert. Pops `true` when anything changed, so the
+/// screen knows to reload the list.
+class _AlertReviewDialog extends StatefulWidget {
+  const _AlertReviewDialog({required this.alert});
+
+  final FraudAlertEntry alert;
+
+  @override
+  State<_AlertReviewDialog> createState() => _AlertReviewDialogState();
+}
+
+class _AlertReviewDialogState extends State<_AlertReviewDialog> {
+  late final TextEditingController _note;
+  bool _busy = false;
+  bool _changed = false;
+  String? _error;
+  String? _info;
+
+  @override
+  void initState() {
+    super.initState();
+    _note = TextEditingController(text: widget.alert.resolutionNote ?? '');
+  }
+
+  @override
+  void dispose() {
+    _note.dispose();
+    super.dispose();
+  }
+
+  /// Runs [action]. With [closeAfter] the dialog closes on success (used for
+  /// status changes); otherwise it stays open and shows [success] (used for
+  /// the side actions, so the admin can still resolve the alert afterwards).
+  Future<void> _run(
+    Future<void> Function() action, {
+    String? success,
+    bool closeAfter = false,
+  }) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+      _info = null;
+    });
+    try {
+      await action();
+      _changed = true;
+      if (!mounted) return;
+      if (closeAfter) {
+        Navigator.pop(context, true);
+        return;
+      }
+      setState(() => _info = success);
+    } on AdminResaleException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } on AdminUserServiceException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Widget _fact(String label, String value) => Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(width: 92, child: Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textGray))),
+        Expanded(child: Text(value, style: const TextStyle(fontSize: 11.5))),
+      ],
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final a = widget.alert;
+    final svc = AdminResaleService.instance;
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 540, maxHeight: 680),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: Text(a.typeLabel, style: AppTextStyles.h3)),
+                  _severityBadge(a),
+                  const SizedBox(width: 6),
+                  _alertStatusBadge(a),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text('Alert ${a.shortId} \u2022 ${a.sourceLabel}-flagged', style: AppTextStyles.bodyGray.copyWith(fontSize: 12)),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8F7FC),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.borderLight),
+                ),
+                child: Text(a.details, style: const TextStyle(fontSize: 12)),
+              ),
+              const SizedBox(height: 14),
+              _fact('Flagged user', a.userName == null ? 'Unknown' : '${a.userName}${a.userEmail == null ? '' : ' (${a.userEmail})'}'),
+              if (a.eventTitle != null) _fact('Event', a.eventTitle!),
+              _fact('Flagged', formatAdminDateTime(a.createdAt)),
+              if (a.reviewedAt != null) _fact('Last reviewed', formatAdminDateTime(a.reviewedAt!)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _note,
+                enabled: !_busy,
+                maxLines: 3,
+                maxLength: 500,
+                decoration: const InputDecoration(
+                  labelText: 'Review note (optional)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text(_error!, style: const TextStyle(color: AppColors.dangerRed, fontSize: 12)),
+                ),
+              if (_info != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text(_info!, style: const TextStyle(color: AppColors.successGreen, fontSize: 12, fontWeight: FontWeight.w600)),
+                ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (a.status == 'open')
+                    OutlinedButton(
+                      onPressed: _busy
+                          ? null
+                          : () => _run(() => svc.updateAlert(a.id, 'reviewing', note: _note.text), closeAfter: true),
+                      child: const Text('Mark Reviewing'),
+                    ),
+                  FilledButton(
+                    onPressed: _busy
+                        ? null
+                        : () => _run(() => svc.updateAlert(a.id, 'resolved', note: _note.text), closeAfter: true),
+                    style: FilledButton.styleFrom(backgroundColor: AppColors.successGreen),
+                    child: const Text('Resolve'),
+                  ),
+                  OutlinedButton(
+                    onPressed: _busy
+                        ? null
+                        : () => _run(() => svc.updateAlert(a.id, 'dismissed', note: _note.text), closeAfter: true),
+                    child: const Text('Dismiss'),
+                  ),
+                ],
+              ),
+              if (a.listingId != null || a.userId != null) ...[
+                const Divider(height: 28),
+                const Text('Take action', style: AppTextStyles.label),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    if (a.listingId != null)
+                      OutlinedButton(
+                        onPressed: _busy
+                            ? null
+                            : () => _run(
+                                () => svc.removeListing(a.listingId!, reason: _note.text.trim()),
+                                success: 'Listing removed and the seller was notified.',
+                              ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.dangerRed,
+                          side: const BorderSide(color: AppColors.dangerRed),
+                        ),
+                        child: const Text('Remove Listing'),
+                      ),
+                    if (a.userId != null)
+                      OutlinedButton(
+                        onPressed: _busy
+                            ? null
+                            : () => _run(
+                                () => AdminUserService.instance.setAccountStatus(
+                                  userId: a.userId!,
+                                  status: 'suspended',
+                                ),
+                                success: 'Account suspended. It can be reactivated from Accounts.',
+                              ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.dangerRed,
+                          side: const BorderSide(color: AppColors.dangerRed),
+                        ),
+                        child: const Text('Suspend User'),
+                      ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 14),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: _busy ? null : () => Navigator.pop(context, _changed),
+                  child: const Text('Close'),
                 ),
               ),
             ],
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }

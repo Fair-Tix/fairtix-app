@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:typed_data';
 
 import '../models/organizer.dart';
+import 'account_status.dart';
 import 'organizer_session.dart';
 
 /// Thrown when an organizer auth action (login, register) fails.
@@ -94,6 +95,12 @@ class OrganizerAuthService {
       throw OrganizerAuthException(
         'Could not load your account details: ${e.message}',
       );
+    }
+
+    final accountStatus = (row['account_status'] as String?) ?? 'active';
+    if (accountStatus != 'active') {
+      await Supabase.instance.client.auth.signOut();
+      throw OrganizerAuthException(inactiveAccountMessage(accountStatus));
     }
 
     if (row['role'] != 'organizer') {

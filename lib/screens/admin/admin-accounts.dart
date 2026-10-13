@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/admin_user_summary.dart';
+import '../../services/admin_auth_service.dart';
 import '../../services/admin_session.dart';
 import '../../services/admin_user_service.dart';
 import '../../widgets/admin_document_viewer.dart';
@@ -499,6 +500,7 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
       ),
     );
     if (confirmed == true && context.mounted) {
+      AdminAuthService.instance.logout();
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const AdminLoginScreen()),

@@ -1,34 +1,42 @@
 import 'package:flutter/material.dart';
 
-import '../../models/organizer_event.dart';
-import '../../services/admin_session.dart';
-import '../../services/event_repository.dart';
+import '../../services/admin_event_service.dart';
+import '../../services/csv_export.dart';
+import '../../widgets/admin_shell.dart';
+import '../../widgets/admin_widgets.dart';
 import '../organizer/app_colors.dart';
-import 'admin-dashboard.dart';
-import 'admin-route.dart';
-import 'admin-accounts.dart';
-import 'admin-fraud-alerts.dart';
-import 'admin-organizer-applications.dart';
-import 'admin-login.dart';
-import 'admin-resale-monitoring.dart';
-import 'admin-revenue-reports.dart';
-import 'admin-platform-settings.dart';
-import 'admin-profile.dart';
 
+/// Every organizer's events with real sales numbers, plus the admin's two
+/// powers from the manuscript: cancel or unpublish any event.
+///
+/// Reads `public.events` / `ticket_tiers` through [AdminEventService].
+/// Canceling here is the same database update the organizer's own Cancel
+/// Event button makes, so the `create_refunds_on_event_cancel` trigger
+/// (supabase/refund_functions.sql) creates a pending refund per purchase,
+/// cancels the tickets and notifies each buyer.
 class AdminEventsTicketsScreen extends StatefulWidget {
   const AdminEventsTicketsScreen({super.key});
 
   @override
-  State<AdminEventsTicketsScreen> createState() =>
-      _AdminEventsTicketsScreenState();
+  State<AdminEventsTicketsScreen> createState() => _AdminEventsTicketsScreenState();
 }
 
 class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
-  final TextEditingController _searchController = TextEditingController();
+  static const _statusFilters = ['All', 'Published', 'Draft', 'Cancelled', 'Completed'];
+
+  final _searchController = TextEditingController();
+  List<AdminEventSummary> _events = const [];
+  bool _isLoading = true;
+  String? _loadError;
   String _statusFilter = 'All';
-  String _organizerFilter = 'All Organizers';
-  bool _filtersApplied = false;
-  final Set<String> _expandedEvents = <String>{};
+  final Set<String> _expanded = {};
+  String? _busyEventId;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
 
   @override
   void dispose() {
@@ -36,623 +44,57 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
     super.dispose();
   }
 
-  List<OrganizerEvent> get _filteredEvents {
+  Future<void> _load({bool showSpinner = true}) async {
+    if (showSpinner) {
+      setState(() {
+        _isLoading = true;
+        _loadError = null;
+      });
+    }
+    try {
+      final events = await AdminEventService.instance.fetchEvents();
+      if (!mounted) return;
+      setState(() {
+        _events = events;
+        _isLoading = false;
+        _loadError = null;
+      });
+    } on AdminEventServiceException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadError = e.message;
+        _isLoading = false;
+      });
+    }
+  }
+
+  List<AdminEventSummary> get _filtered {
     final query = _searchController.text.trim().toLowerCase();
-    return EventRepository.instance.events.where((event) {
-      final matchesSearch =
-          query.isEmpty ||
-          event.name.toLowerCase().contains(query) ||
-          event.venue.toLowerCase().contains(query);
-      final matchesStatus =
-          _statusFilter == 'All' || event.status.label == _statusFilter;
-      return matchesSearch && matchesStatus;
+    return _events.where((e) {
+      if (_statusFilter != 'All' && e.statusLabel != _statusFilter) return false;
+      if (query.isEmpty) return true;
+      return '${e.title} ${e.organizerName} ${e.venue}'.toLowerCase().contains(query);
     }).toList();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width >= 900;
-    return Scaffold(
-      backgroundColor: const Color(0xFFF9F9FC),
-      drawer: isWide ? null : Drawer(child: _buildSidebar()),
-      body: Row(
-        children: [
-          if (isWide) SizedBox(width: 180, child: _buildSidebar()),
-          Expanded(
-            child: Column(
-              children: [
-                _buildTopBar(isWide),
-                Expanded(
-                  child: ValueListenableBuilder<TextEditingValue>(
-                    valueListenable: _searchController,
-                    builder: (context, _, child) {
-                      final events = _filteredEvents;
-                      return SingleChildScrollView(
-                        padding: EdgeInsets.all(isWide ? 18 : 14),
-                        child: _buildContent(context, events, isWide),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Widget _buildSidebar() {
-    const items = [
-      (Icons.grid_view_rounded, 'Dashboard'),
-      (Icons.business_outlined, 'Organizer Applications'),
-      (Icons.people_outline, 'Accounts'),
-      (Icons.calendar_today_outlined, 'Events & Tickets'),
-      (Icons.swap_vert_rounded, 'Resale Monitoring'),
-      (Icons.shield_outlined, 'Fraud Alerts'),
-      (Icons.bar_chart_rounded, 'Revenue & Reports'),
-      (Icons.settings_outlined, 'Platform Settings'),
-      (Icons.person_outline, 'Profile'),
-    ];
-    final currentEmail =
-        AdminSession.instance.currentEmail ?? 'admin@fairtix.com';
-
-    return Container(
-      color: const Color(0xFFF3F1FD),
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 18, 12, 18),
-              child: _AdminLogo(),
-            ),
-            const Divider(height: 1, color: AppColors.borderLight),
-            const SizedBox(height: 14),
-            for (var index = 0; index < items.length; index++)
-              _SidebarItem(
-                icon: items[index].$1,
-                label: items[index].$2,
-                selected: index == 3,
-                onTap: () {
-                  if (index == 0) {
-                    Navigator.pushReplacement(
-                      context,
-                      adminPageRoute(const AdminDashboardScreen()),
-                    );
-                  } else if (index == 1) {
-                    Navigator.pushReplacement(
-                      context,
-                      adminPageRoute(const AdminOrganizerApplicationsScreen()),
-                    );
-                  } else if (index == 2) {
-                    Navigator.pushReplacement(
-                      context,
-                      adminPageRoute(const AdminAccountsScreen()),
-                    );
-                  } else if (index == 4) {
-                    Navigator.pushReplacement(
-                      context,
-                      adminPageRoute(const AdminResaleMonitoringScreen()),
-                    );
-                  } else if (index == 5) {
-                    Navigator.pushReplacement(
-                      context,
-                      adminPageRoute(const AdminFraudAlertsScreen()),
-                    );
-                  } else if (index == 6) {
-                    Navigator.pushReplacement(
-                      context,
-                      adminPageRoute(const AdminRevenueReportsScreen()),
-                    );
-                  } else if (index == 7) {
-                    Navigator.pushReplacement(
-                      context,
-                      adminPageRoute(const AdminPlatformSettingsScreen()),
-                    );
-                  } else if (index == 8) {
-                    Navigator.pushReplacement(
-                      context,
-                      adminPageRoute(const AdminProfileScreen()),
-                    );
-                  }
-                },
-              ),
-            const Spacer(),
-            const Divider(height: 1, color: AppColors.borderLight),
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                children: [
-                  const CircleAvatar(
-                    radius: 15,
-                    backgroundColor: Color(0xFFE8E6F1),
-                    child: Icon(
-                      Icons.person,
-                      size: 17,
-                      color: AppColors.textGray,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Admin', style: AppTextStyles.label),
-                        Text(
-                          currentEmail,
-                          style: const TextStyle(
-                            color: AppColors.textGray,
-                            fontSize: 9,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: _confirmLogout,
-                    icon: const Icon(
-                      Icons.logout,
-                      size: 17,
-                      color: AppColors.textGray,
-                    ),
-                    tooltip: 'Log out',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _confirmLogout() async {
-    final shouldLogout = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Log out?'),
-        content: const Text('Are you sure you want to Log Out?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Log out'),
-          ),
-        ],
-      ),
-    );
-    if (!mounted || shouldLogout != true) return;
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
-      (route) => false,
-    );
-  }
-
-  Widget _buildTopBar(bool isWide) {
-    return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 18),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
-      ),
-      child: Row(
-        children: [
-          if (!isWide)
-            Builder(
-              builder: (context) => IconButton(
-                icon: const Icon(Icons.menu, size: 20),
-                onPressed: () => Scaffold.of(context).openDrawer(),
-              ),
-            ),
-          const Text('Events Management', style: AppTextStyles.label),
-          const Spacer(),
-          const Icon(
-            Icons.notifications_none,
-            size: 19,
-            color: AppColors.textGray,
-          ),
-          const SizedBox(width: 14),
-          const CircleAvatar(
-            radius: 14,
-            backgroundColor: Color(0xFFE8E6F1),
-            child: Icon(Icons.person, size: 16, color: AppColors.textGray),
-          ),
-          if (isWide) ...[
-            const SizedBox(width: 8),
-            Text(
-              AdminSession.instance.currentEmail ?? 'admin@fairtix.com',
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-            ),
-            const Icon(Icons.keyboard_arrow_down, size: 16),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildContent(
-    BuildContext context,
-    List<OrganizerEvent> events,
-    bool isWide,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            const Expanded(
-              child: Text('Events & Ticket Sales', style: AppTextStyles.h2),
-            ),
-            OutlinedButton.icon(
-              onPressed: () => _exportCsv(events),
-              icon: const Icon(Icons.download_outlined, size: 16),
-              label: const Text('Export CSV'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.primaryPurple,
-                side: const BorderSide(color: AppColors.primaryPurple),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 18),
-        _buildFilters(isWide),
-        const SizedBox(height: 18),
-        if (events.isEmpty) _emptyState() else _buildEventTable(events),
-        const SizedBox(height: 16),
-        Text(
-          'Showing ${events.length} of ${EventRepository.instance.events.length} events',
-          style: AppTextStyles.bodyGray,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFilters(bool isWide) {
-    final controls = [
-      Expanded(
-        flex: 3,
-        child: TextField(
-          controller: _searchController,
-          decoration: _inputDecoration(
-            'Search event name or venue...',
-            Icons.search,
-          ),
-        ),
-      ),
-      const SizedBox(width: 10),
-      Expanded(
-        child: _dropdown(
-          'Status',
-          _statusFilter,
-          ['All', 'Published', 'Draft', 'Cancelled', 'Completed'],
-          (value) {
-            setState(() => _statusFilter = value!);
-          },
-        ),
-      ),
-      const SizedBox(width: 10),
-      Expanded(
-        child: _dropdown('Organizer', _organizerFilter, ['All Organizers'], (
-          value,
-        ) {
-          setState(() => _organizerFilter = value!);
-        }),
-      ),
-      const SizedBox(width: 10),
-      FilledButton(
-        onPressed: () => setState(() => _filtersApplied = true),
-        style: FilledButton.styleFrom(
-          backgroundColor: AppColors.primaryPurple,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
-        ),
-        child: const Text('Apply Filters'),
-      ),
-    ];
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x08000000),
-            blurRadius: 8,
-            offset: Offset(0, 3),
-          ),
-        ],
-      ),
-      child: isWide
-          ? Row(children: controls)
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                controls[0],
-                const SizedBox(height: 10),
-                Row(children: controls.sublist(2)),
-              ],
-            ),
-    );
-  }
-
-  Widget _dropdown(
-    String label,
-    String value,
-    List<String> values,
-    ValueChanged<String?> onChanged,
-  ) {
-    return DropdownButtonFormField<String>(
-      initialValue: value,
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(color: AppColors.textGray, fontSize: 10),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(7),
-          borderSide: const BorderSide(color: AppColors.borderLight),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(7),
-          borderSide: const BorderSide(color: AppColors.borderLight),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(7),
-          borderSide: const BorderSide(color: AppColors.primaryPurple),
-        ),
-      ),
-      items: values
-          .map(
-            (item) => DropdownMenuItem(
-              value: item,
-              child: Text(item, overflow: TextOverflow.ellipsis),
-            ),
-          )
-          .toList(),
-      onChanged: onChanged,
-    );
-  }
-
-  InputDecoration _inputDecoration(String hint, IconData icon) =>
-      InputDecoration(
-        hintText: hint,
-        prefixIcon: Icon(icon, size: 18, color: AppColors.textGray),
-        filled: true,
-        fillColor: const Color(0xFFF8F7FC),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: AppColors.borderLight),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: AppColors.borderLight),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: AppColors.primaryPurple),
-        ),
-      );
-
-  Widget _buildEventTable(List<OrganizerEvent> events) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.borderLight),
-      ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          headingRowColor: WidgetStateProperty.all(const Color(0xFFFBFBFD)),
-          columns: const [
-            DataColumn(label: Text('EVENT NAME')),
-            DataColumn(label: Text('DATE')),
-            DataColumn(label: Text('VENUE')),
-            DataColumn(label: Text('TICKETS SOLD')),
-            DataColumn(label: Text('STATUS')),
-            DataColumn(label: Text('ACTIONS')),
-          ],
-          rows: [
-            for (final event in events) ...[
-              _eventRow(event),
-              if (_expandedEvents.contains(event.id)) _tierBreakdownRow(event),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  DataRow _tierBreakdownRow(OrganizerEvent event) {
-    return DataRow(
-      color: WidgetStateProperty.all(const Color(0xFFF8F7FC)),
-      cells: [
-        DataCell(
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 540),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Ticket Tier Breakdown',
-                    style: TextStyle(
-                      color: AppColors.primaryPurple,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                    ),
-                  ),
-                  const SizedBox(height: 7),
-                  for (final tier in event.tiers)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Text(
-                        '${tier.name}   |   ₱${tier.price.toStringAsFixed(0)}   |   ${tier.sold} sold / ${tier.quantity}   |   ₱${tier.grossRevenue.toStringAsFixed(0)} revenue',
-                        style: AppTextStyles.body,
-                      ),
-                    ),
-                  if (event.tiers.isEmpty)
-                    const Text(
-                      'No ticket tiers configured.',
-                      style: AppTextStyles.bodyGray,
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        const DataCell(SizedBox.shrink()),
-        const DataCell(SizedBox.shrink()),
-        const DataCell(SizedBox.shrink()),
-        const DataCell(SizedBox.shrink()),
-        const DataCell(SizedBox.shrink()),
-      ],
-    );
-  }
-
-  DataRow _eventRow(OrganizerEvent event) {
-    final expanded = _expandedEvents.contains(event.id);
-    return DataRow(
-      color: WidgetStateProperty.resolveWith(
-        (_) => expanded ? const Color(0xFFF8F7FC) : null,
-      ),
-      cells: [
-        DataCell(
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 220),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.location_on_outlined,
-                  size: 18,
-                  color: AppColors.textGray,
-                ),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    event.name,
-                    style: AppTextStyles.label,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          onTap: () => setState(() {
-            expanded
-                ? _expandedEvents.remove(event.id)
-                : _expandedEvents.add(event.id);
-          }),
-        ),
-        DataCell(Text(event.date, style: AppTextStyles.body)),
-        DataCell(Text(event.venue, style: AppTextStyles.body)),
-        DataCell(Text(event.soldLabel, style: AppTextStyles.label)),
-        DataCell(_statusBadge(event.status)),
-        DataCell(
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                tooltip: expanded ? 'Hide ticket tiers' : 'Show ticket tiers',
-                onPressed: () => setState(() {
-                  expanded
-                      ? _expandedEvents.remove(event.id)
-                      : _expandedEvents.add(event.id);
-                }),
-                icon: Icon(
-                  expanded
-                      ? Icons.visibility_off_outlined
-                      : Icons.visibility_outlined,
-                  size: 18,
-                  color: AppColors.primaryPurple,
-                ),
-              ),
-              IconButton(
-                tooltip: 'Cancel event',
-                onPressed: event.status == EventStatus.cancelled
-                    ? null
-                    : () => _cancelEvent(event),
-                icon: const Icon(
-                  Icons.cancel_outlined,
-                  size: 18,
-                  color: AppColors.dangerRed,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _statusBadge(EventStatus status) {
-    final color = status == EventStatus.published
-        ? AppColors.successGreen
-        : status == EventStatus.cancelled
-        ? AppColors.dangerRed
-        : const Color(0xFFD97706);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        status.label,
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-
-  Widget _emptyState() => Container(
-    padding: const EdgeInsets.all(42),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: AppColors.borderLight),
-    ),
-    child: Column(
-      children: [
-        const Icon(
-          Icons.event_busy_outlined,
-          size: 42,
-          color: AppColors.textGray,
-        ),
-        const SizedBox(height: 12),
-        Text(
-          _filtersApplied
-              ? 'No events match these filters.'
-              : 'No events have been created yet.',
-          style: AppTextStyles.bodyGray,
-        ),
-      ],
-    ),
-  );
-
-  Future<void> _cancelEvent(OrganizerEvent event) async {
+  Future<void> _cancelEvent(AdminEventSummary event) async {
+    final sold = event.ticketsSold;
+    final body = sold == 0
+        ? 'No tickets have been sold for "${event.title}". It will be marked as cancelled.'
+        : 'This cancels "${event.title}" and all $sold ticket${sold == 1 ? '' : 's'} sold '
+              '(${formatPeso(event.grossRevenue)}). A refund is created for each purchase, '
+              'any resale listings are closed, and every ticket holder is notified. '
+              'This cannot be undone.';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Cancel event?'),
-        content: Text(
-          'Cancel ${event.name}? This changes its status to Cancelled.',
-        ),
+        title: const Text('Cancel this event?'),
+        content: Text(body),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -660,118 +102,405 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.dangerRed),
             child: const Text('Cancel Event'),
           ),
         ],
       ),
     );
-    if (confirmed == true) {
-      EventRepository.instance.cancelEvent(event.id);
-      setState(() {});
+    if (confirmed != true) return;
+    await _changeStatus(
+      event,
+      () => AdminEventService.instance.cancelEvent(event.id),
+      sold == 0
+          ? 'Event cancelled.'
+          : 'Event cancelled. Refunds were created for the ticket holders (see Revenue & Reports).',
+    );
+  }
+
+  Future<void> _unpublishEvent(AdminEventSummary event) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Unpublish this event?'),
+        content: Text(
+          '"${event.title}" will no longer be visible or on sale. Tickets already sold stay valid '
+          'and nothing is refunded. The organizer can publish it again.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Unpublish'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await _changeStatus(
+      event,
+      () => AdminEventService.instance.unpublishEvent(event.id),
+      'Event unpublished.',
+    );
+  }
+
+  Future<void> _changeStatus(
+    AdminEventSummary event,
+    Future<void> Function() action,
+    String successMessage,
+  ) async {
+    setState(() => _busyEventId = event.id);
+    try {
+      await action();
+      await _load(showSpinner: false);
+      _toast(successMessage);
+    } on AdminEventServiceException catch (e) {
+      _toast(e.message);
+    } finally {
+      if (mounted) setState(() => _busyEventId = null);
     }
   }
 
-  void _exportCsv(List<OrganizerEvent> events) {
-    final csv = [
-      'Event,Date,Venue,Tickets Sold,Status,Revenue',
-      ...events.map(
-        (event) =>
-            '${event.name},${event.date},${event.venue},${event.soldLabel},${event.status.label},${event.grossRevenue.toStringAsFixed(2)}',
-      ),
-    ].join('\n');
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('CSV ready (${csv.length} characters).')),
+  Future<void> _exportCsv() async {
+    final rows = _filtered;
+    if (rows.isEmpty) {
+      _toast('There are no events to export.');
+      return;
+    }
+    final csv = toCsv([
+      ['Event', 'Organizer', 'Venue', 'Dates', 'Status', 'Tickets Sold', 'Capacity', 'Gross Ticket Sales'],
+      for (final e in rows)
+        [
+          csvSafe(e.title),
+          csvSafe(e.organizerName),
+          csvSafe(e.venue),
+          e.dateLabel,
+          e.statusLabel,
+          e.ticketsSold,
+          e.ticketsTotal,
+          e.grossRevenue.toStringAsFixed(2),
+        ],
+    ]);
+    final saved = await saveCsvFile(
+      fileName: 'fairtix-events-${formatIsoDate(DateTime.now())}.csv',
+      csv: csv,
+    );
+    _toast(saved ? 'Events exported.' : 'Export canceled.');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AdminShell(
+      active: AdminNavItem.eventsTickets,
+      title: 'Events & Tickets',
+      body: _buildBody(),
+    );
+  }
+
+  Widget _buildBody() {
+    // Cancelled events are being refunded, so they don't count as sales.
+    final live = _events.where((e) => e.status != 'canceled').toList();
+    final published = _events.where((e) => e.status == 'published').length;
+    final ticketsSold = live.fold<int>(0, (sum, e) => sum + e.ticketsSold);
+    final gross = live.fold<double>(0, (sum, e) => sum + e.grossRevenue);
+    final filtered = _filtered;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            const Expanded(child: Text('Events & Tickets', style: AppTextStyles.h2)),
+            IconButton(
+              onPressed: _isLoading ? null : _load,
+              icon: const Icon(Icons.refresh, size: 18),
+              tooltip: 'Refresh',
+            ),
+            const SizedBox(width: 4),
+            OutlinedButton.icon(
+              onPressed: _isLoading ? null : _exportCsv,
+              icon: const Icon(Icons.download_outlined, size: 14),
+              label: const Text('Export CSV', style: TextStyle(fontSize: 11)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primaryPurple,
+                side: const BorderSide(color: AppColors.primaryPurple),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        AdminSummaryRow(
+          cards: [
+            AdminSummaryCard(
+              icon: Icons.event_outlined,
+              color: AppColors.primaryPurple,
+              label: 'Total Events',
+              value: '${_events.length}',
+              caption: '$published published',
+            ),
+            AdminSummaryCard(
+              icon: Icons.confirmation_number_outlined,
+              color: AppColors.infoBlue,
+              label: 'Tickets Sold',
+              value: '$ticketsSold',
+              caption: 'Excludes cancelled events',
+            ),
+            AdminSummaryCard(
+              icon: Icons.payments_outlined,
+              color: AppColors.successGreen,
+              label: 'Gross Ticket Sales',
+              value: formatPeso(gross),
+              caption: 'Before platform fees',
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        AdminCard(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    hintText: 'Search event, organizer or venue...',
+                    hintStyle: const TextStyle(fontSize: 11),
+                    prefixIcon: const Icon(Icons.search, size: 17, color: AppColors.textGray),
+                    isDense: true,
+                    filled: true,
+                    fillColor: const Color(0xFFF8F7FC),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(7),
+                      borderSide: const BorderSide(color: AppColors.borderLight),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              DropdownButton<String>(
+                value: _statusFilter,
+                underline: const SizedBox.shrink(),
+                items: [
+                  for (final f in _statusFilters)
+                    DropdownMenuItem(value: f, child: Text(f, style: const TextStyle(fontSize: 12))),
+                ],
+                onChanged: (value) => setState(() => _statusFilter = value ?? 'All'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+        AdminCard(
+          child: _isLoading
+              ? const Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+                )
+              : _loadError != null
+              ? AdminErrorBox(message: _loadError!, onRetry: _load)
+              : _buildTable(filtered),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTable(List<AdminEventSummary> filtered) {
+    if (filtered.isEmpty) {
+      return AdminEmptyState(
+        icon: Icons.event_busy_outlined,
+        title: _events.isEmpty ? 'No events yet' : 'No events match your filters',
+        hint: _events.isEmpty
+            ? 'Events will appear here once organizers create them.'
+            : 'Try a different search or status.',
+      );
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 760;
+        return Column(
+          children: [
+            if (wide)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                color: const Color(0xFFFBFBFD),
+                child: const Row(
+                  children: [
+                    Expanded(flex: 3, child: Text('EVENT', style: adminHeaderStyle)),
+                    Expanded(flex: 2, child: Text('ORGANIZER', style: adminHeaderStyle)),
+                    Expanded(flex: 2, child: Text('DATE', style: adminHeaderStyle)),
+                    Expanded(child: Text('SOLD', style: adminHeaderStyle)),
+                    Expanded(child: Text('STATUS', style: adminHeaderStyle)),
+                    SizedBox(width: 200, child: Text('ACTIONS', style: adminHeaderStyle)),
+                  ],
+                ),
+              ),
+            const Divider(height: 1),
+            for (final event in filtered)
+              _EventRow(
+                event: event,
+                wide: wide,
+                expanded: _expanded.contains(event.id),
+                busy: _busyEventId == event.id,
+                onToggle: () => setState(() {
+                  if (!_expanded.add(event.id)) _expanded.remove(event.id);
+                }),
+                onUnpublish: () => _unpublishEvent(event),
+                onCancel: () => _cancelEvent(event),
+              ),
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Showing ${filtered.length} of ${_events.length} events',
+                  style: const TextStyle(color: AppColors.textGray, fontSize: 10),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
 
-class _AdminLogo extends StatelessWidget {
-  const _AdminLogo();
+AdminBadge _statusBadge(AdminEventSummary event) => switch (event.status) {
+  'published' => AdminBadge.success(event.statusLabel),
+  'canceled' => AdminBadge.danger(event.statusLabel),
+  'completed' => AdminBadge.info(event.statusLabel),
+  _ => AdminBadge.neutral(event.statusLabel),
+};
 
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
+class _EventRow extends StatelessWidget {
+  const _EventRow({
+    required this.event,
+    required this.wide,
+    required this.expanded,
+    required this.busy,
+    required this.onToggle,
+    required this.onUnpublish,
+    required this.onCancel,
+  });
+
+  final AdminEventSummary event;
+  final bool wide;
+  final bool expanded;
+  final bool busy;
+  final VoidCallback onToggle;
+  final VoidCallback onUnpublish;
+  final VoidCallback onCancel;
+
+  Widget _actions() => Wrap(
+    spacing: 2,
     children: [
-      Container(
-        width: 22,
-        height: 22,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: AppColors.primaryPurple,
-          borderRadius: BorderRadius.circular(5),
-        ),
-        child: const Icon(
-          Icons.confirmation_number_outlined,
-          color: Colors.white,
-          size: 14,
-        ),
+      TextButton(
+        onPressed: onToggle,
+        style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 6), minimumSize: Size.zero),
+        child: Text(expanded ? 'Hide tiers' : 'Tiers', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
       ),
-      const SizedBox(width: 6),
-      const Text(
-        'FairTix',
-        style: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w800,
-          fontStyle: FontStyle.italic,
+      if (event.canUnpublish)
+        TextButton(
+          onPressed: busy ? null : onUnpublish,
+          style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 6), minimumSize: Size.zero),
+          child: const Text('Unpublish', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
         ),
-      ),
-      const SizedBox(width: 3),
-      const Text(
-        'ADMIN',
-        style: TextStyle(fontSize: 8, color: AppColors.textGray),
-      ),
+      if (event.canCancel)
+        TextButton(
+          onPressed: busy ? null : onCancel,
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            minimumSize: Size.zero,
+            foregroundColor: AppColors.dangerRed,
+          ),
+          child: Text(busy ? 'Working...' : 'Cancel', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+        ),
     ],
   );
-}
 
-class _SidebarItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _SidebarItem({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
+  Widget _tierDetails() => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+    color: const Color(0xFFFBFBFD),
+    child: event.tiers.isEmpty
+        ? const Text('No ticket tiers.', style: TextStyle(color: AppColors.textGray, fontSize: 11))
+        : Column(
+            children: [
+              for (final tier in event.tiers)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Expanded(flex: 3, child: Text(tier.label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600))),
+                      Expanded(flex: 2, child: Text(formatPeso(tier.price), style: const TextStyle(fontSize: 11))),
+                      Expanded(flex: 2, child: Text('${tier.sold} / ${tier.total} sold', style: const TextStyle(fontSize: 11))),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          formatPeso(tier.revenue),
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(fontSize: 11, color: AppColors.textGray),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+  );
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-      child: Material(
-        color: selected ? AppColors.primaryPurple : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+    final row = wide
+        ? Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               children: [
-                Icon(
-                  icon,
-                  size: 16,
-                  color: selected ? Colors.white : AppColors.textDark,
-                ),
-                const SizedBox(width: 9),
                 Expanded(
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      color: selected ? Colors.white : AppColors.textDark,
-                      fontSize: 10,
-                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                    ),
+                  flex: 3,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(event.title, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                      Text(event.venue, style: const TextStyle(fontSize: 10.5, color: AppColors.textGray)),
+                    ],
                   ),
                 ),
+                Expanded(flex: 2, child: Text(event.organizerName, style: const TextStyle(fontSize: 11))),
+                Expanded(flex: 2, child: Text(event.dateLabel, style: const TextStyle(fontSize: 11))),
+                Expanded(child: Text(event.soldLabel, style: const TextStyle(fontSize: 11))),
+                Expanded(child: Align(alignment: Alignment.centerLeft, child: _statusBadge(event))),
+                SizedBox(width: 200, child: _actions()),
               ],
             ),
-          ),
-        ),
-      ),
+          )
+        : Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: Text(event.title, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700))),
+                    _statusBadge(event),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text('${event.organizerName} \u2022 ${event.venue}', style: const TextStyle(fontSize: 10.5, color: AppColors.textGray)),
+                const SizedBox(height: 4),
+                Text('${event.dateLabel} \u2022 ${event.soldLabel} sold', style: const TextStyle(fontSize: 11)),
+                const SizedBox(height: 6),
+                _actions(),
+              ],
+            ),
+          );
+
+    return Container(
+      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.borderLight))),
+      child: Column(children: [row, if (expanded) _tierDetails()]),
     );
   }
 }

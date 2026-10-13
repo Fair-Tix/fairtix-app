@@ -1,41 +1,62 @@
 import 'package:flutter/material.dart';
 
-import '../../services/admin_session.dart';
-import '../../models/transaction.dart' show formatDateTime;
+import '../../services/admin_overview_service.dart';
 import '../../services/admin_refund_service.dart';
 import '../../services/admin_report_service.dart';
+import '../../services/admin_resale_service.dart';
 import '../../services/admin_revenue_service.dart';
 import '../../services/csv_export.dart';
+import '../../widgets/admin_shell.dart';
+import '../../widgets/admin_widgets.dart';
 import '../organizer/app_colors.dart';
-import 'admin-accounts.dart';
-import 'admin-dashboard.dart';
-import 'admin-events-tickets.dart';
-import 'admin-fraud-alerts.dart';
-import 'admin-login.dart';
-import 'admin-organizer-applications.dart';
-import 'admin-resale-monitoring.dart';
-import 'admin-route.dart';
-import 'admin-platform-settings.dart';
-import 'admin-profile.dart';
 
+/// Platform earnings, the refund log and CSV report exports.
+///
+/// Every number comes from Supabase:
+///  - summary cards + "Platform Fees by Plan": `admin_revenue_by_plan`
+///    (the range chips at the top change this and the exports)
+///  - daily chart + monthly table: `admin_revenue_daily` /
+///    `admin_revenue_monthly` (always the last 30 days / this year,
+///    independent of the range chips, as their titles say)
+///  - refund log: `public.refunds`
 class AdminRevenueReportsScreen extends StatefulWidget {
   const AdminRevenueReportsScreen({super.key});
 
   @override
-  State<AdminRevenueReportsScreen> createState() =>
-      _AdminRevenueReportsScreenState();
+  State<AdminRevenueReportsScreen> createState() => _AdminRevenueReportsScreenState();
 }
 
 class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
+  static const _monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+
   String _range = 'This Month';
+  DateTimeRange? _customRange;
+
   List<PlanRevenue> _plans = [];
   bool _isLoading = true;
   String? _errorMessage;
+
   List<RefundEntry> _refunds = [];
   bool _isLoadingRefunds = true;
   String? _refundError;
-  DateTimeRange? _customRange;
+
+  List<DailyRevenue> _daily = [];
+  List<MonthlyRevenue> _monthly = [];
+  bool _isLoadingCharts = true;
+  String? _chartsError;
+
   bool _isExporting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRevenue();
+    _loadRefunds();
+    _loadCharts();
+  }
 
   /// Inclusive start / exclusive end of the selected range, or (null, null)
   /// for a Custom Range that hasn't been picked yet (= all time).
@@ -62,7 +83,7 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
     final (from, to) = _rangeBounds();
     if (from == null || to == null) return 'all time';
     String d(DateTime x) => '${x.month}/${x.day}/${x.year}';
-    return '${d(from)} – ${d(to.subtract(const Duration(days: 1)))}';
+    return '${d(from)} \u2013 ${d(to.subtract(const Duration(days: 1)))}';
   }
 
   Future<void> _selectRange(String range) async {
@@ -86,56 +107,24 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
     await _loadRevenue();
   }
 
-  Future<void> _exportReport(
-    String slug,
-    Future<String> Function(DateTime? from, DateTime? to) build,
-  ) async {
-    if (_isExporting) return;
-    setState(() => _isExporting = true);
+  // ── loading ──────────────────────────────────────────────────────────
+
+  Future<void> _loadRevenue() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
     try {
       final (from, to) = _rangeBounds();
-      final csv = await build(from, to);
-      final now = DateTime.now();
-      String two(int n) => n.toString().padLeft(2, '0');
-      final fileName =
-          'fairtix_${slug}_${now.year}-${two(now.month)}-${two(now.day)}.csv';
-      final saved = await saveCsvFile(fileName: fileName, csv: csv);
+      final plans = await AdminRevenueService.instance.fetchByPlan(from: from, to: to);
       if (!mounted) return;
-      if (saved) _showMessage('Report exported ($fileName).');
-    } on AdminReportException catch (e) {
+      setState(() => _plans = plans);
+    } on AdminRevenueException catch (e) {
       if (!mounted) return;
-      _showMessage(e.message);
-    } catch (e) {
-      if (!mounted) return;
-      _showMessage('Could not save the report: $e');
+      setState(() => _errorMessage = e.message);
     } finally {
-      if (mounted) setState(() => _isExporting = false);
+      if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  Future<void> _exportTransactions() => _exportReport(
-    'transactions',
-    (from, to) =>
-        AdminReportService.instance.transactionReportCsv(from: from, to: to),
-  );
-
-  Future<void> _exportRevenue() => _exportReport(
-    'revenue',
-    (from, to) =>
-        AdminReportService.instance.revenueReportCsv(from: from, to: to),
-  );
-
-  Future<void> _exportRefunds() => _exportReport(
-    'refunds',
-    (from, to) =>
-        AdminReportService.instance.refundReportCsv(from: from, to: to),
-  );
-
-  @override
-  void initState() {
-    super.initState();
-    _loadRevenue();
-    _loadRefunds();
   }
 
   Future<void> _loadRefunds() async {
@@ -155,14 +144,39 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
     }
   }
 
+  Future<void> _loadCharts() async {
+    setState(() {
+      _isLoadingCharts = true;
+      _chartsError = null;
+    });
+    try {
+      final daily = await AdminOverviewService.instance.fetchDaily(days: 30);
+      final monthly = await AdminOverviewService.instance.fetchMonthly(DateTime.now().year);
+      if (!mounted) return;
+      setState(() {
+        _daily = daily;
+        _monthly = monthly;
+      });
+    } on AdminOverviewException catch (e) {
+      if (!mounted) return;
+      setState(() => _chartsError = e.message);
+    } finally {
+      if (mounted) setState(() => _isLoadingCharts = false);
+    }
+  }
+
+  Future<void> _refreshAll() => Future.wait([_loadRevenue(), _loadRefunds(), _loadCharts()]);
+
+  // ── refunds ──────────────────────────────────────────────────────────
+
   Future<void> _processRefund(RefundEntry refund) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Mark refund as processed?'),
         content: Text(
-          'Record that ${_money(refund.amount)} was refunded to '
-          '${refund.buyerName}. This does not send money by itself — '
+          'Record that ${formatPeso(refund.amount)} was refunded to '
+          '${refund.buyerName}. This does not send money by itself \u2014 '
           'issue the refund in PayMongo first.',
         ),
         actions: [
@@ -182,230 +196,80 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
       await AdminRefundService.instance.markProcessed(refund.id);
       if (!mounted) return;
       _showMessage('Refund marked as processed.');
-      await Future.wait([_loadRefunds(), _loadRevenue()]);
+      await _refreshAll();
     } on AdminRefundException catch (e) {
       if (!mounted) return;
       _showMessage(e.message);
     }
   }
 
-  Future<void> _loadRevenue() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+  // ── exports ──────────────────────────────────────────────────────────
+
+  Future<void> _exportReport(
+    String slug,
+    Future<String> Function(DateTime? from, DateTime? to) build,
+  ) async {
+    if (_isExporting) return;
+    setState(() => _isExporting = true);
     try {
       final (from, to) = _rangeBounds();
-      final plans = await AdminRevenueService.instance.fetchByPlan(
-        from: from,
-        to: to,
-      );
+      final csv = await build(from, to);
+      final fileName = 'fairtix_${slug}_${formatIsoDate(DateTime.now())}.csv';
+      final saved = await saveCsvFile(fileName: fileName, csv: csv);
       if (!mounted) return;
-      setState(() => _plans = plans);
-    } on AdminRevenueException catch (e) {
+      if (saved) _showMessage('Report exported ($fileName).');
+    } on AdminReportException catch (e) {
       if (!mounted) return;
-      setState(() => _errorMessage = e.message);
+      _showMessage(e.message);
+    } on AdminResaleException catch (e) {
+      if (!mounted) return;
+      _showMessage(e.message);
+    } catch (e) {
+      if (!mounted) return;
+      _showMessage('Could not save the report: $e');
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _isExporting = false);
     }
   }
 
-  static const _items = [
-    (Icons.grid_view_rounded, 'Dashboard'),
-    (Icons.business_outlined, 'Organizer Applications'),
-    (Icons.people_outline, 'Accounts'),
-    (Icons.calendar_today_outlined, 'Events & Tickets'),
-    (Icons.swap_vert_rounded, 'Resale Monitoring'),
-    (Icons.shield_outlined, 'Fraud Alerts'),
-    (Icons.bar_chart_rounded, 'Revenue & Reports'),
-    (Icons.settings_outlined, 'Platform Settings'),
-    (Icons.person_outline, 'Profile'),
-  ];
+  Future<void> _exportTransactions() => _exportReport(
+    'transactions',
+    (from, to) => AdminReportService.instance.transactionReportCsv(from: from, to: to),
+  );
 
-  void _navigate(int index) {
-    final pages = <int, Widget>{
-      0: const AdminDashboardScreen(),
-      1: const AdminOrganizerApplicationsScreen(),
-      2: const AdminAccountsScreen(),
-      3: const AdminEventsTicketsScreen(),
-      4: const AdminResaleMonitoringScreen(),
-      5: const AdminFraudAlertsScreen(),
-      7: const AdminPlatformSettingsScreen(),
-      8: const AdminProfileScreen(),
-    };
-    final page = pages[index];
-    if (page != null) {
-      Navigator.pushReplacement(context, adminPageRoute(page));
-    }
+  Future<void> _exportRevenue() => _exportReport(
+    'revenue',
+    (from, to) => AdminReportService.instance.revenueReportCsv(from: from, to: to),
+  );
+
+  Future<void> _exportRefunds() => _exportReport(
+    'refunds',
+    (from, to) => AdminReportService.instance.refundReportCsv(from: from, to: to),
+  );
+
+  Future<void> _exportResale() => _exportReport('resale_activity', (from, to) async {
+    final listings = await AdminResaleService.instance.fetchListings();
+    final inRange = listings.where((l) {
+      if (from != null && l.listedAt.isBefore(from)) return false;
+      if (to != null && !l.listedAt.isBefore(to)) return false;
+      return true;
+    }).toList();
+    return resaleListingsToCsv(inRange);
+  });
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
+
+  // ── build ────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width >= 900;
-    return Scaffold(
-      backgroundColor: const Color(0xFFF9F9FC),
-      drawer: isWide ? null : Drawer(child: _buildSidebar()),
-      body: Row(
-        children: [
-          if (isWide) SizedBox(width: 180, child: _buildSidebar()),
-          Expanded(
-            child: Column(
-              children: [
-                _buildTopBar(isWide),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.all(isWide ? 18 : 14),
-                    child: _buildContent(isWide),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSidebar() {
-    final currentEmail =
-        AdminSession.instance.currentEmail ?? 'admin@fairtix.com';
-
-    return Container(
-      color: const Color(0xFFF3F1FD),
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 18, 12, 18),
-              child: _AdminLogo(),
-            ),
-            const Divider(height: 1, color: AppColors.borderLight),
-            const SizedBox(height: 14),
-            for (var index = 0; index < _items.length; index++)
-              _SidebarItem(
-                icon: _items[index].$1,
-                label: _items[index].$2,
-                selected: index == 6,
-                onTap: () => _navigate(index),
-              ),
-            const Spacer(),
-            const Divider(height: 1, color: AppColors.borderLight),
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                children: [
-                  const CircleAvatar(
-                    radius: 15,
-                    backgroundColor: Color(0xFFE8E6F1),
-                    child: Icon(
-                      Icons.person,
-                      size: 17,
-                      color: AppColors.textGray,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Admin', style: AppTextStyles.label),
-                        Text(
-                          currentEmail,
-                          style: const TextStyle(
-                            color: AppColors.textGray,
-                            fontSize: 9,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: _confirmLogout,
-                    icon: const Icon(
-                      Icons.logout,
-                      size: 17,
-                      color: AppColors.textGray,
-                    ),
-                    tooltip: 'Log out',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTopBar(bool isWide) {
-    return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 18),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
-      ),
-      child: Row(
-        children: [
-          if (!isWide)
-            Builder(
-              builder: (context) => IconButton(
-                icon: const Icon(Icons.menu, size: 20),
-                onPressed: () => Scaffold.of(context).openDrawer(),
-              ),
-            ),
-          const Text('Revenue & Reports', style: AppTextStyles.label),
-          const Spacer(),
-          SizedBox(
-            width: isWide ? 270 : 130,
-            height: 32,
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Search users, events...',
-                hintStyle: const TextStyle(
-                  color: Color(0xFFA6A9B7),
-                  fontSize: 10,
-                ),
-                prefixIcon: const Icon(
-                  Icons.search,
-                  size: 16,
-                  color: Color(0xFFA6A9B7),
-                ),
-                filled: true,
-                fillColor: const Color(0xFFF3F3F6),
-                contentPadding: EdgeInsets.zero,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
-          const Icon(
-            Icons.notifications_none,
-            size: 19,
-            color: AppColors.textGray,
-          ),
-          const SizedBox(width: 14),
-          const CircleAvatar(
-            radius: 14,
-            backgroundColor: Color(0xFFE8E6F1),
-            child: Icon(Icons.person, size: 16, color: AppColors.textGray),
-          ),
-          if (isWide) ...[
-            const SizedBox(width: 8),
-            Text(
-              AdminSession.instance.currentEmail ?? 'admin@fairtix.com',
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-            ),
-            const Icon(Icons.keyboard_arrow_down, size: 16),
-          ],
-        ],
-      ),
+    return AdminShell(
+      active: AdminNavItem.revenueReports,
+      title: 'Revenue & Reports',
+      body: _buildContent(MediaQuery.of(context).size.width >= 1100),
     );
   }
 
@@ -435,7 +299,11 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
               ),
             ),
             if (isWide) _buildRangeControls(),
-            const SizedBox(width: 10),
+            IconButton(
+              onPressed: _refreshAll,
+              icon: const Icon(Icons.refresh, size: 18),
+              tooltip: 'Refresh',
+            ),
             OutlinedButton.icon(
               onPressed: _isExporting ? null : _exportRevenue,
               icon: const Icon(Icons.download_outlined, size: 14),
@@ -453,7 +321,31 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
           _buildErrorBanner(),
           const SizedBox(height: 12),
         ],
-        _buildSummaryCards(revenue, fees, payouts, hasData),
+        AdminSummaryRow(
+          cards: [
+            AdminSummaryCard(
+              icon: Icons.payments_outlined,
+              color: AppColors.primaryPurple,
+              label: 'Total Revenue',
+              value: formatPeso(revenue),
+              caption: hasData ? 'From recorded ticket sales' : 'No sales data yet',
+            ),
+            AdminSummaryCard(
+              icon: Icons.percent_outlined,
+              color: const Color(0xFFB05BFF),
+              label: 'Platform Fees',
+              value: formatPeso(fees),
+              caption: hasData ? 'Per plan: 8% / 9% / 10%' : 'No fee data yet',
+            ),
+            AdminSummaryCard(
+              icon: Icons.sell_outlined,
+              color: AppColors.successGreen,
+              label: 'Net Payouts',
+              value: formatPeso(payouts),
+              caption: hasData ? 'After platform fees' : 'No payout data yet',
+            ),
+          ],
+        ),
         const SizedBox(height: 18),
         _buildFeesByPlan(),
         const SizedBox(height: 18),
@@ -461,18 +353,18 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: _buildDailyRevenue(hasData)),
+              Expanded(child: _buildDailyRevenue()),
               const SizedBox(width: 18),
-              Expanded(child: _buildBreakdown(revenue, hasData)),
+              Expanded(child: _buildBreakdown(revenue)),
             ],
           )
         else ...[
-          _buildDailyRevenue(hasData),
+          _buildDailyRevenue(),
           const SizedBox(height: 18),
-          _buildBreakdown(revenue, hasData),
+          _buildBreakdown(revenue),
         ],
         const SizedBox(height: 18),
-        _buildMonthlyBreakdown(hasData),
+        _buildMonthlyBreakdown(),
         const SizedBox(height: 18),
         _buildRefundLog(),
         const SizedBox(height: 22),
@@ -484,6 +376,7 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
   Widget _buildRangeControls() {
     return Container(
       height: 34,
+      margin: const EdgeInsets.only(right: 6),
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border.all(color: AppColors.borderLight),
@@ -499,27 +392,23 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 11),
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: _range == range
-                      ? AppColors.primaryPurple
-                      : Colors.transparent,
+                  color: _range == range ? AppColors.primaryPurple : Colors.transparent,
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Row(
                   children: [
                     if (range == 'Custom Range') ...[
-                      const Icon(
+                      Icon(
                         Icons.calendar_today_outlined,
                         size: 12,
-                        color: AppColors.textGray,
+                        color: _range == range ? Colors.white : AppColors.textGray,
                       ),
                       const SizedBox(width: 4),
                     ],
                     Text(
                       range,
                       style: TextStyle(
-                        color: _range == range
-                            ? Colors.white
-                            : AppColors.textGray,
+                        color: _range == range ? Colors.white : AppColors.textGray,
                         fontSize: 9,
                         fontWeight: FontWeight.w600,
                       ),
@@ -530,108 +419,6 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
             ),
         ],
       ),
-    );
-  }
-
-  Widget _buildSummaryCards(
-    double revenue,
-    double fees,
-    double payouts,
-    bool hasData,
-  ) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final cards = [
-          (
-            Icons.payments_outlined,
-            AppColors.primaryPurple,
-            'Total Revenue',
-            _money(revenue),
-            hasData ? 'From recorded ticket sales' : 'No sales data yet',
-          ),
-          (
-            Icons.percent_outlined,
-            const Color(0xFFB05BFF),
-            'Platform Fees',
-            _money(fees),
-            hasData ? 'Per plan: 8% / 9% / 10%' : 'No fee data yet',
-          ),
-          (
-            Icons.sell_outlined,
-            const Color(0xFF10B981),
-            'Net Payouts',
-            _money(payouts),
-            hasData ? 'After platform fees' : 'No payout data yet',
-          ),
-        ];
-        return Wrap(
-          spacing: 16,
-          runSpacing: 12,
-          children: cards
-              .map(
-                (card) => SizedBox(
-                  width: constraints.maxWidth > 760
-                      ? (constraints.maxWidth - 32) / 3
-                      : constraints.maxWidth,
-                  child: Container(
-                    height: 116,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppColors.borderLight),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x08000000),
-                          blurRadius: 8,
-                          offset: Offset(0, 3),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 14,
-                              backgroundColor: card.$2.withValues(alpha: 0.12),
-                              child: Icon(card.$1, size: 16, color: card.$2),
-                            ),
-                            const SizedBox(width: 9),
-                            Text(
-                              card.$3,
-                              style: const TextStyle(
-                                color: AppColors.textGray,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const Spacer(),
-                        Text(
-                          card.$4,
-                          style: TextStyle(
-                            color: card.$2,
-                            fontSize: 24,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        Text(
-                          card.$5,
-                          style: const TextStyle(
-                            color: AppColors.textGray,
-                            fontSize: 10,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              )
-              .toList(),
-        );
-      },
     );
   }
 
@@ -658,79 +445,45 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
   }
 
   Widget _buildFeesByPlan() {
+    final plans = _plans.isEmpty
+        ? [
+            for (final (name, rate) in AdminRevenueService.plans)
+              PlanRevenue(plan: name, rate: rate, tickets: 0, gross: 0, fees: 0, net: 0),
+          ]
+        : _plans;
     return _panel(
       title: 'Platform Fees by Plan',
       trailing: _isLoading ? 'Loading...' : _rangeLabel(),
       child: Column(
         children: [
-          const Divider(height: 1),
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 10, 16, 10),
             child: Row(
               children: [
-                Expanded(child: Text('PLAN', style: _headerStyle)),
-                Expanded(child: Text('FEE RATE', style: _headerStyle)),
-                Expanded(child: Text('TICKETS', style: _headerStyle)),
-                Expanded(child: Text('TICKET REVENUE', style: _headerStyle)),
-                Expanded(child: Text('PLATFORM FEES', style: _headerStyle)),
+                Expanded(child: Text('PLAN', style: adminHeaderStyle)),
+                Expanded(child: Text('FEE RATE', style: adminHeaderStyle)),
+                Expanded(child: Text('TICKETS', style: adminHeaderStyle)),
+                Expanded(child: Text('TICKET REVENUE', style: adminHeaderStyle)),
+                Expanded(child: Text('PLATFORM FEES', style: adminHeaderStyle)),
               ],
             ),
           ),
           const Divider(height: 1),
-          for (final plan in _plans.isEmpty
-              ? [
-                  for (final (name, rate) in AdminRevenueService.plans)
-                    PlanRevenue(
-                      plan: name,
-                      rate: rate,
-                      tickets: 0,
-                      gross: 0,
-                      fees: 0,
-                      net: 0,
-                    ),
-                ]
-              : _plans)
+          for (final plan in plans)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
               child: Row(
                 children: [
-                  Expanded(
-                    child: Text(
-                      plan.plan,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
+                  Expanded(child: Text(plan.plan, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700))),
                   Expanded(
                     child: Text(
                       plan.rateLabel,
-                      style: const TextStyle(
-                        color: AppColors.primaryPurple,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
+                      style: const TextStyle(color: AppColors.primaryPurple, fontSize: 11, fontWeight: FontWeight.w700),
                     ),
                   ),
-                  Expanded(
-                    child: Text(
-                      '${plan.tickets}',
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      _money(plan.gross),
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      _money(plan.fees),
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                  ),
+                  Expanded(child: Text('${plan.tickets}', style: const TextStyle(fontSize: 11))),
+                  Expanded(child: Text(formatPeso(plan.gross), style: const TextStyle(fontSize: 11))),
+                  Expanded(child: Text(formatPeso(plan.fees), style: const TextStyle(fontSize: 11))),
                 ],
               ),
             ),
@@ -739,246 +492,300 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
     );
   }
 
-  Widget _buildRefundLog() {
-    final pending = _refunds.where((r) => !r.isProcessed).length;
-    return _panel(
-      title: 'Refund Log',
-      trailing: _isLoadingRefunds
-          ? 'Loading...'
-          : '${_refunds.length} total • $pending pending',
-      child: Column(
-        children: [
-          const Divider(height: 1),
-          if (_refundError != null)
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _refundError!,
-                      style: const TextStyle(
-                        color: Color(0xFFB91C1C),
-                        fontSize: 11,
-                      ),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: _loadRefunds,
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
-            )
-          else if (!_isLoadingRefunds && _refunds.isEmpty)
-            const SizedBox(
-              height: 110,
-              child: Center(
-                child: Text(
-                  'No refunds yet. Refunds appear here when an event is canceled.',
-                  style: TextStyle(color: AppColors.textGray, fontSize: 11),
-                ),
-              ),
-            )
-          else ...[
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 10, 16, 10),
-              child: Row(
-                children: [
-                  Expanded(flex: 2, child: Text('DATE', style: _headerStyle)),
-                  Expanded(flex: 2, child: Text('EVENT', style: _headerStyle)),
-                  Expanded(flex: 2, child: Text('BUYER', style: _headerStyle)),
-                  Expanded(child: Text('AMOUNT', style: _headerStyle)),
-                  Expanded(child: Text('STATUS', style: _headerStyle)),
-                  SizedBox(width: 96),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            for (final refund in _refunds) ...[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+  Widget _chartSpinner() => const SizedBox(
+    height: 220,
+    child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+  );
+
+  Widget _buildDailyRevenue() {
+    final total = _daily.fold<double>(0, (sum, d) => sum + d.gross);
+    final maxGross = _daily.fold<double>(0, (m, d) => d.gross > m ? d.gross : m);
+
+    final Widget body;
+    if (_isLoadingCharts) {
+      body = _chartSpinner();
+    } else if (_chartsError != null) {
+      body = AdminErrorBox(message: _chartsError!, onRetry: _loadCharts);
+    } else if (total <= 0) {
+      body = const SizedBox(
+        height: 220,
+        child: AdminEmptyState(
+          icon: Icons.show_chart,
+          title: 'No sales in the last 30 days',
+          hint: 'Daily ticket revenue will appear here as tickets are sold.',
+        ),
+      );
+    } else {
+      body = Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+        child: SizedBox(
+          height: 190,
+          child: Column(
+            children: [
+              Expanded(
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(
-                      flex: 2,
-                      child: Text(
-                        formatDateTime(refund.createdAt),
-                        style: const TextStyle(fontSize: 10),
-                      ),
-                    ),
-                    Expanded(
-                      flex: 2,
-                      child: Text(
-                        refund.eventTitle,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      flex: 2,
-                      child: Text(
-                        refund.buyerName,
-                        style: const TextStyle(fontSize: 10),
-                      ),
-                    ),
-                    Expanded(
-                      child: Text(
-                        _money(refund.amount),
-                        style: const TextStyle(fontSize: 10),
-                      ),
-                    ),
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: refund.isProcessed
-                                ? const Color(0xFFD1FAE5)
-                                : const Color(0xFFFEF3C7),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            refund.statusLabel,
-                            style: TextStyle(
-                              color: refund.isProcessed
-                                  ? const Color(0xFF047857)
-                                  : const Color(0xFFB45309),
-                              fontSize: 9,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    SizedBox(
-                      width: 96,
-                      child: refund.isProcessed
-                          ? const SizedBox.shrink()
-                          : TextButton(
-                              onPressed: () => _processRefund(refund),
-                              child: const Text(
-                                'Mark Processed',
-                                style: TextStyle(fontSize: 9),
+                    for (final d in _daily)
+                      Expanded(
+                        child: Tooltip(
+                          message:
+                              '${formatAdminDate(d.day)}\n${formatPeso(d.gross)} \u2022 ${d.tickets} ticket${d.tickets == 1 ? '' : 's'}',
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 1),
+                            child: Align(
+                              alignment: Alignment.bottomCenter,
+                              child: FractionallySizedBox(
+                                heightFactor: d.gross <= 0 ? 0.012 : (d.gross / maxGross).clamp(0.03, 1.0).toDouble(),
+                                widthFactor: 1,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: d.gross > 0 ? AppColors.primaryPurple : AppColors.borderLight,
+                                    borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
+                                  ),
+                                ),
                               ),
                             ),
-                    ),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
-              const Divider(height: 1),
-            ],
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDailyRevenue(bool hasData) {
-    return _panel(
-      title: 'Daily Revenue - Last 30 Days',
-      trailing: 'No recorded sales',
-      child: SizedBox(
-        height: 220,
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.show_chart, size: 42, color: const Color(0xFFD9D7E4)),
-              const SizedBox(height: 10),
-              Text(
-                hasData
-                    ? 'Daily revenue will appear here.'
-                    : 'No revenue data yet',
-                style: const TextStyle(color: AppColors.textGray, fontSize: 12),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'This chart will use ticket sales from the backend.',
-                style: TextStyle(color: Color(0xFFA6A9B7), fontSize: 10),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Text(formatAdminDate(_daily.first.day), style: const TextStyle(color: AppColors.textGray, fontSize: 9)),
+                  const Spacer(),
+                  Text(formatAdminDate(_daily.last.day), style: const TextStyle(color: AppColors.textGray, fontSize: 9)),
+                ],
               ),
             ],
           ),
         ),
-      ),
+      );
+    }
+
+    return _panel(
+      title: 'Daily Revenue \u2013 Last 30 Days',
+      trailing: (_isLoadingCharts || _chartsError != null) ? null : '${formatPeso(total)} total',
+      child: body,
     );
   }
 
-  Widget _buildBreakdown(double revenue, bool hasData) {
+  Widget _buildBreakdown(double revenue) {
     return _panel(
-      title: 'Revenue Breakdown',
-      child: SizedBox(
-        height: 220,
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.donut_large_outlined,
-                size: 54,
-                color: hasData
-                    ? AppColors.primaryPurple
-                    : const Color(0xFFD9D7E4),
+      title: 'Revenue Breakdown by Plan',
+      trailing: _isLoading ? null : formatPeso(revenue),
+      child: _isLoading
+          ? _chartSpinner()
+          : revenue <= 0
+          ? const SizedBox(
+              height: 220,
+              child: AdminEmptyState(
+                icon: Icons.donut_large_outlined,
+                title: 'No revenue in this range',
+                hint: 'Ticket revenue by organizer plan will show here.',
               ),
-              const SizedBox(height: 10),
-              Text(
-                hasData ? _money(revenue) : '₱0',
-                style: const TextStyle(
-                  color: AppColors.textDark,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                ),
+            )
+          : Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+              child: Column(
+                children: [
+                  for (final plan in _plans)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  '${plan.plan} (${plan.rateLabel} fee)',
+                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                              Text(
+                                '${(plan.gross / revenue * 100).round()}%',
+                                style: const TextStyle(fontSize: 11, color: AppColors.textGray),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 5),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: plan.gross / revenue,
+                              minHeight: 8,
+                              backgroundColor: const Color(0xFFF0EEFA),
+                              color: AppColors.primaryPurple,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${formatPeso(plan.gross)} \u2022 ${plan.tickets} ticket${plan.tickets == 1 ? '' : 's'}',
+                            style: const TextStyle(color: AppColors.textGray, fontSize: 10),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
               ),
-              const Text(
-                'Total recorded revenue',
-                style: TextStyle(color: AppColors.textGray, fontSize: 10),
-              ),
-            ],
-          ),
-        ),
-      ),
+            ),
     );
   }
 
-  Widget _buildMonthlyBreakdown(bool hasData) {
-    return _panel(
-      title: 'Monthly Breakdown',
-      trailing: '${DateTime.now().year}',
-      child: Column(
+  Widget _buildMonthlyBreakdown() {
+    final year = DateTime.now().year;
+    // Only months up to the current one; future months are always empty.
+    final months = _monthly.take(DateTime.now().month).toList();
+    final hasSales = months.any((m) => m.hasSales);
+
+    String growth(int i) {
+      if (i == 0) return '\u2014';
+      final prev = months[i - 1].gross;
+      if (prev <= 0) return '\u2014';
+      final pct = ((months[i].gross - prev) / prev * 100).round();
+      return '${pct > 0 ? '+' : ''}$pct%';
+    }
+
+    Color growthColor(String text) {
+      if (text.startsWith('+')) return AppColors.successGreen;
+      if (text.startsWith('-')) return AppColors.dangerRed;
+      return AppColors.textGray;
+    }
+
+    final Widget body;
+    if (_isLoadingCharts) {
+      body = _chartSpinner();
+    } else if (_chartsError != null) {
+      body = AdminErrorBox(message: _chartsError!, onRetry: _loadCharts);
+    } else if (!hasSales) {
+      body = AdminEmptyState(
+        icon: Icons.calendar_month_outlined,
+        title: 'No sales recorded in $year yet',
+        hint: 'Monthly figures will appear here once tickets are sold.',
+      );
+    } else {
+      body = Column(
         children: [
-          const Divider(height: 1),
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 10, 16, 10),
             child: Row(
               children: [
-                Expanded(child: Text('MONTH', style: _headerStyle)),
-                Expanded(child: Text('TICKET REVENUE', style: _headerStyle)),
-                Expanded(child: Text('PLATFORM FEES', style: _headerStyle)),
-                Expanded(child: Text('NET PAYOUTS', style: _headerStyle)),
-                Text('GROWTH', style: _headerStyle),
+                Expanded(flex: 2, child: Text('MONTH', style: adminHeaderStyle)),
+                Expanded(flex: 2, child: Text('TICKET REVENUE', style: adminHeaderStyle)),
+                Expanded(flex: 2, child: Text('PLATFORM FEES', style: adminHeaderStyle)),
+                Expanded(flex: 2, child: Text('NET PAYOUTS', style: adminHeaderStyle)),
+                Expanded(child: Text('GROWTH', style: adminHeaderStyle)),
               ],
             ),
           ),
           const Divider(height: 1),
-          SizedBox(
-            height: 130,
-            child: Center(
-              child: Text(
-                hasData
-                    ? 'Monthly figures will appear after sales are recorded.'
-                    : 'No monthly revenue data yet',
-                style: const TextStyle(color: AppColors.textGray, fontSize: 11),
+          for (var i = 0; i < months.length; i++)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 11, 16, 11),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      _monthNames[months[i].month - 1],
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  Expanded(flex: 2, child: Text(formatPeso(months[i].gross), style: const TextStyle(fontSize: 11))),
+                  Expanded(flex: 2, child: Text(formatPeso(months[i].fees), style: const TextStyle(fontSize: 11))),
+                  Expanded(flex: 2, child: Text(formatPeso(months[i].net), style: const TextStyle(fontSize: 11))),
+                  Expanded(
+                    child: Text(
+                      growth(i),
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: growthColor(growth(i))),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
         ],
-      ),
+      );
+    }
+
+    return _panel(title: 'Monthly Breakdown', trailing: '$year', child: body);
+  }
+
+  Widget _buildRefundLog() {
+    final pending = _refunds.where((r) => !r.isProcessed).length;
+    final Widget body;
+    if (_refundError != null) {
+      body = AdminErrorBox(message: _refundError!, onRetry: _loadRefunds);
+    } else if (_isLoadingRefunds) {
+      body = const Padding(
+        padding: EdgeInsets.all(28),
+        child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+      );
+    } else if (_refunds.isEmpty) {
+      body = const AdminEmptyState(
+        icon: Icons.assignment_return_outlined,
+        title: 'No refunds yet',
+        hint: 'Refunds appear here when an event is canceled.',
+      );
+    } else {
+      body = Column(
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 10, 16, 10),
+            child: Row(
+              children: [
+                Expanded(flex: 2, child: Text('DATE', style: adminHeaderStyle)),
+                Expanded(flex: 2, child: Text('EVENT', style: adminHeaderStyle)),
+                Expanded(flex: 2, child: Text('BUYER', style: adminHeaderStyle)),
+                Expanded(child: Text('AMOUNT', style: adminHeaderStyle)),
+                Expanded(child: Text('STATUS', style: adminHeaderStyle)),
+                SizedBox(width: 96),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          for (final refund in _refunds) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+              child: Row(
+                children: [
+                  Expanded(flex: 2, child: Text(formatAdminDateTime(refund.createdAt), style: const TextStyle(fontSize: 10))),
+                  Expanded(flex: 2, child: Text(refund.eventTitle, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600))),
+                  Expanded(flex: 2, child: Text(refund.buyerName, style: const TextStyle(fontSize: 10))),
+                  Expanded(child: Text(formatPeso(refund.amount), style: const TextStyle(fontSize: 10))),
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: refund.isProcessed
+                          ? AdminBadge.success(refund.statusLabel)
+                          : AdminBadge.warning(refund.statusLabel),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 96,
+                    child: refund.isProcessed
+                        ? const SizedBox.shrink()
+                        : TextButton(
+                            onPressed: () => _processRefund(refund),
+                            child: const Text('Mark Processed', style: TextStyle(fontSize: 9)),
+                          ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+          ],
+        ],
+      );
+    }
+
+    return _panel(
+      title: 'Refund Log',
+      trailing: _isLoadingRefunds ? 'Loading...' : '${_refunds.length} total \u2022 $pending pending',
+      child: body,
     );
   }
 
@@ -1003,16 +810,16 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
         _exportRefunds,
       ),
       (
+        Icons.sync_outlined,
+        'Resale Activity Report',
+        'Every resale listing with seller, event, price versus original, and status.',
+        _exportResale,
+      ),
+      (
         Icons.check_circle_outline,
         'Attendance Report',
         'QR scan logs and attendance rates by event and gate.',
         () => _showMessage('Attendance reports are not available yet.'),
-      ),
-      (
-        Icons.sync_outlined,
-        'Resale Activity Report',
-        'Resale listings, flagged violations, and resolved cases.',
-        () => _showMessage('Resale activity reports are not available yet.'),
       ),
     ];
     return Column(
@@ -1029,98 +836,58 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
           builder: (context, constraints) => Wrap(
             spacing: 16,
             runSpacing: 12,
-            children: reports
-                .map(
-                  (report) => SizedBox(
-                    width: constraints.maxWidth > 760
-                        ? (constraints.maxWidth - 32) / 3
-                        : constraints.maxWidth,
-                    child: Container(
-                      height: 160,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: AppColors.borderLight),
-                      ),
+            children: [
+              for (final report in reports)
+                SizedBox(
+                  width: constraints.maxWidth > 760
+                      ? ((constraints.maxWidth - 32) / 3).floorToDouble()
+                      : constraints.maxWidth,
+                  child: AdminCard(
+                    padding: const EdgeInsets.all(16),
+                    child: SizedBox(
+                      height: 128,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           CircleAvatar(
                             radius: 20,
                             backgroundColor: const Color(0xFFEDE7FF),
-                            child: Icon(
-                              report.$1,
-                              color: AppColors.primaryPurple,
-                              size: 19,
-                            ),
+                            child: Icon(report.$1, color: AppColors.primaryPurple, size: 19),
                           ),
                           const SizedBox(height: 10),
-                          Text(
-                            report.$2,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
+                          Text(report.$2, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
                           const SizedBox(height: 5),
                           Text(
                             report.$3,
-                            style: const TextStyle(
-                              color: AppColors.textGray,
-                              fontSize: 9,
-                              height: 1.3,
-                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: AppColors.textGray, fontSize: 9, height: 1.3),
                           ),
                           const Spacer(),
                           OutlinedButton.icon(
                             onPressed: _isExporting ? null : report.$4,
                             icon: const Icon(Icons.download_outlined, size: 13),
-                            label: const Text(
-                              'Export CSV',
-                              style: TextStyle(fontSize: 9),
-                            ),
+                            label: const Text('Export CSV', style: TextStyle(fontSize: 9)),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: AppColors.primaryPurple,
-                              side: const BorderSide(
-                                color: AppColors.primaryPurple,
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 8,
-                              ),
+                              side: const BorderSide(color: AppColors.primaryPurple),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                             ),
                           ),
                         ],
                       ),
                     ),
                   ),
-                )
-                .toList(),
+                ),
+            ],
           ),
         ),
       ],
     );
   }
 
-  Widget _panel({
-    required String title,
-    String? trailing,
-    required Widget child,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.borderLight),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x08000000),
-            blurRadius: 8,
-            offset: Offset(0, 3),
-          ),
-        ],
-      ),
+  Widget _panel({required String title, String? trailing, required Widget child}) {
+    return AdminCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1130,13 +897,7 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
               children: [
                 Expanded(child: Text(title, style: AppTextStyles.h3)),
                 if (trailing != null)
-                  Text(
-                    trailing,
-                    style: const TextStyle(
-                      color: AppColors.textGray,
-                      fontSize: 10,
-                    ),
-                  ),
+                  Text(trailing, style: const TextStyle(color: AppColors.textGray, fontSize: 10)),
               ],
             ),
           ),
@@ -1146,128 +907,4 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
       ),
     );
   }
-
-  String _money(double amount) => '₱${amount.toStringAsFixed(2)}';
-
-  void _showMessage(String message) => ScaffoldMessenger.of(
-    context,
-  ).showSnackBar(SnackBar(content: Text(message)));
-
-  Future<void> _confirmLogout() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Log out?'),
-        content: const Text('Are you sure you want to Log Out?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Log out'),
-          ),
-        ],
-      ),
-    );
-    if (!mounted || confirmed != true) return;
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
-      (route) => false,
-    );
-  }
-}
-
-const _headerStyle = TextStyle(
-  color: AppColors.textGray,
-  fontSize: 9,
-  fontWeight: FontWeight.w700,
-);
-
-class _AdminLogo extends StatelessWidget {
-  const _AdminLogo();
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Container(
-        width: 22,
-        height: 22,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: AppColors.primaryPurple,
-          borderRadius: BorderRadius.circular(5),
-        ),
-        child: const Icon(
-          Icons.confirmation_number_outlined,
-          color: Colors.white,
-          size: 14,
-        ),
-      ),
-      const SizedBox(width: 6),
-      const Text(
-        'FairTix',
-        style: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w800,
-          fontStyle: FontStyle.italic,
-        ),
-      ),
-      const SizedBox(width: 3),
-      const Text(
-        'ADMIN',
-        style: TextStyle(fontSize: 8, color: AppColors.textGray),
-      ),
-    ],
-  );
-}
-
-class _SidebarItem extends StatelessWidget {
-  const _SidebarItem({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-    child: Material(
-      color: selected ? AppColors.primaryPurple : Colors.transparent,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                size: 16,
-                color: selected ? Colors.white : AppColors.textDark,
-              ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    color: selected ? Colors.white : AppColors.textDark,
-                    fontSize: 10,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
 }

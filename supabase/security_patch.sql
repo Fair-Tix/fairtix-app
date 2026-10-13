@@ -28,6 +28,16 @@
 --    QR code, which defeats "QR invalidated on use". Nothing in the app calls
 --    it yet; the future resale-purchase function should call it from inside
 --    its own SECURITY DEFINER body (which does not need this grant).
+--
+-- 4. Nobody can approve or un-suspend themselves.
+--    The users update policy in policies.sql only checks that `role` is
+--    unchanged, so any signed-in eventgoer or organizer could send
+--    {"id_verification_status": "verified"} for their own row straight to the
+--    API and skip the admin review completely (or flip their own
+--    account_status back to active). The trigger below blocks that. Admins
+--    and the SQL Editor / service role (no signed-in user) are unaffected.
+--    The one change a person may still make is rejected -> pending, which is
+--    exactly what re-uploading an ID after a rejection does.
 -- =============================================================================
 
 -- 1. No direct client inserts of tickets / transactions ---------------------
@@ -48,3 +58,46 @@ create policy "org_subs_update_own_or_admin"
 
 -- 3. Ticket owners cannot reissue their own QR ------------------------------
 revoke execute on function public.reissue_ticket_qr(uuid) from public, anon, authenticated;
+
+-- 4. Protect verification / status / identity columns on public.users -------
+create or replace function public.protect_user_columns()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  -- No signed-in user (SQL Editor, service role) or an admin: allowed.
+  if auth.uid() is null or public.is_admin() then
+    return new;
+  end if;
+
+  if new.role is distinct from old.role then
+    raise exception 'You cannot change your own role.';
+  end if;
+
+  if new.account_status is distinct from old.account_status then
+    raise exception 'You cannot change your own account status.';
+  end if;
+
+  if new.id_number is distinct from old.id_number
+     or new.face_embedding_hash is distinct from old.face_embedding_hash then
+    raise exception 'Identity fields can only be changed by an administrator.';
+  end if;
+
+  if new.id_verification_status is distinct from old.id_verification_status then
+    -- Only allowed move: resubmitting documents after a rejection.
+    if not (old.id_verification_status = 'rejected' and new.id_verification_status = 'pending') then
+      raise exception 'Verification status can only be changed by an administrator.';
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke all on function public.protect_user_columns() from public, anon, authenticated;
+
+drop trigger if exists protect_user_columns on public.users;
+create trigger protect_user_columns
+  before update on public.users
+  for each row execute procedure public.protect_user_columns();

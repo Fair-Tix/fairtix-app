@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'csv_export.dart';
+
 /// Thrown when loading or changing resale listings / fraud alerts fails.
 class AdminResaleException implements Exception {
   final String message;
@@ -80,6 +82,32 @@ class ResaleListingEntry {
       soldAt: soldAt == null ? null : DateTime.parse(soldAt).toLocal(),
     );
   }
+}
+
+/// The resale activity report as CSV text (header row + one row per
+/// listing). Used by both the Resale Monitoring export and the Resale
+/// Activity report on Revenue & Reports, so the two always match.
+String resaleListingsToCsv(List<ResaleListingEntry> rows) {
+  return toCsv([
+    [
+      'Listing ID', 'Seller', 'Seller Email', 'Event', 'Tier', 'Original Price',
+      'Resale Price', '% of Original', 'Status', 'Listed At', 'Sold At',
+    ],
+    for (final l in rows)
+      [
+        l.id,
+        csvSafe(l.sellerName),
+        csvSafe(l.sellerEmail),
+        csvSafe(l.eventTitle),
+        csvSafe(l.tierName),
+        l.originalPrice.toStringAsFixed(2),
+        l.listingPrice.toStringAsFixed(2),
+        (l.fractionOfOriginal * 100).round(),
+        l.statusLabel,
+        l.listedAt.toIso8601String(),
+        l.soldAt?.toIso8601String() ?? '',
+      ],
+  ]);
 }
 
 /// One fraud alert / price flag (`public.fraud_alerts`).

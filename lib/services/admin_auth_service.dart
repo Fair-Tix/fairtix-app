@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'account_status.dart';
 import 'admin_session.dart';
 
 /// thrown when an admin login attempt fails
@@ -61,6 +62,12 @@ class AdminAuthService {
     } on PostgrestException catch (e) {
       await Supabase.instance.client.auth.signOut();
       throw AdminAuthException('Could not load your account details: ${e.message}');
+    }
+
+    final accountStatus = (row['account_status'] as String?) ?? 'active';
+    if (accountStatus != 'active') {
+      await Supabase.instance.client.auth.signOut();
+      throw AdminAuthException(inactiveAccountMessage(accountStatus));
     }
 
     if (row['role'] != 'admin') {

@@ -81,6 +81,12 @@ class AdminUserService {
     required String status,
   }) async {
     assert(status == 'active' || status == 'suspended' || status == 'deactivated');
+    // Suspending yourself would lock you out of the portal (login now blocks
+    // non-active accounts), and with only one admin there'd be nobody left to
+    // undo it.
+    if (status != 'active' && Supabase.instance.client.auth.currentUser?.id == userId) {
+      throw const AdminUserServiceException('You cannot suspend or deactivate your own account.');
+    }
     try {
       await Supabase.instance.client
           .from('users')

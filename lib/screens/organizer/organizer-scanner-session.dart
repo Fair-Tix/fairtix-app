@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'app_colors.dart';
@@ -25,21 +27,53 @@ class _OrganizerScannerSessionScreenState extends State<OrganizerScannerSessionS
   bool _isLoading = true;
   String? _errorMessage;
 
+  /// Latest scans for this session, polled every few seconds so the
+  /// organizer can watch entries (and rejections) come in live.
+  List<ScanActivity> _activity = [];
+  Timer? _activityTimer;
+
   @override
   void initState() {
     super.initState();
     _generateSession();
   }
 
+  @override
+  void dispose() {
+    _activityTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startActivityPolling() {
+    _activityTimer?.cancel();
+    _refreshActivity();
+    _activityTimer = Timer.periodic(const Duration(seconds: 4), (_) => _refreshActivity());
+  }
+
+  Future<void> _refreshActivity() async {
+    final session = _session;
+    if (session == null) return;
+    try {
+      final activity = await ScannerRepository.instance.fetchActivity(session.sessionId);
+      if (!mounted) return;
+      setState(() => _activity = activity);
+    } on ScannerRepositoryException {
+      // A missed poll is harmless — the next tick will try again.
+    }
+  }
+
   Future<void> _generateSession() async {
+    _activityTimer?.cancel();
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _activity = [];
     });
     try {
       final session = await ScannerRepository.instance.createSession(widget.eventId);
       if (!mounted) return;
       setState(() => _session = session);
+      _startActivityPolling();
     } on ScannerRepositoryException catch (e) {
       if (!mounted) return;
       setState(() => _errorMessage = e.message);
@@ -56,6 +90,7 @@ class _OrganizerScannerSessionScreenState extends State<OrganizerScannerSessionS
     }
     try {
       await ScannerRepository.instance.endSession(session.sessionId);
+      _activityTimer?.cancel();
     } on ScannerRepositoryException catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not end session: ${e.message}')));
@@ -278,24 +313,93 @@ class _OrganizerScannerSessionScreenState extends State<OrganizerScannerSessionS
   }
 
   Widget _activityCard() {
+    if (_activity.isEmpty) {
+      return _card(
+        title: 'Live Activity Feed',
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 32),
+          child: Column(
+            children: [
+              const Icon(Icons.qr_code_scanner_outlined, size: 40, color: AppColors.textGray),
+              const SizedBox(height: 12),
+              Text(
+                'No scans yet. Entries will appear here as attendees are '
+                'scanned in.',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.bodyGray,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final accepted = _activity.where((a) => a.isAccepted).length;
+    final rejected = _activity.length - accepted;
     return _card(
       title: 'Live Activity Feed',
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 32),
-        child: Column(
-          children: [
-            const Icon(Icons.qr_code_scanner_outlined, size: 40, color: AppColors.textGray),
-            const SizedBox(height: 12),
-            Text(
-              'No scans yet. Entries will appear here as attendees are '
-              'scanned in.',
-              textAlign: TextAlign.center,
-              style: AppTextStyles.bodyGray,
-            ),
-          ],
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              _countChip('Accepted', accepted, Colors.green.shade700),
+              const SizedBox(width: 10),
+              _countChip('Rejected', rejected, AppColors.dangerRed),
+            ],
+          ),
+          const SizedBox(height: 14),
+          for (final scan in _activity) _activityRow(scan),
+        ],
       ),
     );
+  }
+
+  Widget _countChip(String label, int count, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        '$label: $count',
+        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: color),
+      ),
+    );
+  }
+
+  Widget _activityRow(ScanActivity scan) {
+    final color = scan.isAccepted ? Colors.green.shade700 : AppColors.dangerRed;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Icon(scan.isAccepted ? Icons.check_circle_rounded : Icons.cancel_rounded, color: color, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(scan.label, style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w700, color: color)),
+                if (scan.tierName != null)
+                  Text(scan.tierName!, style: AppTextStyles.bodyGray.copyWith(fontSize: 12)),
+              ],
+            ),
+          ),
+          Text(_formatTime(scan.scannedAt), style: AppTextStyles.bodyGray.copyWith(fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
+  String _formatTime(DateTime dt) {
+    final local = dt.toLocal();
+    final hour12 = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    final minute = local.minute.toString().padLeft(2, '0');
+    final second = local.second.toString().padLeft(2, '0');
+    final period = local.hour >= 12 ? 'PM' : 'AM';
+    return '$hour12:$minute:$second $period';
   }
 
   String _formatExpiry(DateTime dt) {

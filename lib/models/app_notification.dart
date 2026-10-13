@@ -1,8 +1,17 @@
-/// Placeholder in-app notification model for UI scaffolding.
-/// TODO: replace with real push/in-app notifications delivered via FCM
-/// once the backend is wired up (e.g. triggered by a Cloud Function when
-/// a RESALE_LISTINGS record's status flips to sold).
-enum AppNotificationType { ticketSold, general }
+/// An in-app notification.
+///
+/// Two sources feed the notification screen:
+///  * REMOTE — rows from `public.notifications` (channel `in_app`), written
+///    by the database triggers in supabase/notification_functions.sql
+///    (purchase, resale, cancellation, refund, account review, ...). Their
+///    read state is saved back to the database.
+///  * LOCAL — the demo "ticket sold" entries still created in-memory by the
+///    resale flow (see data/sample_notifications.dart) until resale is
+///    fully backed by Supabase.
+///
+/// [ticketSold] / [general] are the original local types; [ticket],
+/// [resale], [system] and [promo] mirror the `notification_type` enum.
+enum AppNotificationType { ticketSold, general, ticket, resale, system, promo }
 
 class AppNotification {
   const AppNotification({
@@ -13,6 +22,7 @@ class AppNotification {
     this.type = AppNotificationType.general,
     this.isRead = false,
     this.relatedTicketId,
+    this.isRemote = false,
   });
 
   final String id;
@@ -26,33 +36,9 @@ class AppNotification {
   /// ticket in `sampleMyTickets` this notification relates to.
   final String? relatedTicketId;
 
-  /// Builds a notification from a `public.notifications` row (see
-  /// supabase/schema.sql, Table 15). Ticket-sold notifications need a
-  /// `relatedTicketId`, which the table has no column for yet, so every
-  /// DB-backed notification is [AppNotificationType.general] for now.
-  factory AppNotification.fromRow(Map<String, dynamic> row) {
-    final sentAt = DateTime.tryParse(row['sent_at'] as String? ?? '')?.toLocal();
-    return AppNotification(
-      id: row['notification_id'] as String,
-      title: row['title'] as String? ?? '',
-      message: row['message'] as String? ?? '',
-      timeLabel: sentAt == null ? '' : _relativeTime(sentAt),
-      isRead: row['is_read'] as bool? ?? false,
-    );
-  }
-
-  static const _months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-  ];
-
-  static String _relativeTime(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
-    if (diff.inMinutes < 1) return 'Just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
-    if (diff.inHours < 24) return '${diff.inHours} hr ago';
-    if (diff.inDays < 7) return '${diff.inDays} day${diff.inDays == 1 ? '' : 's'} ago';
-    return '${_months[dt.month - 1]} ${dt.day}, ${dt.year}';
-  }
+  /// True when this came from `public.notifications` (so reading it must
+  /// be saved to the database), false for the local demo entries.
+  final bool isRemote;
 
   AppNotification copyWith({bool? isRead}) {
     return AppNotification(
@@ -63,6 +49,38 @@ class AppNotification {
       type: type,
       isRead: isRead ?? this.isRead,
       relatedTicketId: relatedTicketId,
+      isRemote: isRemote,
     );
+  }
+
+  /// Builds a notification from a `public.notifications` row.
+  factory AppNotification.fromRow(Map<String, dynamic> row) {
+    final sentAt = DateTime.tryParse((row['sent_at'] as String?) ?? '')?.toLocal();
+    return AppNotification(
+      id: row['notification_id'] as String,
+      title: (row['title'] as String?) ?? '',
+      message: (row['message'] as String?) ?? '',
+      timeLabel: sentAt == null ? '' : relativeTimeLabel(sentAt),
+      type: switch (row['type'] as String?) {
+        'ticket' => AppNotificationType.ticket,
+        'resale' => AppNotificationType.resale,
+        'system' => AppNotificationType.system,
+        'promo' => AppNotificationType.promo,
+        _ => AppNotificationType.general,
+      },
+      isRead: (row['is_read'] as bool?) ?? false,
+      isRemote: true,
+    );
+  }
+
+  /// "Just now", "5 min ago", "3 hr ago", "2 days ago", or a date.
+  static String relativeTimeLabel(DateTime sentAt, {DateTime? now}) {
+    final diff = (now ?? DateTime.now()).difference(sentAt);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
+    if (diff.inHours < 24) return '${diff.inHours} hr ago';
+    if (diff.inDays < 7) return diff.inDays == 1 ? '1 day ago' : '${diff.inDays} days ago';
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${months[sentAt.month - 1]} ${sentAt.day}, ${sentAt.year}';
   }
 }

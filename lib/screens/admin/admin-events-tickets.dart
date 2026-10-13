@@ -5,6 +5,7 @@ import '../../services/csv_export.dart';
 import '../../widgets/admin_shell.dart';
 import '../../widgets/admin_widgets.dart';
 import '../organizer/app_colors.dart';
+import '../user/all_events_screen.dart';
 
 /// Every organizer's events with real sales numbers, plus the admin's two
 /// powers from the manuscript: cancel or unpublish any event.
@@ -220,6 +221,19 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
               tooltip: 'Refresh',
             ),
             const SizedBox(width: 4),
+            // Same published catalogue event goers see, view-only.
+            OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const AllEventsScreen(readOnly: true)),
+              ),
+              icon: const Icon(Icons.explore_outlined, size: 14),
+              label: const Text('Browse Published Events', style: TextStyle(fontSize: 11)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primaryPurple,
+                side: const BorderSide(color: AppColors.primaryPurple),
+              ),
+            ),
+            const SizedBox(width: 8),
             OutlinedButton.icon(
               onPressed: _isLoading ? null : _exportCsv,
               icon: const Icon(Icons.download_outlined, size: 14),

@@ -28,6 +28,15 @@ class FeaturedEventCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: Stack(
         children: [
+          if (event.bannerUrl != null)
+            Positioned.fill(
+              child: Image.network(
+                event.bannerUrl!,
+                fit: BoxFit.cover,
+                // If the image can't load, the accent color behind it shows.
+                errorBuilder: (_, _, _) => const SizedBox.shrink(),
+              ),
+            ),
           Positioned(
             top: 12,
             left: 12,

@@ -10,6 +10,7 @@ import '../screens/admin/admin-platform-settings.dart';
 import '../screens/admin/admin-profile.dart';
 import '../screens/admin/admin-resale-monitoring.dart';
 import '../screens/admin/admin-revenue-reports.dart';
+import 'notification_bell.dart';
 import '../screens/admin/admin-route.dart';
 import '../screens/organizer/app_colors.dart';
 import '../services/admin_auth_service.dart';
@@ -119,8 +120,8 @@ class _TopBar extends StatelessWidget {
             ),
           Text(title, style: AppTextStyles.label),
           const Spacer(),
-          const Icon(Icons.notifications_none, size: 19, color: AppColors.textGray),
-          const SizedBox(width: 14),
+          const NotificationBell(size: 19, color: AppColors.textGray),
+          const SizedBox(width: 8),
           const CircleAvatar(
             radius: 14,
             backgroundColor: Color(0xFFE8E6F1),

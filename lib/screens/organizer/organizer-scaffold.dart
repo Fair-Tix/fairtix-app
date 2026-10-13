@@ -5,6 +5,8 @@ import 'organizer-dashboard.dart';
 import 'organizer-my-events.dart';
 import 'organizer-analytics-sales.dart';
 import 'organizer-profile.dart';
+import '../user/all_events_screen.dart';
+import '../../widgets/notification_bell.dart';
 
 enum OrganizerNavItem { dashboard, myEvents, analytics, profile }
 
@@ -140,6 +142,8 @@ class _TopBar extends StatelessWidget {
             trailing!,
             const SizedBox(width: 16),
           ],
+          const NotificationBell(),
+          const SizedBox(width: 8),
           if (isWide) ...[
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -195,6 +199,17 @@ class _Sidebar extends StatelessWidget {
               label: 'My Events',
               isActive: activeItem == OrganizerNavItem.myEvents,
               onTap: () => _navigate(context, OrganizerNavItem.myEvents),
+            ),
+            // Read-only view of the same published catalogue event goers
+            // see. Opened on top of the current screen (not a sidebar page),
+            // so the back button returns here.
+            _NavTile(
+              icon: Icons.explore_outlined,
+              label: 'Browse Events',
+              isActive: false,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const AllEventsScreen(readOnly: true)),
+              ),
             ),
             _NavTile(
               icon: Icons.bar_chart_rounded,

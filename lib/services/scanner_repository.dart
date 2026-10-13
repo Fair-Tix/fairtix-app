@@ -5,7 +5,18 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class ScannerRepositoryException implements Exception {
   final String message;
   const ScannerRepositoryException(this.message);
+
+  /// True when the server says the link/PIN is no longer good (wrong PIN,
+  /// revoked by the organizer, or expired). The scan screen uses this to
+  /// send staff back to PIN entry instead of showing a ticket rejection.
+  bool get isSessionEnded => message.contains('invalid or have expired');
+
+  @override
+  String toString() => message;
 }
+
+const String _connectionErrorMessage =
+    'Could not reach the server. Check your connection and try again.';
 
 /// A live scanner session for one event — the link + 4-digit PIN an
 /// organizer hands to entry staff. Backed by `public.scanner_sessions`.
@@ -61,15 +72,27 @@ class ScannerAccess {
   final String pin;
 }
 
-/// Result of scanning one ticket's QR code at the door.
-enum ScanResult { valid, alreadyUsed, invalid, wrongEvent }
+/// Result of scanning one ticket's QR code at the door. [error] means the
+/// scan could not be judged at all (e.g. no connection) — the ticket was
+/// neither accepted nor rejected, so staff should simply scan it again.
+enum ScanResult { valid, alreadyUsed, invalid, wrongEvent, error }
+
+ScanResult _scanResultFromString(String? value) => switch (value) {
+      'valid' => ScanResult.valid,
+      'already_used' => ScanResult.alreadyUsed,
+      'wrong_event' => ScanResult.wrongEvent,
+      _ => ScanResult.invalid,
+    };
 
 class ScanOutcome {
-  const ScanOutcome({required this.result, this.eventTitle, this.tierName});
+  const ScanOutcome({required this.result, this.eventTitle, this.tierName, this.message});
 
   final ScanResult result;
   final String? eventTitle;
   final String? tierName;
+
+  /// Extra explanation shown under the headline (used for [ScanResult.error]).
+  final String? message;
 
   bool get isAccepted => result == ScanResult.valid;
 
@@ -78,21 +101,48 @@ class ScanOutcome {
         ScanResult.alreadyUsed => 'Rejected \u2014 Already Used',
         ScanResult.wrongEvent => 'Rejected \u2014 Wrong Event',
         ScanResult.invalid => 'Rejected \u2014 Invalid QR',
+        ScanResult.error => 'Could not scan \u2014 try again',
       };
 
   factory ScanOutcome.fromRow(Map<String, dynamic> row) {
-    final result = switch (row['result'] as String) {
-      'valid' => ScanResult.valid,
-      'already_used' => ScanResult.alreadyUsed,
-      'wrong_event' => ScanResult.wrongEvent,
-      _ => ScanResult.invalid,
-    };
     return ScanOutcome(
-      result: result,
+      result: _scanResultFromString(row['result'] as String?),
       eventTitle: row['event_title'] as String?,
       tierName: row['tier_name'] as String?,
     );
   }
+}
+
+/// One line of the organizer's live scan feed (a `qr_scan_logs` row).
+class ScanActivity {
+  const ScanActivity({
+    required this.logId,
+    required this.scannedAt,
+    required this.result,
+    this.tierName,
+  });
+
+  final String logId;
+  final DateTime scannedAt;
+  final ScanResult result;
+  final String? tierName;
+
+  bool get isAccepted => result == ScanResult.valid;
+
+  String get label => switch (result) {
+        ScanResult.valid => 'Accepted',
+        ScanResult.alreadyUsed => 'Already used',
+        ScanResult.wrongEvent => 'Wrong event',
+        ScanResult.invalid => 'Invalid QR',
+        ScanResult.error => 'Error',
+      };
+
+  factory ScanActivity.fromRow(Map<String, dynamic> row) => ScanActivity(
+        logId: row['log_id'] as String,
+        scannedAt: DateTime.parse(row['scanned_at'] as String),
+        result: _scanResultFromString(row['result'] as String?),
+        tierName: row['tier_name'] as String?,
+      );
 }
 
 /// Wraps the scanner-session RPCs in supabase/scanner_functions.sql:
@@ -111,10 +161,14 @@ class ScannerRepository {
         'generate_scanner_session',
         params: {'p_event_id': eventId},
       );
-      final row = (result is List) ? result.first as Map<String, dynamic> : result as Map<String, dynamic>;
+      final row = _firstRow(result);
       return ScannerSession.fromRow(row);
     } on PostgrestException catch (e) {
       throw ScannerRepositoryException(e.message);
+    } on ScannerRepositoryException {
+      rethrow;
+    } catch (_) {
+      throw const ScannerRepositoryException(_connectionErrorMessage);
     }
   }
 
@@ -126,6 +180,8 @@ class ScannerRepository {
       );
     } on PostgrestException catch (e) {
       throw ScannerRepositoryException(e.message);
+    } catch (_) {
+      throw const ScannerRepositoryException(_connectionErrorMessage);
     }
   }
 
@@ -140,7 +196,7 @@ class ScannerRepository {
         params: {'p_token': token, 'p_pin': pin},
       );
       final rows = result is List ? result : [result];
-      if (rows.isEmpty) {
+      if (rows.isEmpty || rows.first == null) {
         throw const ScannerRepositoryException('That link and PIN are invalid or have expired.');
       }
       final row = rows.first as Map<String, dynamic>;
@@ -153,6 +209,10 @@ class ScannerRepository {
       );
     } on PostgrestException catch (e) {
       throw ScannerRepositoryException(e.message);
+    } on ScannerRepositoryException {
+      rethrow;
+    } catch (_) {
+      throw const ScannerRepositoryException(_connectionErrorMessage);
     }
   }
 
@@ -166,11 +226,44 @@ class ScannerRepository {
         'scan_ticket',
         params: {'p_token': access.token, 'p_pin': access.pin, 'p_qr_code_token': qrToken},
       );
-      final row = (result is List) ? result.first as Map<String, dynamic> : result as Map<String, dynamic>;
+      final row = _firstRow(result);
       return ScanOutcome.fromRow(row);
     } on PostgrestException catch (e) {
       throw ScannerRepositoryException(e.message);
+    } on ScannerRepositoryException {
+      rethrow;
+    } catch (_) {
+      throw const ScannerRepositoryException(_connectionErrorMessage);
     }
+  }
+
+  /// The organizer's live feed: the latest scans logged for [sessionId],
+  /// newest first (see get_scan_activity in scanner_functions.sql).
+  Future<List<ScanActivity>> fetchActivity(String sessionId, {int limit = 50}) async {
+    try {
+      final result = await Supabase.instance.client.rpc(
+        'get_scan_activity',
+        params: {'p_session_id': sessionId, 'p_limit': limit},
+      );
+      final rows = result is List ? result : const [];
+      return rows.map((r) => ScanActivity.fromRow(r as Map<String, dynamic>)).toList();
+    } on PostgrestException catch (e) {
+      throw ScannerRepositoryException(e.message);
+    } catch (_) {
+      throw const ScannerRepositoryException(_connectionErrorMessage);
+    }
+  }
+
+  /// RPCs returning a single composite come back as a map; RPCs returning
+  /// a table come back as a list of maps. Accept both.
+  Map<String, dynamic> _firstRow(dynamic result) {
+    if (result is List) {
+      if (result.isEmpty) {
+        throw const ScannerRepositoryException('The server returned no result. Please try again.');
+      }
+      return result.first as Map<String, dynamic>;
+    }
+    return result as Map<String, dynamic>;
   }
 
   String _extractToken(String input) {

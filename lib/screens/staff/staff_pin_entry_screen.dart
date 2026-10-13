@@ -75,7 +75,13 @@ class _StaffPinEntryScreenState extends State<StaffPinEntryScreen> {
       );
     } on ScannerRepositoryException catch (e) {
       if (!mounted) return;
+      // Wrong PIN (or a revoked/expired link): clear the boxes so staff
+      // can retype straight away instead of editing digit by digit.
+      for (final c in _pinControllers) {
+        c.clear();
+      }
       setState(() => _errorMessage = e.message);
+      _pinFocusNodes.first.requestFocus();
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -87,7 +93,7 @@ class _StaffPinEntryScreenState extends State<StaffPinEntryScreen> {
     } else if (value.isEmpty && index > 0) {
       _pinFocusNodes[index - 1].requestFocus();
     }
-    if (_pin.length == 4) _handleSubmit();
+    if (_pin.length == 4 && !_isSubmitting) _handleSubmit();
   }
 
   @override

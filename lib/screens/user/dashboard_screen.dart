@@ -28,6 +28,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _loadEvents();
+    _refreshUnread();
+  }
+
+  /// Checks for new notifications so the bell's unread dot is accurate
+  /// as soon as the dashboard opens.
+  Future<void> _refreshUnread() async {
+    await NotificationRepository.instance.refreshUnreadCount();
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadEvents() async {
@@ -80,6 +88,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
     // Notifications may have been marked as read while we were away —
     // refresh so the unread dot on the bell reflects that.
+    await NotificationRepository.instance.refreshUnreadCount();
     if (mounted) setState(() {});
   }
 
@@ -134,7 +143,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                             child: const Icon(Icons.notifications_none_rounded, color: AppColors.accentPurple, size: 20),
                           ),
-                          if (sampleNotifications.any((n) => !n.isRead))
+                          if (NotificationRepository.instance.unreadCount.value > 0 ||
+                              sampleNotifications.any((n) => !n.isRead))
                             Positioned(
                               top: 2,
                               right: 2,

@@ -22,10 +22,20 @@ class UpcomingEventTile extends StatelessWidget {
             Container(
               width: 56,
               height: 56,
+              clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
                 color: event.accentColor,
                 borderRadius: BorderRadius.circular(12),
               ),
+              child: event.bannerUrl == null
+                  ? null
+                  : Image.network(
+                      event.bannerUrl!,
+                      width: 56,
+                      height: 56,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                    ),
             ),
             const SizedBox(width: 12),
             Expanded(

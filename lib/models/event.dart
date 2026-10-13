@@ -40,6 +40,8 @@ class EventSummary {
     this.subtitle,
     this.description,
     this.tiers = const [],
+    this.bannerUrl,
+    this.days = const [],
   });
 
   /// Stable identifier for this event — mirrors EVENTS.event_id in the
@@ -61,6 +63,21 @@ class EventSummary {
   final String? subtitle;
   final String? description;
   final List<TicketTier> tiers;
+
+  /// Directly-loadable public URL of the event's banner image (the
+  /// `event_banners` Storage bucket, via `public.events.banner_image_url`).
+  /// Null when the organizer hasn't uploaded one — screens then fall back
+  /// to the [accentColor] placeholder.
+  final String? bannerUrl;
+
+  /// For a multi-day event, one [EventSummary] per day, in day order — each
+  /// is the generated child event (own id, date and ticket tiers, so
+  /// tickets, sold-out counts and the one-ticket-per-day limit all work
+  /// per day). Empty for single-day events.
+  final List<EventSummary> days;
+
+  /// True for a multi-day event whose per-day child events were loaded.
+  bool get isMultiDay => days.isNotEmpty;
 
   /// Resale listings for this event automatically close 24 hours before
   /// it starts (system-enforced, per the study's resale rules).

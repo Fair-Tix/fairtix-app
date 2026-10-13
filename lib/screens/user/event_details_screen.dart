@@ -11,9 +11,14 @@ import '../../widgets/ticket_tier_row.dart';
 import 'checkout_screen.dart';
 
 class EventDetailsScreen extends StatefulWidget {
-  const EventDetailsScreen({super.key, required this.event});
+  const EventDetailsScreen({super.key, required this.event, this.readOnly = false});
 
   final EventSummary event;
+
+  /// True when an organizer or admin is browsing the catalogue: the event
+  /// is shown in full, but nothing can be selected or bought (only event
+  /// goers purchase tickets).
+  final bool readOnly;
 
   @override
   State<EventDetailsScreen> createState() => _EventDetailsScreenState();
@@ -27,16 +32,36 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
   /// repository doesn't have it cached.
   EventSummary get _event => PublicEventRepository.instance.getById(widget.event.id) ?? widget.event;
 
+  /// For a multi-day event, the day currently shown. Each day is its own
+  /// event (own tiers, own one-ticket-per-day limit), so tiers, the limit
+  /// check and checkout all follow this day. Null for single-day events.
+  EventSummary? _selectedDay;
+
+  /// The event actually being viewed/bought: the chosen day of a
+  /// multi-day event (using the freshest copy of that day), or the event
+  /// itself.
+  EventSummary get _activeEvent {
+    final day = _selectedDay;
+    if (day == null) return _event;
+    return _event.days.firstWhere((d) => d.id == day.id, orElse: () => day);
+  }
+
   @override
   void initState() {
     super.initState();
+    if (widget.event.isMultiDay) {
+      _selectedDay = widget.event.days.first;
+    }
     _reloadEvent();
     // Refresh the owned-tickets cache so the one-ticket-per-account limit
     // check below reflects any purchase made since this cache was last
     // loaded (e.g. from another device, or earlier this session).
-    TicketRepository.instance.refresh().then((_) {
-      if (mounted) setState(() {});
-    });
+    // (Skipped for organizers/admins, who can't buy tickets here.)
+    if (!widget.readOnly) {
+      TicketRepository.instance.refresh().then((_) {
+        if (mounted) setState(() {});
+      });
+    }
   }
 
   /// Reloads the catalogue so tier availability is current. Failures are
@@ -51,20 +76,21 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
   }
 
   /// Whether FairTix's one-ticket-per-account-per-event purchase limit
-  /// blocks the current user from buying a ticket for this event because
-  /// they already hold one. (A user who already RESOLD their ticket is
-  /// refused by the server when they try to buy; see isPurchaseLimitReached.)
-  bool get _limitReached => isPurchaseLimitReached(widget.event.id);
+  /// blocks the current user from buying a ticket for this event day
+  /// because they already hold one. (A user who already RESOLD their ticket
+  /// is refused by the server when they try to buy; see isPurchaseLimitReached.)
+  bool get _limitReached => !widget.readOnly && isPurchaseLimitReached(_activeEvent.id);
 
   Future<void> _handleBuyTicket() async {
     final selected = _selectedTier;
     if (selected == null || _limitReached) return;
     // Use the latest copy of the selected tier (matched by id) so checkout
     // sees current availability.
-    final tier = _event.tiers.firstWhere((t) => t.id == selected.id, orElse: () => selected);
+    final active = _activeEvent;
+    final tier = active.tiers.firstWhere((t) => t.id == selected.id, orElse: () => selected);
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => CheckoutScreen(event: _event, tier: tier),
+        builder: (_) => CheckoutScreen(event: active, tier: tier),
       ),
     );
     // Back from checkout/confirmation: pull the new remaining quantity.
@@ -73,6 +99,12 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
 
   void _handleViewMyTicket() {
     navigateToTab(context, 1);
+  }
+
+  Widget _bannerPlaceholder() {
+    return Center(
+      child: Icon(Icons.music_note_rounded, size: 72, color: AppColors.white.withValues(alpha: 0.35)),
+    );
   }
 
   @override
@@ -88,9 +120,20 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                 child: Container(
                   height: 280,
                   decoration: BoxDecoration(color: event.accentColor),
-                  child: Center(
-                    child: Icon(Icons.music_note_rounded, size: 72, color: AppColors.white.withValues(alpha: 0.35)),
-                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: event.bannerUrl != null
+                      ? Image.network(
+                          event.bannerUrl!,
+                          width: double.infinity,
+                          height: 280,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, progress) => progress == null
+                              ? child
+                              : const Center(child: CircularProgressIndicator(color: AppColors.white)),
+                          // If the banner can't load, fall back to the placeholder.
+                          errorBuilder: (_, _, _) => _bannerPlaceholder(),
+                        )
+                      : _bannerPlaceholder(),
                 ),
               ),
               SliverToBoxAdapter(
@@ -130,6 +173,35 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                       if (event.description != null)
                         Text(event.description!, style: AppTextStyles.bodyMuted.copyWith(height: 1.5)),
                       const SizedBox(height: 22),
+                      if (event.isMultiDay) ...[
+                        Text(
+                          'Event Days (${event.days.length})',
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.textDark),
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (var i = 0; i < event.days.length; i++)
+                              ChoiceChip(
+                                label: Text('Day ${i + 1} \u2022 ${event.days[i].dateLabel}'),
+                                selected: _selectedDay?.id == event.days[i].id,
+                                selectedColor: AppColors.accentPurple,
+                                labelStyle: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: _selectedDay?.id == event.days[i].id ? AppColors.white : AppColors.textDark,
+                                ),
+                                onSelected: (_) => setState(() {
+                                  _selectedDay = event.days[i];
+                                  _selectedTier = null; // tiers differ per day
+                                }),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 22),
+                      ],
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         decoration: BoxDecoration(
@@ -146,11 +218,28 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                         _PurchaseLimitNotice(onViewMyTicket: _handleViewMyTicket),
                         const SizedBox(height: 16),
                       ],
-                      ...event.tiers.map(
+                      if (widget.readOnly) ...[
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentPurple.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            'You\u2019re viewing this event. Only event goers can buy tickets.',
+                            style: AppTextStyles.bodyMuted.copyWith(fontSize: 12.5),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      if (_activeEvent.tiers.isEmpty)
+                        Text('No ticket tiers have been set up yet.', style: AppTextStyles.bodyMuted),
+                      ..._activeEvent.tiers.map(
                         (tier) => TicketTierRow(
                           tier: tier,
                           isSelected: _selectedTier?.id == tier.id,
-                          onTap: _limitReached ? null : () => setState(() => _selectedTier = tier),
+                          onTap: (_limitReached || widget.readOnly) ? null : () => setState(() => _selectedTier = tier),
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -175,6 +264,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
             left: 16,
             child: _BackCircleButton(onTap: () => Navigator.of(context).maybePop()),
           ),
+          if (!widget.readOnly)
           Positioned(
             left: 0,
             right: 0,

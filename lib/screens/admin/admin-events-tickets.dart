@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/organizer_event.dart';
 import '../../services/admin_session.dart';
+import '../../widgets/notification_bell.dart';
 import '../../services/event_repository.dart';
 import '../organizer/app_colors.dart';
 import 'admin-dashboard.dart';
@@ -14,6 +15,7 @@ import 'admin-resale-monitoring.dart';
 import 'admin-revenue-reports.dart';
 import 'admin-platform-settings.dart';
 import 'admin-profile.dart';
+import '../user/all_events_screen.dart';
 
 class AdminEventsTicketsScreen extends StatefulWidget {
   const AdminEventsTicketsScreen({super.key});
@@ -254,12 +256,8 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
             ),
           const Text('Events Management', style: AppTextStyles.label),
           const Spacer(),
-          const Icon(
-            Icons.notifications_none,
-            size: 19,
-            color: AppColors.textGray,
-          ),
-          const SizedBox(width: 14),
+          const NotificationBell(size: 19, color: AppColors.textGray),
+          const SizedBox(width: 8),
           const CircleAvatar(
             radius: 14,
             backgroundColor: Color(0xFFE8E6F1),
@@ -291,6 +289,23 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
             const Expanded(
               child: Text('Events & Ticket Sales', style: AppTextStyles.h2),
             ),
+            // Same published catalogue event goers see, view-only.
+            OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const AllEventsScreen(readOnly: true)),
+              ),
+              icon: const Icon(Icons.explore_outlined, size: 16),
+              label: const Text('Browse Published Events'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primaryPurple,
+                side: const BorderSide(color: AppColors.primaryPurple),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
             OutlinedButton.icon(
               onPressed: () => _exportCsv(events),
               icon: const Icon(Icons.download_outlined, size: 16),

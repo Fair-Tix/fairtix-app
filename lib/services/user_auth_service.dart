@@ -231,6 +231,104 @@ class UserAuthService {
     return path;
   }
 
+  /// Turns a stored `profile_photos` path (what [AppUser.profilePhotoUrl]
+  /// holds) into a directly-loadable public URL. The bucket is public-read
+  /// (see supabase/profile_photo.sql) but Storage uploads only return the
+  /// path. Returns null when there is no photo.
+  String? profilePhotoPublicUrl(String? path) {
+    if (path == null || path.isEmpty) return null;
+    return Supabase.instance.client.storage.from('profile_photos').getPublicUrl(path);
+  }
+
+  /// Uploads [bytes] as the signed-in eventgoer's profile photo to the
+  /// public `profile_photos` bucket, records the path on
+  /// `public.users.profile_photo_url`, and refreshes [UserSession] so the
+  /// profile screen shows it straight away. The previous photo file (if
+  /// any) is deleted on a best-effort basis.
+  ///
+  /// Profile photos are optional: nothing in registration or login
+  /// requires one.
+  Future<String> uploadProfilePhoto({
+    required Uint8List bytes,
+    required String fileExtension,
+  }) async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) {
+      throw const UserAuthException('Your session has expired. Please log in again.');
+    }
+
+    final ext = fileExtension.replaceFirst('.', '').toLowerCase();
+    final safeExt = switch (ext) {
+      'png' => 'png',
+      'webp' => 'webp',
+      _ => 'jpg',
+    };
+    final path = '$userId/avatar_${DateTime.now().millisecondsSinceEpoch}.$safeExt';
+    final contentType = 'image/${safeExt == 'jpg' ? 'jpeg' : safeExt}';
+    final previousPath = UserSession.instance.account?.profilePhotoUrl;
+
+    try {
+      await Supabase.instance.client.storage.from('profile_photos').uploadBinary(
+            path,
+            bytes,
+            fileOptions: FileOptions(upsert: true, contentType: contentType),
+          );
+
+      await Supabase.instance.client.from('users').update({
+        'profile_photo_url': path,
+      }).eq('id', userId);
+    } on StorageException catch (e) {
+      throw UserAuthException('Could not upload your photo: ${e.message}');
+    } on PostgrestException catch (e) {
+      throw UserAuthException('Could not save your photo: ${e.message}');
+    }
+
+    final current = UserSession.instance.account;
+    if (current != null) {
+      UserSession.instance.updateAccount(current.copyWith(profilePhotoUrl: path));
+    }
+
+    if (previousPath != null && previousPath != path) {
+      try {
+        await Supabase.instance.client.storage.from('profile_photos').remove([previousPath]);
+      } catch (_) {
+        // Orphaned old file is harmless; don't fail the upload over it.
+      }
+    }
+
+    return path;
+  }
+
+  /// Removes the profile photo (back to the initials avatar).
+  Future<void> removeProfilePhoto() async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) {
+      throw const UserAuthException('Your session has expired. Please log in again.');
+    }
+    final previousPath = UserSession.instance.account?.profilePhotoUrl;
+
+    try {
+      await Supabase.instance.client.from('users').update({
+        'profile_photo_url': null,
+      }).eq('id', userId);
+    } on PostgrestException catch (e) {
+      throw UserAuthException('Could not remove your photo: ${e.message}');
+    }
+
+    final current = UserSession.instance.account;
+    if (current != null) {
+      UserSession.instance.updateAccount(current.copyWith(clearProfilePhoto: true));
+    }
+
+    if (previousPath != null) {
+      try {
+        await Supabase.instance.client.storage.from('profile_photos').remove([previousPath]);
+      } catch (_) {
+        // Best effort, as above.
+      }
+    }
+  }
+
   Future<void> logout() async {
     UserSession.instance.signOut();
     await Supabase.instance.client.auth.signOut();

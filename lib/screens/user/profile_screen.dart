@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../models/app_user.dart';
 import '../../services/user_auth_service.dart';
@@ -14,8 +15,16 @@ import 'transactions_screen.dart';
 /// settings, and log out.
 /// [UserSession.instance.account] is populated by [UserAuthService.login]
 /// from the real signed-in Supabase user + their `public.users` row.
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  final ImagePicker _picker = ImagePicker();
+  bool _isUploadingPhoto = false;
 
   Future<void> _handleLogOut(BuildContext context) async {
     await UserAuthService.instance.logout();
@@ -23,6 +32,155 @@ class ProfileScreen extends StatelessWidget {
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginScreen()),
       (route) => false,
+    );
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Profile photo is optional (Event Goer only): tap the avatar to take or
+  /// choose a photo, or remove the current one.
+  void _showPhotoOptions() {
+    final hasPhoto = UserSession.instance.account?.profilePhotoUrl != null;
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Take a photo'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _pickAndUpload(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from gallery'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _pickAndUpload(ImageSource.gallery);
+              },
+            ),
+            if (hasPhoto)
+              ListTile(
+                leading: const Icon(Icons.delete_outline_rounded, color: AppColors.error),
+                title: const Text('Remove photo', style: TextStyle(color: AppColors.error)),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _removePhoto();
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickAndUpload(ImageSource source) async {
+    XFile? picked;
+    try {
+      picked = await _picker.pickImage(source: source, maxWidth: 1024, imageQuality: 85);
+    } catch (_) {
+      if (!mounted) return;
+      _showMessage(
+        'Could not open the ${source == ImageSource.camera ? 'camera' : 'gallery'}. Please check app permissions.',
+      );
+      return;
+    }
+    if (picked == null) return; // backed out without choosing a photo
+
+    setState(() => _isUploadingPhoto = true);
+    try {
+      final bytes = await picked.readAsBytes();
+      final name = picked.name;
+      final ext = name.contains('.') ? name.split('.').last : 'jpg';
+      await UserAuthService.instance.uploadProfilePhoto(bytes: bytes, fileExtension: ext);
+      if (!mounted) return;
+      _showMessage('Profile photo updated.');
+    } on UserAuthException catch (e) {
+      if (!mounted) return;
+      _showMessage(e.message);
+    } finally {
+      if (mounted) setState(() => _isUploadingPhoto = false);
+    }
+  }
+
+  Future<void> _removePhoto() async {
+    setState(() => _isUploadingPhoto = true);
+    try {
+      await UserAuthService.instance.removeProfilePhoto();
+      if (!mounted) return;
+      _showMessage('Profile photo removed.');
+    } on UserAuthException catch (e) {
+      if (!mounted) return;
+      _showMessage(e.message);
+    } finally {
+      if (mounted) setState(() => _isUploadingPhoto = false);
+    }
+  }
+
+  Widget _initialsText(AppUser user) {
+    return Center(
+      child: Text(
+        user.initials,
+        style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: AppColors.white),
+      ),
+    );
+  }
+
+  Widget _buildAvatar(AppUser user) {
+    final photoUrl = UserAuthService.instance.profilePhotoPublicUrl(user.profilePhotoUrl);
+    return GestureDetector(
+      onTap: _isUploadingPhoto ? null : _showPhotoOptions,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 84,
+            height: 84,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: const Color(0xFF1C1526),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.accentPurple, width: 2),
+            ),
+            child: _isUploadingPhoto
+                ? const Center(
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.white),
+                    ),
+                  )
+                : photoUrl != null
+                    ? Image.network(
+                        photoUrl,
+                        width: 84,
+                        height: 84,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => _initialsText(user),
+                      )
+                    : _initialsText(user),
+          ),
+          Positioned(
+            right: -6,
+            bottom: -6,
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: AppColors.accentPurple,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.pageBackground, width: 2),
+              ),
+              child: const Icon(Icons.camera_alt_rounded, size: 14, color: AppColors.white),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -48,21 +206,7 @@ class ProfileScreen extends StatelessWidget {
                       child: Text('My Profile', style: AppTextStyles.sectionHeading),
                     ),
                     const SizedBox(height: 20),
-                    Container(
-                      width: 84,
-                      height: 84,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1C1526),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: AppColors.accentPurple, width: 2),
-                      ),
-                      child: Center(
-                        child: Text(
-                          user.initials,
-                          style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: AppColors.white),
-                        ),
-                      ),
-                    ),
+                    _buildAvatar(user),
                     const SizedBox(height: 14),
                     Text(user.fullName, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: AppColors.textDark)),
                     const SizedBox(height: 4),

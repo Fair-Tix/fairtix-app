@@ -11,7 +11,9 @@ class PublicEventRepositoryException implements Exception {
 
 /// The published event catalogue shown to eventgoers (Dashboard, All
 /// Events, Event Details), backed by `public.events` / `public.ticket_tiers`
-/// (see supabase/schema.sql).
+/// (see supabase/schema.sql). Also used read-only by the organizer and
+/// admin portals' "Browse Events" screen, so every role sees the same
+/// catalogue.
 ///
 /// Screens call [refresh] once (e.g. in `initState`) to pull the latest
 /// published events into a local cache, then read the synchronous [events]
@@ -43,14 +45,20 @@ class PublicEventRepository {
     return _palette[index];
   }
 
-  /// Fetches every top-level (non-child) published event, plus each
-  /// event's ticket tiers, and replaces the local cache. Only events with
-  /// `status == 'published'` are shown to eventgoers — draft/cancelled/
-  /// completed events are excluded, matching the buyer-facing catalogue.
+  /// Fetches every top-level (non-child) published event, the generated
+  /// per-day child events of any multi-day ones, and every event's ticket
+  /// tiers, and replaces the local cache.
+  ///
+  /// Only events with `status == 'published'` are shown — draft, canceled
+  /// and completed events are excluded, for parents and for each day of a
+  /// multi-day event alike. (A canceled day therefore drops out of its
+  /// event's day list while the other days stay on sale.)
   Future<void> refresh() async {
     try {
-      final eventRows =
-          await Supabase.instance.client
+      final client = Supabase.instance.client;
+
+      final parentRows =
+          await client
                   .from('events')
                   .select()
                   .eq('status', 'published')
@@ -58,15 +66,33 @@ class PublicEventRepository {
                   .order('event_start_date', ascending: true)
               as List;
 
-      final eventIds = eventRows.map((row) => row['event_id'] as String).toList();
+      final parentIds = parentRows.map((row) => row['event_id'] as String).toList();
+
+      // Per-day child rows of multi-day events.
+      List childRows = const [];
+      if (parentIds.isNotEmpty) {
+        childRows =
+            await client
+                    .from('events')
+                    .select()
+                    .eq('status', 'published')
+                    .inFilter('parent_event_id', parentIds)
+                    .order('day_number', ascending: true)
+                as List;
+      }
+
+      final allIds = [
+        ...parentIds,
+        ...childRows.map((row) => row['event_id'] as String),
+      ];
 
       final tiersByEvent = <String, List<TicketTier>>{};
-      if (eventIds.isNotEmpty) {
+      if (allIds.isNotEmpty) {
         final tierRows =
-            await Supabase.instance.client
+            await client
                     .from('ticket_tiers')
                     .select()
-                    .inFilter('event_id', eventIds)
+                    .inFilter('event_id', allIds)
                     .order('base_price', ascending: true)
                 as List;
         for (final row in tierRows) {
@@ -75,14 +101,30 @@ class PublicEventRepository {
         }
       }
 
-      _events = eventRows
-          .map((row) => _eventFromRow(row as Map<String, dynamic>, tiersByEvent))
+      final daysByParent = <String, List<EventSummary>>{};
+      for (final row in childRows) {
+        final parentId = row['parent_event_id'] as String;
+        daysByParent
+            .putIfAbsent(parentId, () => [])
+            .add(_eventFromRow(row as Map<String, dynamic>, tiersByEvent));
+      }
+
+      _events = parentRows
+          .map(
+            (row) => _eventFromRow(
+              row as Map<String, dynamic>,
+              tiersByEvent,
+              days: daysByParent[row['event_id'] as String] ?? const [],
+            ),
+          )
           .toList();
     } on PostgrestException catch (e) {
       throw PublicEventRepositoryException('Could not load events: ${e.message}');
     }
   }
 
+  /// Looks up a top-level event by id (not one of a multi-day event's
+  /// individual days — those are reached through [EventSummary.days]).
   EventSummary? getById(String id) {
     for (final event in _events) {
       if (event.id == id) return event;
@@ -100,10 +142,20 @@ class PublicEventRepository {
     );
   }
 
+  /// Turns a stored `event_banners` path into a directly-loadable public
+  /// URL (the bucket is public, but Storage uploads only record the path).
+  /// Returns null when no banner has been uploaded.
+  String? _bannerUrl(String? path) {
+    if (path == null || path.isEmpty) return null;
+    if (path.startsWith('http')) return path;
+    return Supabase.instance.client.storage.from('event_banners').getPublicUrl(path);
+  }
+
   EventSummary _eventFromRow(
     Map<String, dynamic> row,
-    Map<String, List<TicketTier>> tiersByEvent,
-  ) {
+    Map<String, List<TicketTier>> tiersByEvent, {
+    List<EventSummary> days = const [],
+  }) {
     final eventId = row['event_id'] as String;
     final startDate = DateTime.parse(row['event_start_date'] as String);
     final endDateRaw = row['event_end_date'] as String?;
@@ -126,6 +178,8 @@ class PublicEventRepository {
       accentColor: _colorForEvent(eventId),
       description: row['description'] as String?,
       tiers: tiers,
+      bannerUrl: _bannerUrl(row['banner_image_url'] as String?),
+      days: days,
     );
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/admin_session.dart';
+import '../../widgets/notification_bell.dart';
 import '../organizer/app_colors.dart';
 import 'admin-announcement.dart';
 import 'admin-accounts.dart';
@@ -251,12 +252,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
           ),
           const SizedBox(width: 16),
-          const Icon(
-            Icons.notifications_none,
-            size: 19,
-            color: AppColors.textGray,
-          ),
-          const SizedBox(width: 14),
+          const NotificationBell(size: 19, color: AppColors.textGray),
+          const SizedBox(width: 8),
           const CircleAvatar(
             radius: 14,
             backgroundColor: Color(0xFFE8E6F1),

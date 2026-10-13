@@ -10,6 +10,7 @@ class AppUser {
     this.isVerified = true,
     this.idVerificationStatus = 'verified',
     this.idDocumentUrl,
+    this.profilePhotoUrl,
   });
 
   final String fullName;
@@ -31,6 +32,11 @@ class AppUser {
   /// 'pending' meaning it's uploaded but not yet reviewed by an admin.
   final String? idDocumentUrl;
 
+  /// Storage path of the optional profile photo in the public
+  /// `profile_photos` bucket (`public.users.profile_photo_url`). Null until
+  /// the eventgoer sets one — the avatar then falls back to initials.
+  final String? profilePhotoUrl;
+
   /// Builds an [AppUser] from a `public.users` row (as returned by
   /// `supabase.from('users').select().eq('id', ...).single()`).
   factory AppUser.fromRow(Map<String, dynamic> row) {
@@ -45,6 +51,22 @@ class AppUser {
       isVerified: status == 'verified',
       idVerificationStatus: status,
       idDocumentUrl: row['id_document_url'] as String?,
+      profilePhotoUrl: row['profile_photo_url'] as String?,
+    );
+  }
+
+  /// Copy with a changed profile photo. Pass [clearProfilePhoto] to remove
+  /// the photo (a plain `null` can't be told apart from "leave unchanged").
+  AppUser copyWith({String? profilePhotoUrl, bool clearProfilePhoto = false}) {
+    return AppUser(
+      fullName: fullName,
+      username: username,
+      email: email,
+      idType: idType,
+      isVerified: isVerified,
+      idVerificationStatus: idVerificationStatus,
+      idDocumentUrl: idDocumentUrl,
+      profilePhotoUrl: clearProfilePhoto ? null : (profilePhotoUrl ?? this.profilePhotoUrl),
     );
   }
 

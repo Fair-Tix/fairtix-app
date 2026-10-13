@@ -11,7 +11,12 @@ import 'event_details_screen.dart';
 /// Featured Events section. Backed by `public.events` (status ==
 /// published) via [PublicEventRepository].
 class AllEventsScreen extends StatefulWidget {
-  const AllEventsScreen({super.key});
+  const AllEventsScreen({super.key, this.readOnly = false});
+
+  /// True when opened from the organizer or admin portal: the same
+  /// published catalogue, but events open in view-only mode (no ticket
+  /// selection or purchase — only event goers buy tickets).
+  final bool readOnly;
 
   @override
   State<AllEventsScreen> createState() => _AllEventsScreenState();
@@ -51,7 +56,7 @@ class _AllEventsScreenState extends State<AllEventsScreen> {
 
   void _openEvent(EventSummary event) {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => EventDetailsScreen(event: event)),
+      MaterialPageRoute(builder: (_) => EventDetailsScreen(event: event, readOnly: widget.readOnly)),
     );
   }
 

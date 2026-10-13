@@ -23,6 +23,8 @@
 // The price is computed server-side (checkout_quote in
 // supabase/checkout_guard.sql); any `amount` sent by the app is ignored.
 // Returns: { "checkout_url": "https://pm.link/...", "reference_number": "...", "link_id": "..." }
+// For a FREE (price 0) tier there is no payment: the ticket is issued
+// immediately and the response is { "free": true, "ticket_id": "...", "qr_code_token": "..." }
 //
 // The caller's Supabase auth session (sent automatically by
 // `functions.invoke`) is used to look up their user id server-side, which
@@ -98,8 +100,38 @@ serve(async (req) => {
     }
     const quote = Array.isArray(quoteData) ? quoteData[0] : quoteData;
     const amount = Number(quote.out_amount);
-    if (!(amount > 0)) {
+    if (!Number.isFinite(amount) || amount < 0) {
       throw new Error('Could not work out the price for this ticket.');
+    }
+
+    // FREE TIER (price 0): PayMongo cannot charge zero, so there is nothing
+    // to pay. Issue the ticket right away through the same server-side path a
+    // paid purchase uses (so stock, the one-ticket-per-day limit, the
+    // transaction row and the purchase notification all behave identically).
+    // This only happens when the SERVER-computed price is 0 — the app has no
+    // way to ask for it, since the amount it sends is ignored. No platform
+    // fee applies (fee = 0% of 0). Each call uses a fresh token because
+    // there's no PayMongo link id to derive one from; a repeat call can't
+    // issue a second ticket because checkout_quote above would already have
+    // refused it (the buyer now holds one for this event day).
+    if (amount === 0) {
+      const { data: freeData, error: freeError } = await admin.rpc('fulfill_ticket_purchase', {
+        p_tier_id: tierId,
+        p_buyer_id: user.id,
+        p_qr_code_token: `FTX-FREE-${crypto.randomUUID()}`,
+      });
+      if (freeError) {
+        throw new Error(freeError.message);
+      }
+      const freeTicket = Array.isArray(freeData) ? freeData[0] : freeData;
+      return new Response(
+        JSON.stringify({
+          free: true,
+          ticket_id: freeTicket.ticket_id,
+          qr_code_token: freeTicket.qr_code_token,
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
     }
 
     // PayMongo amounts are in centavos (smallest currency unit).

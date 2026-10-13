@@ -73,7 +73,9 @@ class TicketTierRow extends StatelessWidget {
                 ),
               ),
               Text(
-                formatPeso(withPlatformFee(tier.price, kPrimaryPlatformFeeRate)).replaceAll('.00', ''),
+                tier.price <= 0
+                    ? 'Free'
+                    : formatPeso(withPlatformFee(tier.price, kPrimaryPlatformFeeRate)).replaceAll('.00', ''),
                 style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.accentPurple),
               ),
             ],

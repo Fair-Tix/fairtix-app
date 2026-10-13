@@ -71,6 +71,20 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       );
 
       final data = response.data;
+
+      // A free (price 0) tier never goes to PayMongo: the server has already
+      // issued the ticket and says so. Go straight to the confirmation.
+      if (data is Map &&
+          data['free'] == true &&
+          data['ticket_id'] != null &&
+          data['qr_code_token'] != null) {
+        _finishPurchase(
+          ticketId: data['ticket_id'] as String,
+          qrToken: data['qr_code_token'] as String,
+        );
+        return;
+      }
+
       if (data is! Map || data['checkout_url'] == null || data['link_id'] == null) {
         final errorText = (data is Map ? data['error'] as String? : null) ??
             'Could not start the PayMongo checkout.';
@@ -145,38 +159,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         throw Exception(errorText);
       }
 
-      final newTicket = Ticket(
-        id: row['ticket_id'] as String,
-        event: widget.event,
-        tier: widget.tier,
-        ownerName: UserSession.instance.account?.fullName ?? 'FairTix User',
+      _finishPurchase(
+        ticketId: row['ticket_id'] as String,
         qrToken: row['qr_code_token'] as String,
-      );
-
-      // Refresh the real My Tickets / Transactions caches (see
-      // TicketRepository / TransactionRepository) so they reflect this
-      // purchase the moment those screens are next opened, instead of
-      // showing stale data until their own next manual refresh.
-      unawaited(TicketRepository.instance.refresh());
-      unawaited(TransactionRepository.instance.refresh());
-      // Also reload the event catalogue so ticket_tiers.remaining_quantity
-      // (just decremented server-side) shows its new value everywhere.
-      unawaited(PublicEventRepository.instance.refresh());
-      // The purchase trigger (supabase/purchase_notification.sql) has already
-      // written the "Ticket Purchased" notification; pull it in so the
-      // dashboard's unread dot shows it without opening Notifications first.
-      // Errors are swallowed: the Notifications screen reloads on its own.
-      unawaited(NotificationRepository.instance.refresh().catchError((_) {}));
-
-      if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => CheckoutConfirmationScreen(
-            event: widget.event,
-            tier: widget.tier,
-            purchasedTicket: newTicket,
-          ),
-        ),
       );
     } on FunctionException catch (e) {
       // The Edge Function answered with a non-2xx (e.g. 402 payment not
@@ -205,9 +190,49 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
+  /// Runs once the server has issued the ticket — after a verified PayMongo
+  /// payment, or immediately for a free (price 0) tier: builds the local
+  /// [Ticket], refreshes the caches, and shows the confirmation screen.
+  void _finishPurchase({required String ticketId, required String qrToken}) {
+    final newTicket = Ticket(
+      id: ticketId,
+      event: widget.event,
+      tier: widget.tier,
+      ownerName: UserSession.instance.account?.fullName ?? 'FairTix User',
+      qrToken: qrToken,
+    );
+
+    // Refresh the real My Tickets / Transactions caches (see
+    // TicketRepository / TransactionRepository) so they reflect this
+    // purchase the moment those screens are next opened, instead of
+    // showing stale data until their own next manual refresh.
+    unawaited(TicketRepository.instance.refresh());
+    unawaited(TransactionRepository.instance.refresh());
+    // Also reload the event catalogue so ticket_tiers.remaining_quantity
+    // (just decremented server-side) shows its new value everywhere.
+    unawaited(PublicEventRepository.instance.refresh());
+    // The purchase trigger (supabase/purchase_notification.sql) has already
+    // written the "Ticket Purchased" notification; pull it in so the
+    // dashboard's unread dot shows it without opening Notifications first.
+    // Errors are swallowed: the Notifications screen reloads on its own.
+    unawaited(NotificationRepository.instance.refresh().catchError((_) {}));
+
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => CheckoutConfirmationScreen(
+          event: widget.event,
+          tier: widget.tier,
+          purchasedTicket: newTicket,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final ticketPrice = widget.tier.price;
+    final isFree = ticketPrice <= 0;
     final platformFee = ticketPrice * kPrimaryPlatformFeeRate;
     final total = ticketPrice + platformFee;
     final isBusy = _stage == _CheckoutStage.creatingLink || _stage == _CheckoutStage.finalizing;
@@ -285,7 +310,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     children: [
                       const Text('Ticket Price', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textDark)),
                       Text(
-                        formatPeso(total),
+                        isFree ? 'Free' : formatPeso(total),
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.accentPurple),
                       ),
                     ],
@@ -304,7 +329,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'You\u2019ll pay via PayMongo\u2019s Sandbox checkout page (test mode \u2014 no real money is processed).',
+                            isFree
+                                ? 'This ticket is free \u2014 no payment is needed. Tap the button below to get it.'
+                                : 'You\u2019ll pay via PayMongo\u2019s Sandbox checkout page (test mode \u2014 no real money is processed).',
                             style: AppTextStyles.bodyMuted.copyWith(fontSize: 12),
                           ),
                         ),
@@ -376,7 +403,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             ],
             const SizedBox(height: 24),
             GradientPillButton(
-              label: _stage == _CheckoutStage.awaitingPayment ? 'I\u2019ve Completed Payment' : 'Pay with PayMongo',
+              label: _stage == _CheckoutStage.awaitingPayment
+                  ? 'I\u2019ve Completed Payment'
+                  : (isFree ? 'Get Free Ticket' : 'Pay with PayMongo'),
               loading: isBusy,
               onPressed: _stage == _CheckoutStage.awaitingPayment ? _handleConfirmPaid : _handleStartPayment,
             ),

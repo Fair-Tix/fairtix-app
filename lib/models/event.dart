@@ -79,6 +79,7 @@ class EventSummary {
   String get startingPriceLabel {
     if (tiers.isEmpty) return priceLabel;
     final lowestTierPrice = tiers.map((t) => t.price).reduce((a, b) => a < b ? a : b);
+    if (lowestTierPrice <= 0) return 'Free';
     return 'From ${formatPeso(withPlatformFee(lowestTierPrice, kPrimaryPlatformFeeRate))}';
   }
 }

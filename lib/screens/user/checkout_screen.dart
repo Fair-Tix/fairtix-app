@@ -57,15 +57,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       _errorMessage = null;
     });
 
-    final ticketPrice = widget.tier.price;
-    final platformFee = ticketPrice * kPrimaryPlatformFeeRate;
-    final total = ticketPrice + platformFee;
-
     try {
+      // No amount is sent: the server works out the price itself and also
+      // refuses the checkout if this buyer already holds a ticket for this
+      // event day, the event isn't on sale, or the tier is sold out.
       final response = await Supabase.instance.client.functions.invoke(
         'paymongo-checkout',
         body: {
-          'amount': total,
           'description': '${widget.tier.name} \u2013 ${widget.event.title}',
           'tierId': widget.tier.id,
         },
@@ -89,6 +87,17 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       if (!launched && mounted) {
         setState(() => _errorMessage = 'Could not open the payment page automatically. Use the link below.');
       }
+    } on FunctionException catch (e) {
+      // The Edge Function refused (e.g. "You can only hold one ticket per
+      // event day"). Show its plain-sentence message; no payment was started.
+      if (!mounted) return;
+      final details = e.details;
+      final message = (details is Map ? details['error'] as String? : null) ??
+          'Could not start the PayMongo checkout. Please try again.';
+      setState(() {
+        _stage = _CheckoutStage.review;
+        _errorMessage = message;
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() {

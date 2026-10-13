@@ -19,7 +19,9 @@ class EventRepositoryException implements Exception {
 /// My Events / the Dashboard / Edit Event free of further changes.
 ///
 /// [createEvent] is the one write path currently wired to Supabase (see
-/// organizer-create-event.dart). [updateEvent], [cancelEvent], and
+/// organizer-create-event.dart). [cancelEventPersisted] also writes to
+/// Supabase (used by organizer-cancel-event.dart). [updateEvent],
+/// [cancelEvent], and
 /// [deleteEvent] still only mutate the local cache — persisting those is
 /// still open TODO(backend) work (Phase 2 follow-up), same as before this
 /// change; a [refresh] after using this class will not reflect an edit or
@@ -358,6 +360,36 @@ class EventRepository {
     if (index != -1) {
       _events[index] = _events[index].copyWith(status: EventStatus.cancelled);
     }
+  }
+
+  /// Cancels [id] in Supabase (and, for a multi-day parent, its generated
+  /// day-children), then updates the local cache.
+  ///
+  /// The database trigger in supabase/refund_functions.sql does the rest:
+  /// it creates a pending refund per completed purchase, cancels the
+  /// tickets and any active resale listings, and notifies each buyer.
+  Future<void> cancelEventPersisted(String id) async {
+    try {
+      final updated = await Supabase.instance.client
+          .from('events')
+          .update({'status': 'canceled'})
+          .eq('event_id', id)
+          .select('event_id');
+      // RLS silently matches zero rows for an event the caller doesn't own,
+      // so an empty result means nothing was canceled.
+      if ((updated as List).isEmpty) {
+        throw const EventRepositoryException(
+          'Could not cancel this event. It may not belong to your account.',
+        );
+      }
+      await Supabase.instance.client
+          .from('events')
+          .update({'status': 'canceled'})
+          .eq('parent_event_id', id);
+    } on PostgrestException catch (e) {
+      throw EventRepositoryException('Could not cancel the event: ${e.message}');
+    }
+    cancelEvent(id);
   }
 
   void deleteEvent(String id) {

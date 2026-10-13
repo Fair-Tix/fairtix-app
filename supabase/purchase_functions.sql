@@ -26,6 +26,52 @@
 -- already-created ticket — no double-issuance if both happen to fire.
 -- =============================================================================
 
+-- ── Fee rate by organizer plan ───────────────────────────────────────────
+-- FairTix's primary-sale platform fee depends on the ORGANIZER's plan
+-- (organizer-subscription-plan.dart):
+--   Basic    (monthly_fee 299)  -> 8%
+--   Standard (monthly_fee 699)  -> 9%
+--   Premium  (monthly_fee 1499) -> 10%
+-- organizer_subscriptions has no plan-name column (only monthly_fee), so the
+-- plan is derived from the fee, the same mapping the Flutter app uses.
+--
+-- FEE MODEL: the buyer pays exactly the listed ticket price. The platform fee
+-- is taken OUT of the organizer's proceeds, never added on top for the buyer
+-- ("buyers are never charged more than the ticket tier price" - Definition of
+-- Terms, Platform Fee). So for a primary purchase:
+--   transactions.amount       = ticket price (what the buyer paid)
+--   transactions.platform_fee = price x plan rate (FairTix's cut)
+--   organizer receives        = amount - platform_fee
+create or replace function public.plan_fee_rate(p_monthly_fee numeric)
+returns numeric
+language sql immutable
+as $$
+  select case p_monthly_fee
+    when 299  then 0.08
+    when 699  then 0.09
+    when 1499 then 0.10
+    else 0.10  -- no active plan / unknown fee: fall back to the highest rate
+  end;
+$$;
+
+-- The rate that applies to this organizer's sales right now (their latest
+-- active subscription). Internal: only called from the purchase functions.
+create or replace function public.organizer_fee_rate(p_organizer_id uuid)
+returns numeric
+language sql stable
+security definer set search_path = public
+as $$
+  select public.plan_fee_rate((
+    select s.monthly_fee
+    from public.organizer_subscriptions s
+    where s.user_id = p_organizer_id and s.status = 'active'
+    order by s.start_date desc, s.created_at desc
+    limit 1
+  ));
+$$;
+
+revoke all on function public.organizer_fee_rate(uuid) from public, anon, authenticated;
+
 create or replace function public._do_ticket_purchase(
   p_tier_id uuid,
   p_buyer_id uuid,
@@ -37,6 +83,8 @@ security definer set search_path = public
 as $$
 declare
   v_remaining int;
+  v_event_id uuid;
+  v_organizer_id uuid;
   v_base_price numeric(10,2);
   v_service_fee numeric(10,2);
   v_ticket public.tickets;
@@ -52,11 +100,12 @@ begin
 
   -- Lock the tier row so two concurrent purchases can't both read the same
   -- remaining_quantity and oversell the last ticket.
-  select remaining_quantity, base_price
-    into v_remaining, v_base_price
-    from public.ticket_tiers
-    where tier_id = p_tier_id
-    for update;
+  select tt.remaining_quantity, tt.base_price, tt.event_id, e.organizer_id
+    into v_remaining, v_base_price, v_event_id, v_organizer_id
+    from public.ticket_tiers tt
+    join public.events e on e.event_id = tt.event_id
+    where tt.tier_id = p_tier_id
+    for update of tt;
 
   if not found then
     raise exception 'That ticket tier no longer exists.';
@@ -65,8 +114,29 @@ begin
     raise exception 'This ticket tier is sold out.';
   end if;
 
-  -- Mirrors kPrimaryPlatformFeeRate (10%%) in lib/models/event.dart.
-  v_service_fee := round(v_base_price * 0.10, 2);
+  -- One ticket per account per event day (see checkout_guard.sql). The
+  -- checkout function already checks this BEFORE taking payment; this is the
+  -- backstop for two checkouts racing. The advisory lock makes simultaneous
+  -- purchases by the same buyer for the same event run one after another, so
+  -- the second one sees the first one's ticket.
+  perform pg_advisory_xact_lock(hashtextextended(p_buyer_id::text || v_event_id::text, 0));
+
+  -- Re-check idempotency now that we hold the locks: if verify and the webhook
+  -- raced on the SAME payment, the other one has just created this ticket, so
+  -- return it instead of tripping the limit check below on our own twin.
+  select * into v_existing from public.tickets where qr_code_token = p_qr_code_token;
+  if found then
+    return v_existing;
+  end if;
+
+  if public.ticket_slot_used(p_buyer_id, v_event_id) then
+    raise exception 'You already hold (or have resold) a ticket for this event day.';
+  end if;
+
+  -- FairTix's cut, by the organizer's plan (8% / 9% / 10%). It comes out of
+  -- the organizer's proceeds; the buyer pays only the listed price. Mirrors
+  -- plan_fee_rate above and the plan fees in organizer-subscription-plan.dart.
+  v_service_fee := round(v_base_price * public.organizer_fee_rate(v_organizer_id), 2);
 
   begin
     insert into public.tickets (
@@ -91,7 +161,7 @@ begin
   )
   values (
     v_ticket.ticket_id, p_buyer_id, null, 'purchase',
-    v_base_price + v_service_fee, v_service_fee, 'completed', 'released', 0
+    v_base_price, v_service_fee, 'completed', 'released', 0
   );
 
   update public.ticket_tiers

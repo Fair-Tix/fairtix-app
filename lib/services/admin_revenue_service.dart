@@ -46,11 +46,19 @@ class AdminRevenueService {
   ];
 
   /// Always returns one entry per plan, in Basic/Standard/Premium order,
-  /// with zeros for plans that have no sales yet.
-  Future<List<PlanRevenue>> fetchByPlan() async {
+  /// with zeros for plans that have no sales yet. [from] is inclusive and
+  /// [to] exclusive; either may be null for no limit on that side.
+  Future<List<PlanRevenue>> fetchByPlan({DateTime? from, DateTime? to}) async {
     try {
       final rows =
-          await Supabase.instance.client.rpc('admin_revenue_by_plan') as List;
+          await Supabase.instance.client.rpc(
+                'admin_revenue_by_plan',
+                params: {
+                  'p_from': from?.toUtc().toIso8601String(),
+                  'p_to': to?.toUtc().toIso8601String(),
+                },
+              )
+              as List;
       final byPlan = <String, Map<String, dynamic>>{
         for (final row in rows)
           (row as Map<String, dynamic>)['plan'] as String: row,

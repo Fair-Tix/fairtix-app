@@ -97,14 +97,25 @@ String formatPeso(double amount) {
   return '₱$wholeFormatted.$decimalPart';
 }
 
-// FairTix's platform-fee rates. The fee is a backend split between the
-// event organizer and FairTix (admin) — the buyer never sees it broken
-// out anywhere in the app. Every buyer-facing price (tier list, resale
-// market, checkout, receipt) already has the fee folded in via
-// [withPlatformFee], so the number the user sees is the same number
-// they pay, everywhere, with no separate "platform fee" line.
-const double kPrimaryPlatformFeeRate = 0.10; // primary ticket purchases
-const double kResalePlatformFeeRate = 0.05; // resale purchases (flat, per the study)
+// FEE MODEL: the buyer pays exactly the listed price, with nothing added
+// on top, so these two buyer-facing surcharge rates are 0. FairTix's real
+// platform fee is taken out of the organizer's / seller's proceeds on the
+// server: primary sales 8% / 9% / 10% by the organizer's plan (see
+// plan_fee_rate in supabase/purchase_functions.sql), resale a flat 5%
+// deducted from the seller (see kResaleSellerFeeRate below).
+//
+// [withPlatformFee] is still used everywhere a buyer-facing price is built
+// (tier list, resale market, checkout, receipt), so with a rate of 0 the
+// number the buyer sees is the number they pay. If a surcharge were ever
+// reintroduced it would need the server to charge it too: checkout_quote in
+// supabase/checkout_guard.sql and _do_ticket_purchase in
+// supabase/purchase_functions.sql.
+const double kPrimaryPlatformFeeRate = 0.0; // added on top for primary purchases (none)
+const double kResalePlatformFeeRate = 0.0; // added on top for resale purchases (none)
+
+/// Flat fee FairTix keeps from a resale, deducted from the SELLER's
+/// proceeds (per the study); the resale buyer pays only the listing price.
+const double kResaleSellerFeeRate = 0.05;
 
 /// Adds the platform fee on top of a base (organizer/seller) price to get
 /// the fee-inclusive total the buyer sees and pays.

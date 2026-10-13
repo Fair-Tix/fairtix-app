@@ -17,10 +17,11 @@
 //
 // Called from Flutter as:
 //   supabase.functions.invoke('paymongo-checkout', body: {
-//     'amount': totalPesos,        // e.g. 550.0
 //     'description': 'VIP – Some Concert',
 //     'tierId': tier.id,           // the ticket_tiers.tier_id being bought
 //   })
+// The price is computed server-side (checkout_quote in
+// supabase/checkout_guard.sql); any `amount` sent by the app is ignored.
 // Returns: { "checkout_url": "https://pm.link/...", "reference_number": "...", "link_id": "..." }
 //
 // The caller's Supabase auth session (sent automatically by
@@ -35,6 +36,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 const PAYMONGO_SECRET_KEY = Deno.env.get('PAYMONGO_SECRET_KEY') ?? '';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const PAYMONGO_API = 'https://api.paymongo.com/v1/links';
 
 const corsHeaders = {
@@ -74,13 +76,30 @@ serve(async (req) => {
       throw new Error('You need to be signed in to start a checkout.');
     }
 
-    const { amount, description, tierId } = await req.json();
+    const { description, tierId } = await req.json();
 
-    if (typeof amount !== 'number' || amount <= 0) {
-      throw new Error('amount must be a positive number (in pesos).');
-    }
     if (typeof tierId !== 'string' || tierId.length === 0) {
       throw new Error('tierId is required.');
+    }
+
+    // The server decides whether this buyer may buy this tier, and what it
+    // costs. The `amount` the app sends is deliberately IGNORED: trusting it
+    // would let someone pay PHP 1 for a VIP ticket. checkout_quote (see
+    // supabase/checkout_guard.sql) raises a plain-sentence error if the event
+    // isn't on sale, the tier is sold out, or the buyer already holds (or has
+    // resold) a ticket for this event day, so no payment link is created.
+    const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const { data: quoteData, error: quoteError } = await admin.rpc('checkout_quote', {
+      p_tier_id: tierId,
+      p_buyer_id: user.id,
+    });
+    if (quoteError) {
+      throw new Error(quoteError.message);
+    }
+    const quote = Array.isArray(quoteData) ? quoteData[0] : quoteData;
+    const amount = Number(quote.out_amount);
+    if (!(amount > 0)) {
+      throw new Error('Could not work out the price for this ticket.');
     }
 
     // PayMongo amounts are in centavos (smallest currency unit).

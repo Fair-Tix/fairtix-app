@@ -119,11 +119,21 @@ class OrganizerCancelEventScreen extends StatelessWidget {
                 PrimaryButton(
                   label: 'Confirm Cancellation',
                   color: AppColors.dangerRed,
-                  onPressed: () {
+                  onPressed: () async {
                     final ticketsSold = event.ticketsSold;
-                    EventRepository.instance.cancelEvent(eventId);
-                    Navigator.pushReplacement(
-                      context,
+                    final navigator = Navigator.of(context);
+                    final messenger = ScaffoldMessenger.maybeOf(context);
+                    try {
+                      await EventRepository.instance.cancelEventPersisted(
+                        eventId,
+                      );
+                    } on EventRepositoryException catch (e) {
+                      messenger?.showSnackBar(
+                        SnackBar(content: Text(e.message)),
+                      );
+                      return;
+                    }
+                    navigator.pushReplacement(
                       MaterialPageRoute(
                         builder: (_) => OrganizerEventCancelledScreen(
                           eventId: event.id,

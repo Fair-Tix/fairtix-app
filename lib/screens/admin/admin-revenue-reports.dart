@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../services/admin_session.dart';
+import '../../models/transaction.dart' show formatDateTime;
+import '../../services/admin_refund_service.dart';
+import '../../services/admin_report_service.dart';
 import '../../services/admin_revenue_service.dart';
+import '../../services/csv_export.dart';
 import '../organizer/app_colors.dart';
 import 'admin-accounts.dart';
 import 'admin-dashboard.dart';
@@ -27,11 +31,162 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
   List<PlanRevenue> _plans = [];
   bool _isLoading = true;
   String? _errorMessage;
+  List<RefundEntry> _refunds = [];
+  bool _isLoadingRefunds = true;
+  String? _refundError;
+  DateTimeRange? _customRange;
+  bool _isExporting = false;
+
+  /// Inclusive start / exclusive end of the selected range, or (null, null)
+  /// for a Custom Range that hasn't been picked yet (= all time).
+  (DateTime?, DateTime?) _rangeBounds() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    switch (_range) {
+      case 'This Week':
+        final monday = today.subtract(Duration(days: now.weekday - 1));
+        return (monday, monday.add(const Duration(days: 7)));
+      case 'This Month':
+        return (DateTime(now.year, now.month), DateTime(now.year, now.month + 1));
+      default:
+        final custom = _customRange;
+        if (custom == null) return (null, null);
+        return (
+          DateTime(custom.start.year, custom.start.month, custom.start.day),
+          DateTime(custom.end.year, custom.end.month, custom.end.day + 1),
+        );
+    }
+  }
+
+  String _rangeLabel() {
+    final (from, to) = _rangeBounds();
+    if (from == null || to == null) return 'all time';
+    String d(DateTime x) => '${x.month}/${x.day}/${x.year}';
+    return '${d(from)} – ${d(to.subtract(const Duration(days: 1)))}';
+  }
+
+  Future<void> _selectRange(String range) async {
+    if (range != 'Custom Range') {
+      setState(() => _range = range);
+      await _loadRevenue();
+      return;
+    }
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 2),
+      lastDate: DateTime(now.year + 1, 12, 31),
+      initialDateRange: _customRange,
+    );
+    if (!mounted || picked == null) return;
+    setState(() {
+      _customRange = picked;
+      _range = range;
+    });
+    await _loadRevenue();
+  }
+
+  Future<void> _exportReport(
+    String slug,
+    Future<String> Function(DateTime? from, DateTime? to) build,
+  ) async {
+    if (_isExporting) return;
+    setState(() => _isExporting = true);
+    try {
+      final (from, to) = _rangeBounds();
+      final csv = await build(from, to);
+      final now = DateTime.now();
+      String two(int n) => n.toString().padLeft(2, '0');
+      final fileName =
+          'fairtix_${slug}_${now.year}-${two(now.month)}-${two(now.day)}.csv';
+      final saved = await saveCsvFile(fileName: fileName, csv: csv);
+      if (!mounted) return;
+      if (saved) _showMessage('Report exported ($fileName).');
+    } on AdminReportException catch (e) {
+      if (!mounted) return;
+      _showMessage(e.message);
+    } catch (e) {
+      if (!mounted) return;
+      _showMessage('Could not save the report: $e');
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  Future<void> _exportTransactions() => _exportReport(
+    'transactions',
+    (from, to) =>
+        AdminReportService.instance.transactionReportCsv(from: from, to: to),
+  );
+
+  Future<void> _exportRevenue() => _exportReport(
+    'revenue',
+    (from, to) =>
+        AdminReportService.instance.revenueReportCsv(from: from, to: to),
+  );
+
+  Future<void> _exportRefunds() => _exportReport(
+    'refunds',
+    (from, to) =>
+        AdminReportService.instance.refundReportCsv(from: from, to: to),
+  );
 
   @override
   void initState() {
     super.initState();
     _loadRevenue();
+    _loadRefunds();
+  }
+
+  Future<void> _loadRefunds() async {
+    setState(() {
+      _isLoadingRefunds = true;
+      _refundError = null;
+    });
+    try {
+      final refunds = await AdminRefundService.instance.fetchRefunds();
+      if (!mounted) return;
+      setState(() => _refunds = refunds);
+    } on AdminRefundException catch (e) {
+      if (!mounted) return;
+      setState(() => _refundError = e.message);
+    } finally {
+      if (mounted) setState(() => _isLoadingRefunds = false);
+    }
+  }
+
+  Future<void> _processRefund(RefundEntry refund) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Mark refund as processed?'),
+        content: Text(
+          'Record that ${_money(refund.amount)} was refunded to '
+          '${refund.buyerName}. This does not send money by itself — '
+          'issue the refund in PayMongo first.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Mark Processed'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+    try {
+      await AdminRefundService.instance.markProcessed(refund.id);
+      if (!mounted) return;
+      _showMessage('Refund marked as processed.');
+      await Future.wait([_loadRefunds(), _loadRevenue()]);
+    } on AdminRefundException catch (e) {
+      if (!mounted) return;
+      _showMessage(e.message);
+    }
   }
 
   Future<void> _loadRevenue() async {
@@ -40,7 +195,11 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
       _errorMessage = null;
     });
     try {
-      final plans = await AdminRevenueService.instance.fetchByPlan();
+      final (from, to) = _rangeBounds();
+      final plans = await AdminRevenueService.instance.fetchByPlan(
+        from: from,
+        to: to,
+      );
       if (!mounted) return;
       setState(() => _plans = plans);
     } on AdminRevenueException catch (e) {
@@ -278,8 +437,7 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
             if (isWide) _buildRangeControls(),
             const SizedBox(width: 10),
             OutlinedButton.icon(
-              onPressed: () =>
-                  _showMessage('Revenue export will be connected to Firebase.'),
+              onPressed: _isExporting ? null : _exportRevenue,
               icon: const Icon(Icons.download_outlined, size: 14),
               label: const Text('Export CSV', style: TextStyle(fontSize: 10)),
               style: OutlinedButton.styleFrom(
@@ -315,6 +473,8 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
         ],
         const SizedBox(height: 18),
         _buildMonthlyBreakdown(hasData),
+        const SizedBox(height: 18),
+        _buildRefundLog(),
         const SizedBox(height: 22),
         _buildExportReports(),
       ],
@@ -334,7 +494,7 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
         children: [
           for (final range in ['This Week', 'This Month', 'Custom Range'])
             InkWell(
-              onTap: () => setState(() => _range = range),
+              onTap: () => _selectRange(range),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 11),
                 alignment: Alignment.center,
@@ -500,7 +660,7 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
   Widget _buildFeesByPlan() {
     return _panel(
       title: 'Platform Fees by Plan',
-      trailing: _isLoading ? 'Loading...' : 'From recorded ticket sales',
+      trailing: _isLoading ? 'Loading...' : _rangeLabel(),
       child: Column(
         children: [
           const Divider(height: 1),
@@ -574,6 +734,147 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
                 ],
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRefundLog() {
+    final pending = _refunds.where((r) => !r.isProcessed).length;
+    return _panel(
+      title: 'Refund Log',
+      trailing: _isLoadingRefunds
+          ? 'Loading...'
+          : '${_refunds.length} total • $pending pending',
+      child: Column(
+        children: [
+          const Divider(height: 1),
+          if (_refundError != null)
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _refundError!,
+                      style: const TextStyle(
+                        color: Color(0xFFB91C1C),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _loadRefunds,
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            )
+          else if (!_isLoadingRefunds && _refunds.isEmpty)
+            const SizedBox(
+              height: 110,
+              child: Center(
+                child: Text(
+                  'No refunds yet. Refunds appear here when an event is canceled.',
+                  style: TextStyle(color: AppColors.textGray, fontSize: 11),
+                ),
+              ),
+            )
+          else ...[
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 10, 16, 10),
+              child: Row(
+                children: [
+                  Expanded(flex: 2, child: Text('DATE', style: _headerStyle)),
+                  Expanded(flex: 2, child: Text('EVENT', style: _headerStyle)),
+                  Expanded(flex: 2, child: Text('BUYER', style: _headerStyle)),
+                  Expanded(child: Text('AMOUNT', style: _headerStyle)),
+                  Expanded(child: Text('STATUS', style: _headerStyle)),
+                  SizedBox(width: 96),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            for (final refund in _refunds) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        formatDateTime(refund.createdAt),
+                        style: const TextStyle(fontSize: 10),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        refund.eventTitle,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        refund.buyerName,
+                        style: const TextStyle(fontSize: 10),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        _money(refund.amount),
+                        style: const TextStyle(fontSize: 10),
+                      ),
+                    ),
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: refund.isProcessed
+                                ? const Color(0xFFD1FAE5)
+                                : const Color(0xFFFEF3C7),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            refund.statusLabel,
+                            style: TextStyle(
+                              color: refund.isProcessed
+                                  ? const Color(0xFF047857)
+                                  : const Color(0xFFB45309),
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 96,
+                      child: refund.isProcessed
+                          ? const SizedBox.shrink()
+                          : TextButton(
+                              onPressed: () => _processRefund(refund),
+                              child: const Text(
+                                'Mark Processed',
+                                style: TextStyle(fontSize: 9),
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+            ],
+          ],
         ],
       ),
     );
@@ -682,27 +983,47 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
   }
 
   Widget _buildExportReports() {
-    const reports = [
+    final reports = <(IconData, String, String, VoidCallback?)>[
       (
-        Icons.description_outlined,
-        'Sales Report',
-        'Ticket sales, buyer information, tiers, and revenue by event.',
+        Icons.receipt_long_outlined,
+        'Transaction Report',
+        'Every purchase and resale with buyer, event, tier, amount, fee, and status.',
+        _exportTransactions,
+      ),
+      (
+        Icons.payments_outlined,
+        'Revenue Report',
+        'Platform fees per organizer plan (8% / 9% / 10%) with gross, fee, and net totals.',
+        _exportRevenue,
+      ),
+      (
+        Icons.assignment_return_outlined,
+        'Refund Report',
+        'Every refund with its event, buyer, amount, and processed status.',
+        _exportRefunds,
       ),
       (
         Icons.check_circle_outline,
         'Attendance Report',
         'QR scan logs and attendance rates by event and gate.',
+        () => _showMessage('Attendance reports are not available yet.'),
       ),
       (
         Icons.sync_outlined,
         'Resale Activity Report',
         'Resale listings, flagged violations, and resolved cases.',
+        () => _showMessage('Resale activity reports are not available yet.'),
       ),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text('Export Reports', style: AppTextStyles.h3),
+        const SizedBox(height: 4),
+        Text(
+          'Exports cover: ${_rangeLabel()} (change it with the range selector above)',
+          style: const TextStyle(color: AppColors.textGray, fontSize: 10),
+        ),
         const SizedBox(height: 12),
         LayoutBuilder(
           builder: (context, constraints) => Wrap(
@@ -753,9 +1074,7 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
                           ),
                           const Spacer(),
                           OutlinedButton.icon(
-                            onPressed: () => _showMessage(
-                              '${report.$2} will be connected to Firebase.',
-                            ),
+                            onPressed: _isExporting ? null : report.$4,
                             icon: const Icon(Icons.download_outlined, size: 13),
                             label: const Text(
                               'Export CSV',

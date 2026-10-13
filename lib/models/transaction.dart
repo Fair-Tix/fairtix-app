@@ -97,8 +97,15 @@ class AppTransaction {
         ? TransactionCategory.resaleSale
         : (rawType == 'resale' ? TransactionCategory.resalePurchase : TransactionCategory.ticketPurchase);
 
-    final amount = (row['amount'] as num).toDouble();
-    final platformFee = (row['platform_fee'] as num).toDouble();
+    final paid = (row['amount'] as num).toDouble();
+    final fee = (row['platform_fee'] as num).toDouble();
+
+    // transactions.amount is what the BUYER paid (the listed price, with no
+    // fee added on top). FairTix's fee comes out of the receiving side, so:
+    //  - a buyer's receipt shows just what they paid, and no fee;
+    //  - a seller's receipt (resale sale) shows what they actually receive,
+    //    i.e. the sale price minus FairTix's flat 5% resale fee.
+    final amount = category == TransactionCategory.resaleSale ? paid - fee : paid;
 
     final rawStatus = row['status'] as String;
     final status = switch (rawStatus) {
@@ -113,8 +120,8 @@ class AppTransaction {
       tierName: (tierRow?['tier_name'] as String?) ?? 'Ticket',
       category: category,
       amount: amount,
-      subtotal: amount - platformFee,
-      platformFee: platformFee,
+      subtotal: paid,
+      platformFee: category == TransactionCategory.resaleSale ? fee : null,
       dateTime: DateTime.parse(row['created_at'] as String),
       paymentMethod: 'PayMongo Sandbox',
       status: status,

@@ -12,6 +12,22 @@ import 'registration_pending_screen.dart';
 import 'registration_screen.dart';
 import '../staff/staff_pin_entry_screen.dart';
 
+/// Picks the first screen for a signed-in eventgoer based on their real
+/// id_verification_status. Shared by the login flow and app startup
+/// (session restore) so both land in the same place:
+///  - verified            -> straight into the app
+///  - pending, no ID yet  -> still mid-registration; resume ID upload
+///  - pending, ID on file -> "Verification Pending" (under admin review)
+///  - rejected            -> treat like "no ID yet" so they can resubmit
+Widget userHomeFor(AppUser account) {
+  if (account.idVerificationStatus == 'verified') {
+    return const MainShell();
+  } else if (account.idDocumentUrl == null || account.idVerificationStatus == 'rejected') {
+    return const IdentityVerificationScreen();
+  }
+  return RegistrationPendingScreen(idType: account.idType);
+}
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -50,30 +66,12 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!mounted) return;
     setState(() => _isLoading = false);
 
-    // Route based on the account's real id_verification_status rather
-    // than always going Home:
-    //  - verified            -> straight into the app
-    //  - pending, no ID yet  -> still mid-registration; resume ID upload
-    //  - pending, ID on file -> "Verification Pending" (under admin review)
-    //  - rejected            -> treat like "no ID yet" so they can resubmit
-    if (account.idVerificationStatus == 'verified') {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const MainShell()),
-        (route) => false,
-      );
-    } else if (account.idDocumentUrl == null || account.idVerificationStatus == 'rejected') {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const IdentityVerificationScreen()),
-        (route) => false,
-      );
-    } else {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (_) => RegistrationPendingScreen(idType: account.idType),
-        ),
-        (route) => false,
-      );
-    }
+    // Route based on the account's real id_verification_status (see
+    // [userHomeFor]) rather than always going Home.
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => userHomeFor(account)),
+      (route) => false,
+    );
   }
 
   @override

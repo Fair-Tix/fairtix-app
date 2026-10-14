@@ -14,6 +14,7 @@ import 'screens/admin/admin-profile.dart';
 import 'screens/admin/admin-resale-monitoring.dart';
 import 'screens/admin/admin-revenue-reports.dart';
 import 'screens/admin/admin-route.dart';
+import 'screens/admin/admin-user-registrations.dart';
 import 'screens/organizer/organizer-splash.dart';
 import 'screens/organizer/organizer-landing.dart';
 import 'screens/organizer/app_colors.dart';
@@ -114,6 +115,7 @@ class MyApp extends StatelessWidget {
     '/AdminProfileScreen' => const AdminProfileScreen(),
     '/AdminResaleMonitoringScreen' => const AdminResaleMonitoringScreen(),
     '/AdminRevenueReportsScreen' => const AdminRevenueReportsScreen(),
+    '/AdminUserRegistrationsScreen' => const AdminUserRegistrationsScreen(),
     _ => null,
   };
 

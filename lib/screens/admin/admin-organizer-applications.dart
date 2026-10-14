@@ -9,6 +9,7 @@ import '../organizer/app_colors.dart';
 import 'admin-dashboard.dart';
 import 'admin-login.dart';
 import 'admin-route.dart';
+import 'admin-user-registrations.dart';
 import 'admin-accounts.dart';
 import 'admin-events-tickets.dart';
 import 'admin-fraud-alerts.dart';
@@ -155,6 +156,7 @@ class _AdminOrganizerApplicationsScreenState
     final items = [
       (Icons.grid_view_rounded, 'Dashboard'),
       (Icons.business_outlined, 'Organizer Applications'),
+      (Icons.how_to_reg_outlined, 'User Registrations'),
       (Icons.people_outline, 'Accounts'),
       (Icons.calendar_today_outlined, 'Events & Tickets'),
       (Icons.swap_vert_rounded, 'Resale Monitoring'),
@@ -183,13 +185,14 @@ class _AdminOrganizerApplicationsScreenState
                 onTap: () {
                   final pages = <int, Widget>{
                     0: const AdminDashboardScreen(),
-                    2: const AdminAccountsScreen(),
-                    3: const AdminEventsTicketsScreen(),
-                    4: const AdminResaleMonitoringScreen(),
-                    5: const AdminFraudAlertsScreen(),
-                    6: const AdminRevenueReportsScreen(),
-                    7: const AdminPlatformSettingsScreen(),
-                    8: const AdminProfileScreen(),
+                    2: const AdminUserRegistrationsScreen(),
+                    3: const AdminAccountsScreen(),
+                    4: const AdminEventsTicketsScreen(),
+                    5: const AdminResaleMonitoringScreen(),
+                    6: const AdminFraudAlertsScreen(),
+                    7: const AdminRevenueReportsScreen(),
+                    8: const AdminPlatformSettingsScreen(),
+                    9: const AdminProfileScreen(),
                   };
                   final page = pages[index];
                   if (page != null) {

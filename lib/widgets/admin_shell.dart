@@ -10,6 +10,7 @@ import '../screens/admin/admin-platform-settings.dart';
 import '../screens/admin/admin-profile.dart';
 import '../screens/admin/admin-resale-monitoring.dart';
 import '../screens/admin/admin-revenue-reports.dart';
+import '../screens/admin/admin-user-registrations.dart';
 import 'notification_bell.dart';
 import '../screens/admin/admin-route.dart';
 import '../screens/organizer/app_colors.dart';
@@ -20,6 +21,7 @@ import '../services/admin_session.dart';
 enum AdminNavItem {
   dashboard(Icons.grid_view_rounded, 'Dashboard'),
   organizerApplications(Icons.business_outlined, 'Organizer Applications'),
+  userRegistrations(Icons.how_to_reg_outlined, 'User Registrations'),
   accounts(Icons.people_outline, 'Accounts'),
   eventsTickets(Icons.calendar_today_outlined, 'Events & Tickets'),
   resaleMonitoring(Icons.swap_vert_rounded, 'Resale Monitoring'),
@@ -37,6 +39,7 @@ Widget _pageFor(AdminNavItem item) => switch (item) {
   AdminNavItem.dashboard => const AdminDashboardScreen(),
   AdminNavItem.organizerApplications =>
     const AdminOrganizerApplicationsScreen(),
+  AdminNavItem.userRegistrations => const AdminUserRegistrationsScreen(),
   AdminNavItem.accounts => const AdminAccountsScreen(),
   AdminNavItem.eventsTickets => const AdminEventsTicketsScreen(),
   AdminNavItem.resaleMonitoring => const AdminResaleMonitoringScreen(),

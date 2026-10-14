@@ -12,6 +12,7 @@ import 'admin-organizer-applications.dart';
 import 'admin-resale-monitoring.dart';
 import 'admin-revenue-reports.dart';
 import 'admin-route.dart';
+import 'admin-user-registrations.dart';
 import 'admin-profile.dart';
 
 class AdminPlatformSettingsScreen extends StatefulWidget {
@@ -36,6 +37,7 @@ class _AdminPlatformSettingsScreenState
   static const _items = [
     (Icons.grid_view_rounded, 'Dashboard'),
     (Icons.business_outlined, 'Organizer Applications'),
+    (Icons.how_to_reg_outlined, 'User Registrations'),
     (Icons.people_outline, 'Accounts'),
     (Icons.calendar_today_outlined, 'Events & Tickets'),
     (Icons.swap_vert_rounded, 'Resale Monitoring'),
@@ -57,12 +59,13 @@ class _AdminPlatformSettingsScreenState
     final pages = <int, Widget>{
       0: const AdminDashboardScreen(),
       1: const AdminOrganizerApplicationsScreen(),
-      2: const AdminAccountsScreen(),
-      3: const AdminEventsTicketsScreen(),
-      4: const AdminResaleMonitoringScreen(),
-      5: const AdminFraudAlertsScreen(),
-      6: const AdminRevenueReportsScreen(),
-      8: const AdminProfileScreen(),
+      2: const AdminUserRegistrationsScreen(),
+      3: const AdminAccountsScreen(),
+      4: const AdminEventsTicketsScreen(),
+      5: const AdminResaleMonitoringScreen(),
+      6: const AdminFraudAlertsScreen(),
+      7: const AdminRevenueReportsScreen(),
+      9: const AdminProfileScreen(),
     };
     final page = pages[index];
     if (page != null) {
@@ -159,7 +162,7 @@ class _AdminPlatformSettingsScreenState
               _SidebarItem(
                 icon: _items[index].$1,
                 label: _items[index].$2,
-                selected: index == 7,
+                selected: index == 8,
                 onTap: () => _navigate(context, index),
               ),
             const Spacer(),

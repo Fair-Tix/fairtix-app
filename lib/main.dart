@@ -17,10 +17,13 @@ import 'screens/admin/admin-route.dart';
 import 'screens/organizer/organizer-splash.dart';
 import 'screens/organizer/organizer-landing.dart';
 import 'screens/organizer/app_colors.dart';
+import 'screens/user/login_screen.dart' show userHomeFor;
 import 'screens/user/splash_screen.dart';
 import 'services/admin_auth_service.dart';
 import 'services/organizer_auth_service.dart';
 import 'services/organizer_session.dart';
+import 'services/user_auth_service.dart';
+import 'services/user_session.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -65,6 +68,17 @@ void main() async {
       } catch (_) {
         // Same rule: fall through to the splash screen, never crash.
       }
+    }
+  }
+
+  if (!kIsWeb) {
+    // Mobile app: keep the eventgoer signed in across app restarts until
+    // they press Log Out. Supabase persists the session on the device; this
+    // rebuilds UserSession from it. Never blocks startup on failure.
+    try {
+      await UserAuthService.instance.restoreSession();
+    } catch (_) {
+      // Fall through to the splash screen.
     }
   }
 
@@ -117,7 +131,12 @@ class MyApp extends StatelessWidget {
         return MaterialPageRoute<void>(
           settings: settings,
           builder: (_) {
-            if (!kIsWeb) return const SplashScreen();
+            if (!kIsWeb) {
+              // A restored eventgoer skips the splash/login and goes straight
+              // to where they belong. Read live so a Log Out is respected.
+              final user = UserSession.instance.account;
+              return user != null ? userHomeFor(user) : const SplashScreen();
+            }
             // A signed-in organizer (restored after a refresh, or logged in
             // this session) goes straight to where they belong; everyone
             // else sees the public splash screen. Read live from the

@@ -111,13 +111,78 @@ class OrganizerAuthService {
       );
     }
 
+    final account = await _buildAccount(
+      userId: authUser.id,
+      row: row,
+      fallbackEmail: normalizedEmail,
+    );
+    OrganizerSession.instance.signIn(account);
+    return account;
+  }
+
+  /// Rehydrates [OrganizerSession] from Supabase's persisted auth session
+  /// after a browser refresh, so the organizer stays signed in until they
+  /// press Log Out. Returns the restored account, or null when there is no
+  /// saved session or it doesn't belong to an active organizer.
+  ///
+  /// A temporary failure (network, expired token mid-refresh) does NOT sign
+  /// the Supabase session out: the organizer just lands on the splash screen
+  /// and a later refresh can restore them.
+  Future<OrganizerAccount?> restoreSession() async {
+    final client = Supabase.instance.client;
+    final authUser = client.auth.currentUser;
+    if (authUser == null) {
+      OrganizerSession.instance.signOut();
+      return null;
+    }
+
+    try {
+      final row = await client
+          .from('users')
+          .select()
+          .eq('id', authUser.id)
+          .maybeSingle();
+
+      if (row == null || row['role'] != 'organizer') {
+        OrganizerSession.instance.signOut();
+        return null;
+      }
+
+      final accountStatus = (row['account_status'] as String?) ?? 'active';
+      if (accountStatus != 'active') {
+        OrganizerSession.instance.signOut();
+        await client.auth.signOut();
+        return null;
+      }
+
+      final account = await _buildAccount(
+        userId: authUser.id,
+        row: row,
+        fallbackEmail: authUser.email ?? '',
+      );
+      OrganizerSession.instance.signIn(account);
+      return account;
+    } on PostgrestException {
+      OrganizerSession.instance.signOut();
+      return null;
+    }
+  }
+
+  /// Builds an [OrganizerAccount] from a `public.users` row plus the
+  /// organizer's latest active subscription. Shared by [login] and
+  /// [restoreSession] so both produce identical accounts.
+  Future<OrganizerAccount> _buildAccount({
+    required String userId,
+    required Map<String, dynamic> row,
+    required String fallbackEmail,
+  }) async {
     String? subscriptionPlan;
     DateTime? subscriptionRenewsAt;
     try {
       final subRow = await Supabase.instance.client
           .from('organizer_subscriptions')
           .select()
-          .eq('user_id', authUser.id)
+          .eq('user_id', userId)
           .eq('status', 'active')
           .order('start_date', ascending: false)
           .limit(1)
@@ -140,10 +205,10 @@ class OrganizerAuthService {
     final fullName = (row['full_name'] as String?)?.trim() ?? '';
     final organizationName =
         (row['organization_name'] as String?)?.trim() ?? '';
-    final account = OrganizerAccount(
-      id: authUser.id,
+    return OrganizerAccount(
+      id: userId,
       fullName: fullName.isNotEmpty ? fullName : 'Organizer',
-      email: (row['email'] as String?) ?? normalizedEmail,
+      email: (row['email'] as String?) ?? fallbackEmail,
       organizationName: organizationName.isNotEmpty
           ? organizationName
           : 'Your Organization',
@@ -154,9 +219,6 @@ class OrganizerAuthService {
       venueProofUrl: row['venue_proof_url'] as String?,
       eventPermitUrl: row['event_permit_url'] as String?,
     );
-
-    OrganizerSession.instance.signIn(account);
-    return account;
   }
 
   Future<void> selectSubscriptionPlan({

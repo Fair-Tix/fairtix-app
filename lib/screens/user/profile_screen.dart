@@ -209,8 +209,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     _buildAvatar(user),
                     const SizedBox(height: 14),
                     Text(user.fullName, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: AppColors.textDark)),
-                    const SizedBox(height: 4),
-                    Text(user.username, style: AppTextStyles.bodyMuted),
+                    if (user.username.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(user.username, style: AppTextStyles.bodyMuted),
+                    ],
                     const SizedBox(height: 12),
                     if (user.isVerified)
                       Container(

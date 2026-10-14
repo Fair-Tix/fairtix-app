@@ -84,7 +84,6 @@ class UserAuthService {
   /// work as a code instead of a magic link.
   Future<void> register({
     required String fullName,
-    required String username,
     required String email,
     required String phone,
     required String password,
@@ -97,7 +96,6 @@ class UserAuthService {
         password: password,
         data: {
           'full_name': fullName.trim(),
-          'username': username.trim(),
           'phone': phone.trim(),
           'birth_date':
               '${birthDate.year.toString().padLeft(4, '0')}-'
@@ -127,11 +125,11 @@ class UserAuthService {
           'An account with this email already exists. Try logging in instead.',
         );
       }
-      // The signup trigger inserts into public.users, so a taken username
-      // (unique constraint) surfaces as this generic database error.
+      // The signup trigger inserts into public.users, so any failure inside
+      // it (e.g. a constraint) surfaces as this generic database error.
       if (msg.contains('database error saving new user')) {
         throw const UserAuthException(
-          'That username is already taken. Please choose another.',
+          'Could not create your account. Please try again.',
         );
       }
       throw UserAuthException(e.message);

@@ -18,7 +18,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
-  final _usernameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
@@ -41,7 +40,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   ];
 
   static final _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-  static final _usernamePattern = RegExp(r'^[a-zA-Z0-9_]{3,20}$');
   static final _phoneDigitsPattern = RegExp(r'^\d{10}$');
 
   @override
@@ -49,7 +47,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     _firstNameController.dispose();
     _lastNameController.dispose();
     _emailController.dispose();
-    _usernameController.dispose();
     _phoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
@@ -75,13 +72,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       errors['email'] = 'Email is required';
     } else if (!_emailPattern.hasMatch(email)) {
       errors['email'] = 'Enter a valid email address';
-    }
-
-    final username = _usernameController.text.trim().replaceFirst('@', '');
-    if (username.isEmpty) {
-      errors['username'] = 'Username is required';
-    } else if (!_usernamePattern.hasMatch(username)) {
-      errors['username'] = '3-20 letters, numbers, or underscores';
     }
 
     final phoneDigits = _phoneController.text.trim().replaceAll(RegExp(r'\D'), '');
@@ -121,14 +111,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     setState(() => _isSubmitting = true);
 
     final fullName = '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}';
-    final username = _usernameController.text.trim().replaceFirst('@', '');
     final email = _emailController.text.trim();
     final phone = '+63${_phoneController.text.trim().replaceAll(RegExp(r'\D'), '')}';
 
     try {
       await UserAuthService.instance.register(
         fullName: fullName,
-        username: username,
         email: email,
         phone: phone,
         password: _passwordController.text,
@@ -203,13 +191,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                 hintText: 'herondave@gmail.com',
                 keyboardType: TextInputType.emailAddress,
                 errorText: _errors['email'],
-              ),
-              const SizedBox(height: 18),
-              LightPillField(
-                label: 'Username',
-                controller: _usernameController,
-                hintText: '@herondave',
-                errorText: _errors['username'],
               ),
               const SizedBox(height: 18),
               Text('Phone Number', style: AppTextStyles.fieldLabelLight),

@@ -15,9 +15,12 @@ import 'screens/admin/admin-resale-monitoring.dart';
 import 'screens/admin/admin-revenue-reports.dart';
 import 'screens/admin/admin-route.dart';
 import 'screens/organizer/organizer-splash.dart';
+import 'screens/organizer/organizer-landing.dart';
 import 'screens/organizer/app_colors.dart';
 import 'screens/user/splash_screen.dart';
 import 'services/admin_auth_service.dart';
+import 'services/organizer_auth_service.dart';
+import 'services/organizer_session.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,10 +34,15 @@ void main() async {
   String? startupAuthError;
 
   if (kIsWeb) {
+    var adminRestored = false;
     try {
-      final isAdmin = await AdminAuthService.instance.restoreSession();
-      if (isAdmin) {
-        if (!isAdminRoute) initialRoute = '/AdminDashboardScreen';
+      adminRestored = await AdminAuthService.instance.restoreSession();
+      if (adminRestored) {
+        // Signed-in admin: deep links stay as-is, but the public site and
+        // the login page itself both go to the dashboard.
+        if (!isAdminRoute || initialRoute == '/AdminLoginScreen') {
+          initialRoute = '/AdminDashboardScreen';
+        }
       } else if (isAdminRoute) {
         initialRoute = '/AdminLoginScreen';
       }
@@ -42,6 +50,20 @@ void main() async {
       if (isAdminRoute) {
         initialRoute = '/AdminLoginScreen';
         startupAuthError = e.message;
+      }
+    } catch (_) {
+      // Anything unexpected (e.g. no network) must never stop the app from
+      // starting. The Supabase session is left alone, so a refresh retries.
+      if (isAdminRoute) initialRoute = '/AdminLoginScreen';
+    }
+
+    // Keep an organizer signed in across a browser refresh. The restored
+    // account is read back by the fallback route in MyApp.build below.
+    if (!adminRestored && !isAdminRoute) {
+      try {
+        await OrganizerAuthService.instance.restoreSession();
+      } catch (_) {
+        // Same rule: fall through to the splash screen, never crash.
       }
     }
   }
@@ -94,8 +116,17 @@ class MyApp extends StatelessWidget {
         if (adminPage != null) return adminPageRoute(adminPage);
         return MaterialPageRoute<void>(
           settings: settings,
-          builder: (_) =>
-              kIsWeb ? const OrganizerSplashScreen() : const SplashScreen(),
+          builder: (_) {
+            if (!kIsWeb) return const SplashScreen();
+            // A signed-in organizer (restored after a refresh, or logged in
+            // this session) goes straight to where they belong; everyone
+            // else sees the public splash screen. Read live from the
+            // session so a Log Out is respected.
+            final organizer = OrganizerSession.instance.account;
+            return organizer != null
+                ? organizerLandingFor(organizer)
+                : const OrganizerSplashScreen();
+          },
         );
       },
       theme: ThemeData(

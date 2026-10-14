@@ -67,7 +67,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     final displayEmail = widget.email.isNotEmpty ? widget.email : 'your email';
     return Scaffold(
       body: GradientBackground(
-        child: Padding(
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -115,6 +118,22 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
               ),
             ],
           ),
+              ),
+            ),
+            SafeArea(
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 8, top: 4),
+                  child: IconButton(
+                    tooltip: 'Back',
+                    icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.white, size: 22),
+                    onPressed: () => Navigator.of(context).maybePop(),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

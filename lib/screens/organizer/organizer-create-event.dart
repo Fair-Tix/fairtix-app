@@ -135,33 +135,21 @@ class _OrganizerCreateEventScreenState
     });
   }
 
-  /// Uploads whatever banner/documents were picked for the just-created
-  /// [event]. Failures here are shown as a warning but never block
-  /// navigation — the event itself was already created successfully.
+  /// Uploads the selected attachments for [event]. A publish must not proceed
+  /// unless every required document has been uploaded successfully.
   Future<void> _uploadAttachments(OrganizerEvent event) async {
-    try {
-      if (_bannerBytes != null) {
-        await EventRepository.instance.uploadEventBanner(
-          eventId: event.id,
-          bytes: _bannerBytes!,
-          fileExtension: _bannerExt ?? 'jpg',
-        );
-      }
-      for (final doc in _documents) {
-        await EventRepository.instance.uploadEventDocument(
-          eventId: event.id,
-          bytes: doc.bytes,
-          fileName: doc.fileName,
-        );
-      }
-    } on EventRepositoryException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '"${event.name}" was created, but ${e.message.toLowerCase()}',
-          ),
-        ),
+    if (_bannerBytes != null) {
+      await EventRepository.instance.uploadEventBanner(
+        eventId: event.id,
+        bytes: _bannerBytes!,
+        fileExtension: _bannerExt ?? 'jpg',
+      );
+    }
+    for (final doc in _documents) {
+      await EventRepository.instance.uploadEventDocument(
+        eventId: event.id,
+        bytes: doc.bytes,
+        fileName: doc.fileName,
       );
     }
   }
@@ -320,11 +308,19 @@ class _OrganizerCreateEventScreenState
         span: _span,
         startDate: _startDate!,
         endDate: _span == EventSpan.multiDay ? _endDate : null,
-        status: EventStatus.published,
+        // Keep the event unpublished until all required documents are safely
+        // stored. If any upload fails, the draft remains available to retry.
+        status: EventStatus.draft,
         tiers: _buildTiers(),
       );
 
       await _uploadAttachments(event);
+      final eventWithAttachments =
+          EventRepository.instance.getById(event.id) ?? event;
+      await EventRepository.instance.updateEvent(
+        eventWithAttachments,
+        publish: true,
+      );
 
       if (!mounted) return;
       Navigator.pushReplacement(

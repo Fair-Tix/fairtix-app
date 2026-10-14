@@ -302,17 +302,13 @@ class EventRepository {
             fileOptions: FileOptions(upsert: true, contentType: contentType),
           );
 
-      await Supabase.instance.client
-          .from('events')
-          .update({'banner_image_url': path})
-          .eq('event_id', eventId);
+      await Supabase.instance.client.rpc(
+        'set_event_banner',
+        params: {'p_event_id': eventId, 'p_path': path},
+      );
 
       // Multi-day parent: propagate the same banner to every generated
       // day-child (a no-op update if there are none, e.g. single-day).
-      await Supabase.instance.client
-          .from('events')
-          .update({'banner_image_url': path})
-          .eq('parent_event_id', eventId);
     } on StorageException catch (e) {
       throw EventRepositoryException(
         'Could not upload the banner: ${e.message}',
@@ -349,26 +345,10 @@ class EventRepository {
             fileOptions: const FileOptions(upsert: true),
           );
 
-      final current = await Supabase.instance.client
-          .from('events')
-          .select('supporting_document_urls')
-          .eq('event_id', eventId)
-          .single();
-      final updatedUrls = [
-        ...((current['supporting_document_urls'] as List?)?.cast<String>() ??
-            const []),
-        path,
-      ];
-
-      await Supabase.instance.client
-          .from('events')
-          .update({'supporting_document_urls': updatedUrls})
-          .eq('event_id', eventId);
-
-      await Supabase.instance.client
-          .from('events')
-          .update({'supporting_document_urls': updatedUrls})
-          .eq('parent_event_id', eventId);
+      await Supabase.instance.client.rpc(
+        'append_event_document',
+        params: {'p_event_id': eventId, 'p_path': path},
+      );
     } on StorageException catch (e) {
       throw EventRepositoryException(
         'Could not upload the document: ${e.message}',

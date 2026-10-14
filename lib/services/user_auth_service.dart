@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/app_user.dart';
@@ -70,7 +72,39 @@ class UserAuthService {
 
     final account = AppUser.fromRow(row);
     UserSession.instance.signIn(account);
+    await _saveProfileCache(authUser.id, row);
     return account;
+  }
+
+  // --- Offline profile copy -------------------------------------------------
+  // A copy of the user's `public.users` row in encrypted device storage, so
+  // the app can restore the signed-in session on launch with no connection
+  // (the wallet and QR codes are already viewable offline via TicketCache).
+  // Keyed per user id and wiped on logout. Storage errors are swallowed: a
+  // broken keystore just means no offline restore, never a broken login.
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  String _profileKey(String userId) => 'profile_cache_v1_$userId';
+
+  Future<void> _saveProfileCache(String userId, Map<String, dynamic> row) async {
+    try {
+      await _secureStorage.write(key: _profileKey(userId), value: jsonEncode(row));
+    } catch (_) {}
+  }
+
+  Future<Map<String, dynamic>?> _loadProfileCache(String userId) async {
+    try {
+      final raw = await _secureStorage.read(key: _profileKey(userId));
+      if (raw == null) return null;
+      return Map<String, dynamic>.from(jsonDecode(raw) as Map);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _clearProfileCache(String userId) async {
+    try {
+      await _secureStorage.delete(key: _profileKey(userId));
+    } catch (_) {}
   }
 
   /// Creates a new eventgoer account in Supabase Auth. A `public.users`
@@ -358,9 +392,77 @@ class UserAuthService {
     }
   }
 
+  /// Rehydrates [UserSession] from Supabase's persisted auth session when
+  /// the app is reopened, so an eventgoer stays signed in until they press
+  /// Log Out. Returns the restored account, or null when there is no saved
+  /// session or it doesn't belong to an active eventgoer.
+  ///
+  /// Offline-safe: if the server can't be reached (no connection, or no
+  /// answer within [_restoreTimeout]), the profile saved at last login is
+  /// used instead, so the user still lands in the app and can open their
+  /// saved tickets. A real server rejection is NOT treated as offline. The
+  /// Supabase session is never signed out because of a network problem.
+  Future<AppUser?> restoreSession() async {
+    final client = Supabase.instance.client;
+    final authUser = client.auth.currentUser;
+    if (authUser == null) {
+      UserSession.instance.signOut();
+      return null;
+    }
+
+    Map<String, dynamic>? row;
+    try {
+      row = await client
+          .from('users')
+          .select()
+          .eq('id', authUser.id)
+          .maybeSingle()
+          .timeout(_restoreTimeout);
+      if (row != null) await _saveProfileCache(authUser.id, row);
+    } on PostgrestException {
+      // The server answered and refused: a real problem, not "offline".
+      UserSession.instance.signOut();
+      return null;
+    } catch (_) {
+      // Can't reach the server (offline / timeout): use the saved copy.
+      row = await _loadProfileCache(authUser.id);
+      if (row == null) {
+        UserSession.instance.signOut();
+        return null;
+      }
+    }
+
+    // No profile row, or the saved session belongs to an organizer/admin
+    // (they use the web panel). Leave that session alone.
+    final role = row?['role'] as String?;
+    if (row == null || role == 'organizer' || role == 'admin') {
+      UserSession.instance.signOut();
+      return null;
+    }
+
+    final accountStatus = (row['account_status'] as String?) ?? 'active';
+    if (accountStatus != 'active') {
+      UserSession.instance.signOut();
+      await _clearProfileCache(authUser.id);
+      await client.auth.signOut();
+      return null;
+    }
+
+    final account = AppUser.fromRow(row);
+    UserSession.instance.signIn(account);
+    return account;
+  }
+
+  /// How long app startup waits for the server before falling back to the
+  /// saved profile. Kept short so a weak venue signal never leaves the
+  /// user staring at a blank screen.
+  static const Duration _restoreTimeout = Duration(seconds: 6);
+
   Future<void> logout() async {
     // Must run before signOut(): it needs the current user id to find the
     // saved offline ticket copy to delete.
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId != null) await _clearProfileCache(userId);
     await TicketRepository.instance.clearForLogout();
     UserSession.instance.signOut();
     await Supabase.instance.client.auth.signOut();

@@ -1,10 +1,12 @@
 // FairTix — PayMongo payment verifier (Supabase Edge Function)
 //
-// Called by the app when the buyer taps "I've Completed Payment". Instead
-// of trusting that tap, this function asks PayMongo's API directly whether
-// the Payment Link is actually PAID, and only then issues the ticket (via
-// fulfill_ticket_purchase, which is locked to service_role). A failed,
-// abandoned, or canceled payment therefore never produces a ticket.
+// Called by the app automatically when PayMongo redirects the buyer back via
+// the fairtix://payment/success deep link (and when the app returns to the
+// foreground). Instead of trusting the redirect, this function asks PayMongo's
+// API directly whether the Checkout Session is actually PAID, and only then
+// issues the ticket (via fulfill_ticket_purchase, which is locked to
+// service_role). A failed, abandoned, or canceled payment therefore never
+// produces a ticket.
 //
 // The tier and buyer come from the link's `remarks` (written server-side
 // by paymongo-checkout), NOT from the request body, so a client can't pay
@@ -17,7 +19,7 @@
 // service role key is provided automatically by Supabase.)
 //
 // Called from Flutter as:
-//   supabase.functions.invoke('paymongo-verify', body: {'linkId': linkId})
+//   supabase.functions.invoke('paymongo-verify', body: {'sessionId': sessionId})
 // Returns: { ticket_id, qr_code_token } on success, or a non-2xx with
 // { error } if the payment isn't confirmed.
 
@@ -28,7 +30,7 @@ const PAYMONGO_SECRET_KEY = Deno.env.get('PAYMONGO_SECRET_KEY') ?? '';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-const PAYMONGO_API = 'https://api.paymongo.com/v1/links';
+const PAYMONGO_API = 'https://api.paymongo.com/v1/checkout_sessions';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -65,13 +67,13 @@ serve(async (req) => {
       return json({ error: 'You need to be signed in to verify a payment.' }, 401);
     }
 
-    const { linkId } = await req.json();
-    if (typeof linkId !== 'string' || linkId.length === 0) {
-      return json({ error: 'linkId is required.' }, 400);
+    const { sessionId } = await req.json();
+    if (typeof sessionId !== 'string' || sessionId.length === 0) {
+      return json({ error: 'sessionId is required.' }, 400);
     }
 
     // Ask PayMongo itself — this is the source of truth for payment status.
-    const pmResponse = await fetch(`${PAYMONGO_API}/${encodeURIComponent(linkId)}`, {
+    const pmResponse = await fetch(`${PAYMONGO_API}/${encodeURIComponent(sessionId)}`, {
       method: 'GET',
       headers: { Authorization: `Basic ${btoa(`${PAYMONGO_SECRET_KEY}:`)}` },
     });
@@ -82,26 +84,27 @@ serve(async (req) => {
     }
 
     const attrs = pmPayload.data.attributes;
-    if (attrs.status !== 'paid') {
+    // A Checkout Session is paid once one of its payments has status "paid"
+    // (or its payment intent has succeeded).
+    const payments: Array<{ attributes?: { status?: string } }> = attrs.payments ?? [];
+    const isPaid =
+      payments.some((p) => p?.attributes?.status === 'paid') ||
+      attrs.payment_intent?.attributes?.status === 'succeeded';
+    if (!isPaid) {
       return json(
         {
           error:
             'We have not received a successful payment for this checkout. If you canceled or the payment failed, no ticket was issued and you have not been charged. You can try again.',
-          payment_status: attrs.status,
+          payment_status: attrs.status ?? 'unpaid',
         },
         402,
       );
     }
 
-    // Payment is confirmed. Read tier/buyer from the server-written remarks.
-    let remarks: { tier_id?: string; buyer_id?: string } = {};
-    try {
-      remarks = JSON.parse(attrs.remarks ?? '{}');
-    } catch (_) {
-      // fall through to the check below
-    }
+    // Payment is confirmed. Read tier/buyer from the server-written metadata.
+    const remarks: { tier_id?: string; buyer_id?: string } = attrs.metadata ?? {};
     if (!remarks.tier_id || !remarks.buyer_id) {
-      return json({ error: 'This payment link was not created by FairTix checkout.' }, 400);
+      return json({ error: 'This payment was not created by FairTix checkout.' }, 400);
     }
     if (remarks.buyer_id !== user.id) {
       return json({ error: 'This payment belongs to a different account.' }, 403);
@@ -109,7 +112,7 @@ serve(async (req) => {
 
     // Same deterministic token as paymongo-webhook, so whichever of the two
     // runs first issues the ticket and the other is a harmless no-op.
-    const qrCodeToken = `FTX-${linkId}`;
+    const qrCodeToken = `FTX-${sessionId}`;
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const { data, error } = await admin.rpc('fulfill_ticket_purchase', {
       p_tier_id: remarks.tier_id,

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -16,20 +17,19 @@ import '../../widgets/gradient_pill_button.dart';
 import '../../widgets/purple_header_bar.dart';
 import 'checkout_confirmation_screen.dart';
 
-/// Real checkout flow:
+/// Real checkout flow (fully automatic, no "I've paid" button):
 ///  1. Ask the `paymongo-checkout` Supabase Edge Function to create a
-///     PayMongo Sandbox Payment Link (the function holds the PayMongo
+///     PayMongo Sandbox Checkout Session (the function holds the PayMongo
 ///     secret key — see supabase/functions/paymongo-checkout/index.ts).
-///  2. Open that link in the browser so the buyer pays on PayMongo's own
+///  2. Open that session in the browser so the buyer pays on PayMongo's own
 ///     Sandbox checkout page.
-///  3. Once the buyer taps "I've completed payment", call the
-///     `paymongo-verify` Edge Function (supabase/functions/paymongo-verify),
-///     which asks PayMongo directly whether the link is PAID and only then
-///     issues the ticket (atomically checking stock, creating the
-///     `tickets` row, recording the `transactions` row, and decrementing
-///     `ticket_tiers.remaining_quantity` — see
-///     supabase/purchase_functions.sql). A failed or canceled payment
-///     therefore never produces a ticket.
+///  3. PayMongo redirects the browser to `fairtix://payment/success`, which
+///     reopens this app. We catch that deep link and immediately call the
+///     `paymongo-verify` Edge Function, which asks PayMongo directly whether
+///     the session is PAID and only then issues the ticket. A failed or
+///     canceled payment therefore never produces a ticket.
+///  4. If the redirect is blocked, we also verify whenever the app returns
+///     to the foreground while a payment is pending.
 ///
 /// `paymongo-webhook` is a second, independent path that issues the same
 /// ticket when PayMongo notifies us server-to-server; both use the same
@@ -46,11 +46,54 @@ class CheckoutScreen extends StatefulWidget {
 
 enum _CheckoutStage { review, creatingLink, awaitingPayment, finalizing }
 
-class _CheckoutScreenState extends State<CheckoutScreen> {
+class _CheckoutScreenState extends State<CheckoutScreen> with WidgetsBindingObserver {
   _CheckoutStage _stage = _CheckoutStage.review;
   String? _checkoutUrl;
-  String? _linkId;
+  String? _sessionId;
   String? _errorMessage;
+  bool _verifying = false;
+  StreamSubscription<Uri>? _linkSub;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // PayMongo redirects the browser to fairtix://payment/success (or /cancel)
+    // after the buyer authorizes; the OS reopens the app with that link.
+    _linkSub = AppLinks().uriLinkStream.listen(_handleDeepLink, onError: (_) {});
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _linkSub?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Fallback if the browser redirect didn't fire: when the buyer switches
+    // back to the app while a payment is pending, quietly check it.
+    if (state == AppLifecycleState.resumed && _stage == _CheckoutStage.awaitingPayment) {
+      _verifyPayment(attempts: 1, silent: true);
+    }
+  }
+
+  void _handleDeepLink(Uri uri) {
+    if (uri.scheme != 'fairtix' || uri.host != 'payment') return;
+    if (_stage != _CheckoutStage.awaitingPayment) return;
+    final result = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : '';
+    if (result == 'cancel') {
+      setState(() {
+        _stage = _CheckoutStage.review;
+        _errorMessage = 'Payment was canceled. You have not been charged.';
+      });
+      return;
+    }
+    // success: confirm with the server. Retry a few times because PayMongo can
+    // take a moment to mark the payment as paid after the redirect.
+    _verifyPayment(attempts: 6, silent: false);
+  }
 
   Future<void> _handleStartPayment() async {
     setState(() {
@@ -85,7 +128,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         return;
       }
 
-      if (data is! Map || data['checkout_url'] == null || data['link_id'] == null) {
+      if (data is! Map || data['checkout_url'] == null || data['session_id'] == null) {
         final errorText = (data is Map ? data['error'] as String? : null) ??
             'Could not start the PayMongo checkout.';
         throw Exception(errorText);
@@ -94,7 +137,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       final url = data['checkout_url'] as String;
       setState(() {
         _checkoutUrl = url;
-        _linkId = data['link_id'] as String;
+        _sessionId = data['session_id'] as String;
         _stage = _CheckoutStage.awaitingPayment;
       });
 
@@ -122,72 +165,80 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
-  Future<void> _handleConfirmPaid() async {
-    setState(() {
-      _stage = _CheckoutStage.finalizing;
-      _errorMessage = null;
-    });
-
-    // Deterministic token derived from the PayMongo link id — matches what
-    // paymongo-webhook computes server-side when PayMongo itself confirms
-    // the payment. Whichever of the two fires first actually creates the
-    // ticket; the other safely becomes a no-op (see _do_ticket_purchase in
-    // supabase/purchase_functions.sql), so a ticket is never double-issued
-    // for one payment no matter which path lands first.
-    final linkId = _linkId;
-    if (linkId == null) {
-      setState(() {
-        _stage = _CheckoutStage.awaitingPayment;
-        _errorMessage = 'Missing payment reference — please restart checkout.';
-      });
+  /// Confirms the payment with the server and, if PayMongo says it's paid,
+  /// issues the ticket and moves to the confirmation screen.
+  ///
+  /// [attempts]: how many times to ask while PayMongo still reports "unpaid"
+  /// (HTTP 402) — right after the redirect the payment can lag by a second or
+  /// two. [silent]: when true (app-resume fallback) a not-yet-paid result is
+  /// ignored instead of shown as an error.
+  Future<void> _verifyPayment({int attempts = 6, bool silent = false}) async {
+    if (_verifying) return;
+    final sessionId = _sessionId;
+    if (sessionId == null) {
+      if (!silent) {
+        setState(() {
+          _stage = _CheckoutStage.review;
+          _errorMessage = 'Missing payment reference — please restart checkout.';
+        });
+      }
       return;
     }
 
-    try {
-      // paymongo-verify asks PayMongo itself whether this link is paid and
-      // only then issues the ticket. If the payment failed, was canceled,
-      // or never happened, it returns an error and NO ticket is created.
-      final response = await Supabase.instance.client.functions.invoke(
-        'paymongo-verify',
-        body: {'linkId': linkId},
-      );
-
-      final row = response.data;
-      if (row is! Map || row['ticket_id'] == null || row['qr_code_token'] == null) {
-        final errorText = (row is Map ? row['error'] as String? : null) ??
-            'Could not confirm your payment. Please try again.';
-        throw Exception(errorText);
-      }
-
-      _finishPurchase(
-        ticketId: row['ticket_id'] as String,
-        qrToken: row['qr_code_token'] as String,
-      );
-    } on FunctionException catch (e) {
-      // The Edge Function answered with a non-2xx (e.g. 402 payment not
-      // completed). Show its message and stay on the payment step so the
-      // buyer can finish paying or reopen the link — no ticket exists.
-      if (!mounted) return;
-      final details = e.details;
-      final message = (details is Map ? details['error'] as String? : null) ??
-          'Could not confirm your payment. Please try again.';
+    _verifying = true;
+    if (!silent && mounted) {
       setState(() {
-        _stage = _CheckoutStage.awaitingPayment;
-        _errorMessage = message;
-      });
-    } on PostgrestException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _stage = _CheckoutStage.awaitingPayment;
-        _errorMessage = e.message;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _stage = _CheckoutStage.awaitingPayment;
-        _errorMessage = e.toString().replaceFirst('Exception: ', '');
+        _stage = _CheckoutStage.finalizing;
+        _errorMessage = null;
       });
     }
+
+    String? lastMessage;
+    try {
+      for (var i = 0; i < attempts; i++) {
+        try {
+          // paymongo-verify asks PayMongo itself whether this session is paid
+          // and only then issues the ticket (idempotent via the FTX-<session>
+          // token, shared with paymongo-webhook).
+          final response = await Supabase.instance.client.functions.invoke(
+            'paymongo-verify',
+            body: {'sessionId': sessionId},
+          );
+          final row = response.data;
+          if (row is Map && row['ticket_id'] != null && row['qr_code_token'] != null) {
+            _verifying = false;
+            _finishPurchase(
+              ticketId: row['ticket_id'] as String,
+              qrToken: row['qr_code_token'] as String,
+            );
+            return;
+          }
+          lastMessage = (row is Map ? row['error'] as String? : null) ??
+              'Could not confirm your payment.';
+        } on FunctionException catch (e) {
+          final details = e.details;
+          lastMessage = (details is Map ? details['error'] as String? : null) ??
+              'Could not confirm your payment.';
+          // 402 = PayMongo doesn't show it as paid (yet): worth retrying.
+          // Anything else (403 wrong account, 400, 5xx) won't fix itself.
+          if (e.status != 402) break;
+        }
+        if (i < attempts - 1) {
+          await Future.delayed(const Duration(seconds: 2));
+          if (!mounted) return;
+        }
+      }
+    } catch (e) {
+      lastMessage = e.toString().replaceFirst('Exception: ', '');
+    } finally {
+      _verifying = false;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _stage = _CheckoutStage.awaitingPayment;
+      _errorMessage = silent ? null : lastMessage;
+    });
   }
 
   /// Runs once the server has issued the ticket — after a verified PayMongo
@@ -361,7 +412,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'A PayMongo Sandbox payment page opened in your browser. Once you\u2019ve completed the test payment there, come back and tap the button below.',
+                      'A PayMongo Sandbox payment page opened in your browser. After you authorize the test payment there, you\u2019ll be brought back here automatically and your ticket will be confirmed.',
                       style: AppTextStyles.bodyMuted.copyWith(fontSize: 12.5, height: 1.4),
                     ),
                     if (_checkoutUrl != null) ...[
@@ -400,13 +451,28 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               ),
             ],
             const SizedBox(height: 24),
-            GradientPillButton(
-              label: _stage == _CheckoutStage.awaitingPayment
-                  ? 'I\u2019ve Completed Payment'
-                  : (isFree ? 'Get Free Ticket' : 'Pay with PayMongo'),
-              loading: isBusy,
-              onPressed: _stage == _CheckoutStage.awaitingPayment ? _handleConfirmPaid : _handleStartPayment,
-            ),
+            if (_stage == _CheckoutStage.awaitingPayment || _stage == _CheckoutStage.finalizing)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2.4, color: AppColors.accentPurple),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    _stage == _CheckoutStage.finalizing ? 'Confirming your payment\u2026' : 'Waiting for your payment\u2026',
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.accentPurple),
+                  ),
+                ],
+              )
+            else
+              GradientPillButton(
+                label: isFree ? 'Get Free Ticket' : 'Pay with PayMongo',
+                loading: isBusy,
+                onPressed: _handleStartPayment,
+              ),
             const SizedBox(height: 14),
             Center(
               child: TextButton(

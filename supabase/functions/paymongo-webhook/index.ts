@@ -14,7 +14,7 @@
 //      has no Supabase session to attach a JWT to.)
 //   2. Add a webhook in the PayMongo Dashboard (Sandbox mode) pointing to:
 //        https://<your-project-ref>.supabase.co/functions/v1/paymongo-webhook
-//      Subscribe it to the "link.payment.paid" event.
+//      Subscribe it to the "checkout_session.payment.paid" event.
 //   3. Copy the "Signing Secret" PayMongo shows you (starts with whsk_...)
 //      and set it here:
 //        supabase secrets set PAYMONGO_WEBHOOK_SECRET=whsk_...
@@ -90,33 +90,35 @@ serve(async (req) => {
     const event = JSON.parse(rawBody);
     const eventType = event?.data?.attributes?.type;
 
-    // Only "link.payment.paid" actually confirms money moved; ignore
-    // everything else (link.payment.expired, etc.) with a 200 so PayMongo
-    // doesn't keep retrying a delivery we deliberately don't act on.
-    if (eventType !== 'link.payment.paid') {
+    // Only "checkout_session.payment.paid" actually confirms money moved;
+    // ignore everything else with a 200 so PayMongo doesn't keep retrying a
+    // delivery we deliberately don't act on.
+    if (eventType !== 'checkout_session.payment.paid') {
       return new Response(JSON.stringify({ received: true, ignored: eventType }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    const linkData = event.data.attributes.data;
-    const linkId = linkData.id as string;
-    const remarksRaw = linkData.attributes.remarks as string | null;
-    if (!remarksRaw) {
-      throw new Error(`Link ${linkId} has no remarks metadata — was it created outside paymongo-checkout?`);
-    }
-
-    const { tier_id: tierId, buyer_id: buyerId } = JSON.parse(remarksRaw);
+    // For this event, event.data.attributes.data is the Checkout Session.
+    const sessionData = event.data.attributes.data;
+    const sessionId = sessionData.id as string;
+    const metadata = (sessionData.attributes?.metadata ?? {}) as { tier_id?: string; buyer_id?: string };
+    const tierId = metadata.tier_id;
+    const buyerId = metadata.buyer_id;
     if (!tierId || !buyerId) {
-      throw new Error(`Link ${linkId} remarks missing tier_id/buyer_id.`);
+      // Not created by paymongo-checkout; acknowledge so PayMongo stops retrying.
+      return new Response(JSON.stringify({ received: true, ignored: 'no FairTix metadata' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
-    // Deterministic token: matches what checkout_screen.dart computes
-    // client-side ('FTX-' + link_id), so whichever fulfillment path lands
-    // first wins and the other becomes a safe idempotent no-op — see
-    // _do_ticket_purchase in purchase_functions.sql.
-    const qrCodeToken = `FTX-${linkId}`;
+    // Deterministic token: identical to what paymongo-verify computes
+    // ('FTX-' + session id), so whichever fulfillment path lands first wins and
+    // the other becomes a safe idempotent no-op — see _do_ticket_purchase in
+    // purchase_functions.sql.
+    const qrCodeToken = `FTX-${sessionId}`;
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const { error } = await supabase.rpc('fulfill_ticket_purchase', {

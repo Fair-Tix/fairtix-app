@@ -39,7 +39,16 @@ const PAYMONGO_SECRET_KEY = Deno.env.get('PAYMONGO_SECRET_KEY') ?? '';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-const PAYMONGO_API = 'https://api.paymongo.com/v1/links';
+// Checkout Sessions (not Payment Links): only Checkout Sessions accept a
+// success_url / cancel_url, which is what lets PayMongo send the buyer
+// straight back into the app after paying, with no manual button tap.
+const PAYMONGO_API = 'https://api.paymongo.com/v1/checkout_sessions';
+
+// Where PayMongo sends the buyer after paying. This is a deep link the Flutter
+// app listens for (see AndroidManifest.xml + checkout_screen.dart). If PayMongo
+// ever rejects a custom scheme, set this secret to an https relay page that
+// forwards to the app:  supabase secrets set APP_RETURN_URL_BASE=https://your-domain/payment-return
+const APP_RETURN_URL_BASE = Deno.env.get('APP_RETURN_URL_BASE') ?? 'fairtix://payment';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -137,10 +146,11 @@ serve(async (req) => {
     // PayMongo amounts are in centavos (smallest currency unit).
     const amountInCentavos = Math.round(amount * 100);
 
-    // Packed into `remarks` since the Links API has no dedicated metadata
-    // field — paymongo-webhook parses this back out once PayMongo confirms
-    // payment, so it knows which tier/buyer to fulfil the ticket for.
-    const remarks = JSON.stringify({ tier_id: tierId, buyer_id: user.id });
+    // Stored in the session's `metadata` — paymongo-webhook and
+    // paymongo-verify read this back once PayMongo confirms payment, so they
+    // know which tier/buyer to fulfil the ticket for.
+    const metadata = { tier_id: tierId, buyer_id: user.id };
+    const itemName = (description ?? 'FairTix ticket purchase').toString().slice(0, 250);
 
     const response = await fetch(PAYMONGO_API, {
       method: 'POST',
@@ -151,9 +161,14 @@ serve(async (req) => {
       body: JSON.stringify({
         data: {
           attributes: {
-            amount: amountInCentavos,
-            description: description ?? 'FairTix ticket purchase',
-            remarks,
+            line_items: [
+              { currency: 'PHP', amount: amountInCentavos, name: itemName, quantity: 1 },
+            ],
+            payment_method_types: ['gcash', 'paymaya', 'card', 'grab_pay'],
+            description: itemName,
+            metadata,
+            success_url: `${APP_RETURN_URL_BASE}/success`,
+            cancel_url: `${APP_RETURN_URL_BASE}/cancel`,
           },
         },
       }),
@@ -171,7 +186,7 @@ serve(async (req) => {
       JSON.stringify({
         checkout_url: attrs.checkout_url,
         reference_number: attrs.reference_number,
-        link_id: payload.data.id,
+        session_id: payload.data.id,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );

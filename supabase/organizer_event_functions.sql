@@ -246,7 +246,7 @@ as $$
 declare
   v_user_id uuid := auth.uid();
   v_user public.users%rowtype;
-  v_plan_fee numeric;
+  v_plan public.subscription_plans%rowtype;
   v_monthly_limit integer;
   v_day_limit integer;
   v_ticket_cap integer;
@@ -268,27 +268,16 @@ begin
   end if;
 
   perform pg_advisory_xact_lock(hashtextextended(v_user_id::text, 0));
-  v_plan_fee := public._organizer_plan_fee(v_user_id);
-  if v_plan_fee is null then
+  select * into v_plan from public._organizer_plan(v_user_id);
+  if v_plan.plan_id is null then
     raise exception 'Choose an active subscription plan before creating events.';
   end if;
 
-  case v_plan_fee
-    when 299 then
-      v_monthly_limit := 3;
-      v_day_limit := 3;
-      v_ticket_cap := 500;
-    when 699 then
-      v_monthly_limit := 9;
-      v_day_limit := 14;
-      v_ticket_cap := 5000;
-    when 1499 then
-      v_monthly_limit := null;
-      v_day_limit := null;
-      v_ticket_cap := null;
-    else
-      raise exception 'The active subscription plan is not recognized.';
-  end case;
+  -- Limits come from the plan the admin configured in Platform Settings
+  -- (public.subscription_plans); a null limit means unlimited.
+  v_monthly_limit := v_plan.max_events_per_month;
+  v_day_limit := v_plan.max_multiday_days;
+  v_ticket_cap := v_plan.max_tickets_per_day;
 
   insert into public.organizer_event_monthly_usage (
     organizer_id, month_start, event_count
@@ -479,7 +468,7 @@ set search_path = public
 as $$
 declare
   v_event public.events%rowtype;
-  v_plan_fee numeric;
+  v_plan public.subscription_plans%rowtype;
   v_ticket_cap integer;
   v_day_id uuid;
 begin
@@ -513,25 +502,17 @@ begin
     raise exception 'Upload at least one supporting document before publishing.';
   end if;
 
-  v_plan_fee := public._organizer_plan_fee(v_event.organizer_id);
-  if v_plan_fee is null then
+  select * into v_plan from public._organizer_plan(v_event.organizer_id);
+  if v_plan.plan_id is null then
     raise exception 'Choose an active subscription plan before editing events.';
   end if;
-  v_ticket_cap := case v_plan_fee
-    when 299 then 500
-    when 699 then 5000
-    when 1499 then null
-    else null
-  end;
-  if v_plan_fee not in (299, 699, 1499) then
-    raise exception 'The active subscription plan is not recognized.';
-  end if;
-  if v_event.event_type = 'multi_day' and v_plan_fee = 299
-     and (v_event.event_end_date - v_event.event_start_date + 1) > 3 then
-    raise exception 'Your plan allows multi-day events up to 3 days.';
-  elsif v_event.event_type = 'multi_day' and v_plan_fee = 699
-     and (v_event.event_end_date - v_event.event_start_date + 1) > 14 then
-    raise exception 'Your plan allows multi-day events up to 14 days.';
+  v_ticket_cap := v_plan.max_tickets_per_day;
+  if v_event.event_type = 'multi_day'
+     and v_plan.max_multiday_days is not null
+     and (v_event.event_end_date - v_event.event_start_date + 1)
+         > v_plan.max_multiday_days then
+    raise exception 'Your plan allows multi-day events up to % days.',
+      v_plan.max_multiday_days;
   end if;
 
   if v_event.event_type = 'multi_day' then

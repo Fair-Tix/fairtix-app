@@ -13,14 +13,14 @@ String formatDateTime(DateTime dt) {
   return '${months[dt.month - 1]} ${dt.day}, ${dt.year} \u2022 $hour12:$minute $period';
 }
 
-enum TransactionCategory { ticketPurchase, resalePurchase, resaleSale }
+enum TransactionCategory { ticketPurchase, resalePurchase, resaleSale, refund }
 
-enum TransactionStatus { completed, pending, failed }
+enum TransactionStatus { completed, pending, failed, refunded }
 
-/// A payment transaction (ticket purchase, resale purchase, or resale
-/// sale), backed by `public.transactions` joined through `public.tickets`
-/// / `public.ticket_tiers` / `public.events` (see
-/// services/transaction_repository.dart for the query).
+/// A payment transaction (ticket purchase, resale purchase, resale sale,
+/// or refund), built from the rows returned by the `get_my_transactions()`
+/// Postgres function (see supabase/my_transactions.sql and
+/// services/transaction_repository.dart).
 class AppTransaction {
   const AppTransaction({
     required this.id,
@@ -58,44 +58,47 @@ class AppTransaction {
 
   String get referenceNumber => 'FTX-${id.toUpperCase()}';
 
-  /// True for money the user received (a resale sale); false for money paid.
-  bool get isCredit => category == TransactionCategory.resaleSale;
+  /// True for money the user received (a resale sale or a refund); false
+  /// for money paid.
+  bool get isCredit =>
+      category == TransactionCategory.resaleSale || category == TransactionCategory.refund;
 
   String get categoryLabel => switch (category) {
         TransactionCategory.ticketPurchase => 'Ticket Purchase',
         TransactionCategory.resalePurchase => 'Resale Purchase',
         TransactionCategory.resaleSale => 'Resale Sale',
+        TransactionCategory.refund => 'Refund',
       };
 
   IconData get categoryIcon => switch (category) {
         TransactionCategory.ticketPurchase => Icons.confirmation_number_rounded,
         TransactionCategory.resalePurchase => Icons.swap_horiz_rounded,
         TransactionCategory.resaleSale => Icons.sell_rounded,
+        TransactionCategory.refund => Icons.undo_rounded,
       };
 
   String get statusLabel => switch (status) {
         TransactionStatus.completed => 'Completed',
         TransactionStatus.pending => 'Pending',
         TransactionStatus.failed => 'Failed',
+        TransactionStatus.refunded => 'Refunded',
       };
 
-  /// Builds an [AppTransaction] from a `public.transactions` row fetched
-  /// with its ticket/tier/event joined in (see
-  /// TransactionRepository.refresh's select string). [currentUserId] is
-  /// needed to tell a resale sale (money received, this user is the
-  /// seller) apart from a resale purchase (money paid, this user is the
-  /// buyer) — the row itself doesn't say which side of the transaction
-  /// "you" are.
+  /// Builds an [AppTransaction] from a flat row returned by
+  /// `get_my_transactions()` (columns: transaction_id, ticket_id,
+  /// buyer_id, seller_id, transaction_type, amount, platform_fee, status,
+  /// created_at, tier_name, event_title). [currentUserId] is needed to tell
+  /// a resale sale (money received, this user is the seller) apart from a
+  /// resale purchase (money paid, this user is the buyer). Refund rows
+  /// arrive with transaction_type = 'refund'.
   factory AppTransaction.fromRow(Map<String, dynamic> row, {required String currentUserId}) {
-    final ticketRow = row['tickets'] as Map<String, dynamic>?;
-    final tierRow = ticketRow?['ticket_tiers'] as Map<String, dynamic>?;
-    final eventRow = tierRow?['events'] as Map<String, dynamic>?;
-
     final isSeller = row['seller_id'] == currentUserId;
     final rawType = row['transaction_type'] as String;
-    final category = isSeller
-        ? TransactionCategory.resaleSale
-        : (rawType == 'resale' ? TransactionCategory.resalePurchase : TransactionCategory.ticketPurchase);
+    final category = rawType == 'refund'
+        ? TransactionCategory.refund
+        : isSeller
+            ? TransactionCategory.resaleSale
+            : (rawType == 'resale' ? TransactionCategory.resalePurchase : TransactionCategory.ticketPurchase);
 
     final paid = (row['amount'] as num).toDouble();
     final fee = (row['platform_fee'] as num).toDouble();
@@ -111,13 +114,14 @@ class AppTransaction {
     final status = switch (rawStatus) {
       'completed' => TransactionStatus.completed,
       'pending' => TransactionStatus.pending,
-      _ => TransactionStatus.failed, // 'failed' or 'refunded'
+      'refunded' => TransactionStatus.refunded,
+      _ => TransactionStatus.failed,
     };
 
     return AppTransaction(
       id: row['transaction_id'] as String,
-      eventTitle: (eventRow?['title'] as String?) ?? 'Unknown event',
-      tierName: (tierRow?['tier_name'] as String?) ?? 'Ticket',
+      eventTitle: (row['event_title'] as String?) ?? 'Unknown event',
+      tierName: (row['tier_name'] as String?) ?? 'Ticket',
       category: category,
       amount: amount,
       subtotal: paid,

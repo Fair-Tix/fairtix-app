@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'csv_export.dart' show toCsv;
+import 'csv_export.dart' show toSafeCsv;
+import 'admin_revenue_service.dart' show formatFeeRate;
 
 /// Thrown when generating a report fails.
 class AdminReportException implements Exception {
@@ -8,8 +9,10 @@ class AdminReportException implements Exception {
   const AdminReportException(this.message);
 }
 
-/// Builds the admin reports as CSV text. Saving the file is
-/// `saveCsvFile` in csv_export.dart.
+/// Builds the admin reports. Each report is available as rows (first row =
+/// the header) so the same data can be saved as CSV (`toSafeCsv`, saved with
+/// `saveCsvFile` in csv_export.dart) or as a PDF (`savePdfReport` in
+/// pdf_export.dart). The `...Csv` methods are shortcuts for the CSV form.
 ///
 /// Transactions and revenue come from the `admin_transaction_report` /
 /// `admin_revenue_report` Postgres functions (supabase/report_functions.sql,
@@ -22,9 +25,9 @@ class AdminReportService {
   AdminReportService._();
   static final AdminReportService instance = AdminReportService._();
 
-  Future<String> transactionReportCsv({DateTime? from, DateTime? to}) async {
+  Future<List<List<Object?>>> transactionReportRows({DateTime? from, DateTime? to}) async {
     final rows = await _rpc('admin_transaction_report', from, to);
-    return toCsv([
+    return [
       const [
         'Transaction ID',
         'Date',
@@ -45,23 +48,23 @@ class AdminReportService {
           r['tx_date'],
           r['tx_type'],
           r['tx_status'],
-          _safe(r['event_title']),
-          _safe(r['tier_name']),
-          _safe(r['buyer_name']),
-          _safe(r['buyer_email']),
-          _safe(r['seller_name']),
+          r['event_title'],
+          r['tier_name'],
+          r['buyer_name'],
+          r['buyer_email'],
+          r['seller_name'],
           r['amount'],
           r['platform_fee'],
           r['escrow'],
         ],
-    ]);
+    ];
   }
 
   /// One row per event + organizer + fee rate, so the Plan and Fee Rate
-  /// columns show the 8% / 9% / 10% split. Refunded sales are excluded.
-  Future<String> revenueReportCsv({DateTime? from, DateTime? to}) async {
+  /// columns show each plan's rate. Refunded sales are excluded.
+  Future<List<List<Object?>>> revenueReportRows({DateTime? from, DateTime? to}) async {
     final rows = await _rpc('admin_revenue_report', from, to);
-    return toCsv([
+    return [
       const [
         'Event',
         'Organizer',
@@ -74,19 +77,19 @@ class AdminReportService {
       ],
       for (final r in rows)
         [
-          _safe(r['event_title']),
-          _safe(r['organizer_name']),
+          r['event_title'],
+          r['organizer_name'],
           r['plan_name'],
-          '${((r['fee_rate'] as num) * 100).round()}%',
+          formatFeeRate((r['fee_rate'] as num).toDouble()),
           r['tickets_sold'],
           r['gross_revenue'],
           r['platform_fees'],
           r['net_payout'],
         ],
-    ]);
+    ];
   }
 
-  Future<String> refundReportCsv({DateTime? from, DateTime? to}) async {
+  Future<List<List<Object?>>> refundReportRows({DateTime? from, DateTime? to}) async {
     try {
       var query = Supabase.instance.client.from('refunds').select('''
             refund_id, amount, reason, status, created_at, processed_at,
@@ -100,7 +103,7 @@ class AdminReportService {
         query = query.lt('created_at', to.toUtc().toIso8601String());
       }
       final rows = await query.order('created_at', ascending: false) as List;
-      return toCsv([
+      return [
         const [
           'Refund ID',
           'Requested',
@@ -117,23 +120,32 @@ class AdminReportService {
             final r = row as Map<String, dynamic>;
             final buyer = r['users'] as Map<String, dynamic>?;
             final event = r['events'] as Map<String, dynamic>?;
-            return [
+            return <Object?>[
               r['refund_id'],
               r['created_at'],
-              _safe(event?['title']),
-              _safe(buyer?['full_name']),
-              _safe(buyer?['email']),
+              event?['title'],
+              buyer?['full_name'],
+              buyer?['email'],
               r['amount'],
-              _safe(r['reason']),
+              r['reason'],
               r['status'],
               r['processed_at'],
             ];
           }(),
-      ]);
+      ];
     } on PostgrestException catch (e) {
       throw AdminReportException('Could not generate the report: ${e.message}');
     }
   }
+
+  Future<String> transactionReportCsv({DateTime? from, DateTime? to}) async =>
+      toSafeCsv(await transactionReportRows(from: from, to: to));
+
+  Future<String> revenueReportCsv({DateTime? from, DateTime? to}) async =>
+      toSafeCsv(await revenueReportRows(from: from, to: to));
+
+  Future<String> refundReportCsv({DateTime? from, DateTime? to}) async =>
+      toSafeCsv(await refundReportRows(from: from, to: to));
 
   Future<List<Map<String, dynamic>>> _rpc(
     String function,
@@ -154,14 +166,5 @@ class AdminReportService {
     } on PostgrestException catch (e) {
       throw AdminReportException('Could not generate the report: ${e.message}');
     }
-  }
-
-  /// Text that starts with = + - @ gets a leading apostrophe, so Excel or
-  /// Sheets can't run a user-supplied name or event title as a formula.
-  Object? _safe(Object? value) {
-    if (value is String && value.isNotEmpty && '=+-@'.contains(value[0])) {
-      return "'$value";
-    }
-    return value;
   }
 }

@@ -83,7 +83,7 @@ class _StaffQrScanScreenState extends State<StaffQrScanScreen> {
         title: const Text('Session ended'),
         content: const Text(
           'The organizer ended this scanner session, or it has expired. '
-          'Enter a new link and PIN to keep scanning.',
+          'Enter a new PIN to keep scanning.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),

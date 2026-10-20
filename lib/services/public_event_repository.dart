@@ -57,6 +57,12 @@ class PublicEventRepository {
     try {
       final client = Supabase.instance.client;
 
+      // Flip events whose last day has passed to 'completed' (idempotent).
+      // Failure here must never block the catalogue from loading.
+      try {
+        await client.rpc('complete_finished_events');
+      } catch (_) {}
+
       final parentRows =
           await client
                   .from('events')
@@ -109,7 +115,19 @@ class PublicEventRepository {
             .add(_eventFromRow(row as Map<String, dynamic>, tiersByEvent));
       }
 
+      // Safety net: hide anything whose last day is already before today
+      // even if the database hasn't flipped it to 'completed' yet.
+      final today = DateTime.now();
+      final todayDate = DateTime(today.year, today.month, today.day);
+      bool notFinished(dynamic row) {
+        final last = DateTime.parse(
+          (row['event_end_date'] ?? row['event_start_date']) as String,
+        );
+        return !DateTime(last.year, last.month, last.day).isBefore(todayDate);
+      }
+
       _events = parentRows
+          .where(notFinished)
           .map(
             (row) => _eventFromRow(
               row as Map<String, dynamic>,

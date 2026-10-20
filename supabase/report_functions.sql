@@ -83,7 +83,16 @@ as $$
   select
     e.title,
     coalesce(nullif(o.organization_name, ''), o.full_name),
-    case f.fee_rate when 0.0800 then 'Basic' when 0.0900 then 'Standard' else 'Premium' end,
+    -- Plan name looked up by fee rate in subscription_plans (admin-editable);
+    -- organizer_fees stores the rate charged, not the plan. A rate no plan
+    -- uses any more is labelled with the rate.
+    coalesce(
+      (select string_agg(p.name, ' / ' order by p.sort_order, p.name)
+         from public.subscription_plans p
+        where p.platform_fee_rate = f.fee_rate),
+      trim(trailing '.' from trim(trailing '0' from round(f.fee_rate * 100, 2)::text))
+        || '% (former rate)'
+    ),
     f.fee_rate::numeric,
     count(*),
     sum(f.gross_amount),

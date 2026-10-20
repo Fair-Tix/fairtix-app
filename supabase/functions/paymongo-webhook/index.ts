@@ -31,6 +31,7 @@ const PAYMONGO_WEBHOOK_SECRET = Deno.env.get('PAYMONGO_WEBHOOK_SECRET') ?? '';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
+
 /// Verifies PayMongo's `Paymongo-Signature` header, shaped like:
 ///   t=1690000000,te=<hex hmac over unsigned mode>,li=<hex hmac over live mode>
 /// We're in Sandbox, so we check the `te` (test) digest: HMAC-SHA256 of
@@ -103,9 +104,66 @@ serve(async (req) => {
     // For this event, event.data.attributes.data is the Checkout Session.
     const sessionData = event.data.attributes.data;
     const sessionId = sessionData.id as string;
-    const metadata = (sessionData.attributes?.metadata ?? {}) as { tier_id?: string; buyer_id?: string };
+    const metadata = (sessionData.attributes?.metadata ?? {}) as {
+      tier_id?: string;
+      listing_id?: string;
+      plan_id?: string;
+      plan_name?: string;
+      plan_price?: string;
+      buyer_id?: string;
+    };
     const tierId = metadata.tier_id;
+    const listingId = metadata.listing_id;
     const buyerId = metadata.buyer_id;
+
+    // ORGANIZER SUBSCRIPTION payment: activate the plan (idempotent on the
+    // session id, shared with paymongo-verify).
+    if (metadata.plan_id && buyerId) {
+      // plan_id / plan_price were written by paymongo-checkout from the saved
+      // plan at checkout time; the amount PayMongo collected must equal it.
+      const planFee = Number(metadata.plan_price);
+      const paidCentavos = Number(sessionData.attributes?.line_items?.[0]?.amount);
+      if (
+        !Number.isFinite(planFee) ||
+        (Number.isFinite(paidCentavos) && paidCentavos !== Math.round(planFee * 100))
+      ) {
+        // Acknowledge so PayMongo stops retrying, but never activate a plan
+        // whose paid amount doesn't match its price.
+        return new Response(JSON.stringify({ received: true, ignored: 'plan amount mismatch' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      const subClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const { error: subError } = await subClient.rpc('fulfill_organizer_subscription', {
+        p_user_id: buyerId,
+        p_plan_id: metadata.plan_id,
+        p_fee: planFee,
+        p_payment_ref: `FTX-SUB-${sessionId}`,
+      });
+      if (subError) throw new Error(subError.message);
+      return new Response(JSON.stringify({ received: true, fulfilled: true, subscription: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // RESALE payment: hand the listed ticket to the buyer (idempotent on the
+    // session id, shared with paymongo-verify).
+    if (listingId && buyerId) {
+      const resaleClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const { error: resaleError } = await resaleClient.rpc('fulfill_resale_purchase', {
+        p_listing_id: listingId,
+        p_buyer_id: buyerId,
+        p_payment_ref: `FTX-RS-${sessionId}`,
+      });
+      if (resaleError) throw new Error(resaleError.message);
+      return new Response(JSON.stringify({ received: true, fulfilled: true, resale: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     if (!tierId || !buyerId) {
       // Not created by paymongo-checkout; acknowledge so PayMongo stops retrying.
       return new Response(JSON.stringify({ received: true, ignored: 'no FairTix metadata' }), {

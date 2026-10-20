@@ -27,13 +27,13 @@
 -- =============================================================================
 
 -- ── Fee rate by organizer plan ───────────────────────────────────────────
--- FairTix's primary-sale platform fee depends on the ORGANIZER's plan
--- (organizer-subscription-plan.dart):
---   Basic    (monthly_fee 299)  -> 8%
---   Standard (monthly_fee 699)  -> 9%
---   Premium  (monthly_fee 1499) -> 10%
--- organizer_subscriptions has no plan-name column (only monthly_fee), so the
--- plan is derived from the fee, the same mapping the Flutter app uses.
+-- FairTix's primary-sale platform fee depends on the ORGANIZER's plan. The
+-- plans and their rates are admin-editable (public.subscription_plans, edited
+-- in Platform Settings; see subscription_plans.sql, which must be run first),
+-- so nothing about them is fixed in this file. The seed plans are Basic 8%,
+-- Standard 9% and Premium 10%, but the table is the source of truth.
+-- An organizer's plan is the one they bought (organizer_subscriptions.plan_id);
+-- older rows with only a monthly_fee are matched to a plan by that fee.
 --
 -- FEE MODEL: the buyer pays exactly the listed ticket price. The platform fee
 -- is taken OUT of the organizer's proceeds, never added on top for the buyer
@@ -42,32 +42,52 @@
 --   transactions.amount       = ticket price (what the buyer paid)
 --   transactions.platform_fee = price x plan rate (FairTix's cut)
 --   organizer receives        = amount - platform_fee
+-- The rate comes from public.subscription_plans. The old hardcoded rates
+-- remain only as a fallback for a fee no plan matches.
 create or replace function public.plan_fee_rate(p_monthly_fee numeric)
 returns numeric
-language sql immutable
+language sql stable
+security definer set search_path = public
 as $$
-  select case p_monthly_fee
-    when 299  then 0.08
-    when 699  then 0.09
-    when 1499 then 0.10
-    else 0.10  -- no active plan / unknown fee: fall back to the highest rate
-  end;
+  select coalesce(
+    (select p.platform_fee_rate
+       from public.subscription_plans p
+      where p.monthly_fee = p_monthly_fee
+      order by p.is_active desc, p.sort_order
+      limit 1),
+    case p_monthly_fee
+      when 299  then 0.08
+      when 699  then 0.09
+      when 1499 then 0.10
+      else 0.10  -- no active plan / unknown fee: fall back to the highest rate
+    end
+  );
 $$;
 
 -- The rate that applies to this organizer's sales right now (their latest
--- active subscription). Internal: only called from the purchase functions.
+-- active subscription that has not run out, the same rule the app and
+-- _organizer_plan use). Internal: only called from the purchase functions.
+-- Uses the plan the organizer actually bought (plan_id), so later price changes
+-- by the admin do not change which fee rate an existing subscriber is on.
+-- With no current subscription the highest-rate fallback (10%) applies.
 create or replace function public.organizer_fee_rate(p_organizer_id uuid)
 returns numeric
 language sql stable
 security definer set search_path = public
 as $$
-  select public.plan_fee_rate((
-    select s.monthly_fee
+  select coalesce((
+    select coalesce(
+      (select p.platform_fee_rate
+         from public.subscription_plans p
+        where p.plan_id = s.plan_id),
+      public.plan_fee_rate(s.monthly_fee)
+    )
     from public.organizer_subscriptions s
     where s.user_id = p_organizer_id and s.status = 'active'
+      and current_date between s.start_date and s.end_date
     order by s.start_date desc, s.created_at desc
     limit 1
-  ));
+  ), 0.10);
 $$;
 
 revoke all on function public.organizer_fee_rate(uuid) from public, anon, authenticated;
@@ -133,9 +153,9 @@ begin
     raise exception 'You already hold (or have resold) a ticket for this event day.';
   end if;
 
-  -- FairTix's cut, by the organizer's plan (8% / 9% / 10%). It comes out of
-  -- the organizer's proceeds; the buyer pays only the listed price. Mirrors
-  -- plan_fee_rate above and the plan fees in organizer-subscription-plan.dart.
+  -- FairTix's cut, by the organizer's plan (rate from subscription_plans). It
+  -- comes out of the organizer's proceeds; the buyer pays only the listed
+  -- price. See organizer_fee_rate and plan_fee_rate above.
   v_service_fee := round(v_base_price * public.organizer_fee_rate(v_organizer_id), 2);
 
   begin

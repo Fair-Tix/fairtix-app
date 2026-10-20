@@ -6,6 +6,7 @@ import '../../services/admin_report_service.dart';
 import '../../services/admin_resale_service.dart';
 import '../../services/admin_revenue_service.dart';
 import '../../services/csv_export.dart';
+import '../../services/pdf_export.dart';
 import '../../widgets/admin_shell.dart';
 import '../../widgets/admin_widgets.dart';
 import '../organizer/app_colors.dart';
@@ -205,17 +206,37 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
 
   // ── exports ──────────────────────────────────────────────────────────
 
+  /// Builds the report rows (first row = header) for the selected range and
+  /// saves them as CSV or PDF.
   Future<void> _exportReport(
     String slug,
-    Future<String> Function(DateTime? from, DateTime? to) build,
-  ) async {
+    String title,
+    Future<List<List<Object?>>> Function(DateTime? from, DateTime? to) build, {
+    required bool pdf,
+    bool showTotals = false,
+  }) async {
     if (_isExporting) return;
     setState(() => _isExporting = true);
     try {
       final (from, to) = _rangeBounds();
-      final csv = await build(from, to);
-      final fileName = 'fairtix_${slug}_${formatIsoDate(DateTime.now())}.csv';
-      final saved = await saveCsvFile(fileName: fileName, csv: csv);
+      final rows = await build(from, to);
+      final ext = pdf ? 'pdf' : 'csv';
+      final fileName = 'fairtix_${slug}_${formatIsoDate(DateTime.now())}.$ext';
+      final saved = pdf
+          ? await savePdfReport(
+              fileName: fileName,
+              title: title,
+              subtitle: 'Range: ${_rangeLabel()}',
+              rows: rows,
+              showTotals: showTotals,
+            )
+          : await saveCsvReport(
+              fileName: fileName,
+              title: title,
+              subtitle: 'Range: ${_rangeLabel()}',
+              rows: rows,
+              showTotals: showTotals,
+            );
       if (!mounted) return;
       if (saved) _showMessage('Report exported ($fileName).');
     } on AdminReportException catch (e) {
@@ -232,30 +253,43 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
     }
   }
 
-  Future<void> _exportTransactions() => _exportReport(
+  Future<void> _exportTransactions({required bool pdf}) => _exportReport(
     'transactions',
-    (from, to) => AdminReportService.instance.transactionReportCsv(from: from, to: to),
+    'Transaction Report',
+    (from, to) => AdminReportService.instance.transactionReportRows(from: from, to: to),
+    pdf: pdf,
   );
 
-  Future<void> _exportRevenue() => _exportReport(
+  Future<void> _exportRevenue({required bool pdf}) => _exportReport(
     'revenue',
-    (from, to) => AdminReportService.instance.revenueReportCsv(from: from, to: to),
+    'Revenue Report',
+    (from, to) => AdminReportService.instance.revenueReportRows(from: from, to: to),
+    pdf: pdf,
+    showTotals: true,
   );
 
-  Future<void> _exportRefunds() => _exportReport(
+  Future<void> _exportRefunds({required bool pdf}) => _exportReport(
     'refunds',
-    (from, to) => AdminReportService.instance.refundReportCsv(from: from, to: to),
+    'Refund Report',
+    (from, to) => AdminReportService.instance.refundReportRows(from: from, to: to),
+    pdf: pdf,
+    showTotals: true,
   );
 
-  Future<void> _exportResale() => _exportReport('resale_activity', (from, to) async {
-    final listings = await AdminResaleService.instance.fetchListings();
-    final inRange = listings.where((l) {
-      if (from != null && l.listedAt.isBefore(from)) return false;
-      if (to != null && !l.listedAt.isBefore(to)) return false;
-      return true;
-    }).toList();
-    return resaleListingsToCsv(inRange);
-  });
+  Future<void> _exportResale({required bool pdf}) => _exportReport(
+    'resale_activity',
+    'Resale Activity Report',
+    (from, to) async {
+      final listings = await AdminResaleService.instance.fetchListings();
+      final inRange = listings.where((l) {
+        if (from != null && l.listedAt.isBefore(from)) return false;
+        if (to != null && !l.listedAt.isBefore(to)) return false;
+        return true;
+      }).toList();
+      return resaleListingsToRows(inRange);
+    },
+    pdf: pdf,
+  );
 
   void _showMessage(String message) {
     if (!mounted) return;
@@ -304,13 +338,46 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
               icon: const Icon(Icons.refresh, size: 18),
               tooltip: 'Refresh',
             ),
-            OutlinedButton.icon(
-              onPressed: _isExporting ? null : _exportRevenue,
-              icon: const Icon(Icons.download_outlined, size: 14),
-              label: const Text('Export CSV', style: TextStyle(fontSize: 10)),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.primaryPurple,
-                side: const BorderSide(color: AppColors.primaryPurple),
+            PopupMenuButton<bool>(
+              enabled: !_isExporting,
+              tooltip: 'Export the revenue report',
+              onSelected: (pdf) => _exportRevenue(pdf: pdf),
+              itemBuilder: (context) => const [
+                PopupMenuItem(value: false, child: Text('Export as CSV')),
+                PopupMenuItem(value: true, child: Text('Export as PDF')),
+              ],
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: _isExporting ? AppColors.borderLight : AppColors.primaryPurple,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.download_outlined,
+                      size: 14,
+                      color: _isExporting ? AppColors.textGray : AppColors.primaryPurple,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _isExporting ? 'Exporting...' : 'Export',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: _isExporting ? AppColors.textGray : AppColors.primaryPurple,
+                      ),
+                    ),
+                    Icon(
+                      Icons.arrow_drop_down,
+                      size: 16,
+                      color: _isExporting ? AppColors.textGray : AppColors.primaryPurple,
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -335,7 +402,7 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
               color: const Color(0xFFB05BFF),
               label: 'Platform Fees',
               value: formatPeso(fees),
-              caption: hasData ? 'Per plan: 8% / 9% / 10%' : 'No fee data yet',
+              caption: hasData ? 'Per plan: ${_feeRatesCaption()}' : 'No fee data yet',
             ),
             AdminSummaryCard(
               icon: Icons.sell_outlined,
@@ -444,13 +511,17 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
     );
   }
 
+  /// The distinct fee rates in use, e.g. 8% / 9% / 10%, from the live plans.
+  String _feeRatesCaption() {
+    final labels = <String>[];
+    for (final plan in _plans) {
+      if (!labels.contains(plan.rateLabel)) labels.add(plan.rateLabel);
+    }
+    return labels.join(' / ');
+  }
+
   Widget _buildFeesByPlan() {
-    final plans = _plans.isEmpty
-        ? [
-            for (final (name, rate) in AdminRevenueService.plans)
-              PlanRevenue(plan: name, rate: rate, tickets: 0, gross: 0, fees: 0, net: 0),
-          ]
-        : _plans;
+    final plans = _plans;
     return _panel(
       title: 'Platform Fees by Plan',
       trailing: _isLoading ? 'Loading...' : _rangeLabel(),
@@ -790,7 +861,9 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
   }
 
   Widget _buildExportReports() {
-    final reports = <(IconData, String, String, VoidCallback?)>[
+    // The last field is the export action (pdf: true/false), or null when
+    // the report isn't available yet.
+    final reports = <(IconData, String, String, Future<void> Function({required bool pdf})?)>[
       (
         Icons.receipt_long_outlined,
         'Transaction Report',
@@ -800,7 +873,7 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
       (
         Icons.payments_outlined,
         'Revenue Report',
-        'Platform fees per organizer plan (8% / 9% / 10%) with gross, fee, and net totals.',
+        'Platform fees per organizer plan with gross, fee, and net totals.',
         _exportRevenue,
       ),
       (
@@ -819,7 +892,7 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
         Icons.check_circle_outline,
         'Attendance Report',
         'QR scan logs and attendance rates by event and gate.',
-        () => _showMessage('Attendance reports are not available yet.'),
+        null,
       ),
     ];
     return Column(
@@ -864,15 +937,32 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
                             style: const TextStyle(color: AppColors.textGray, fontSize: 9, height: 1.3),
                           ),
                           const Spacer(),
-                          OutlinedButton.icon(
-                            onPressed: _isExporting ? null : report.$4,
-                            icon: const Icon(Icons.download_outlined, size: 13),
-                            label: const Text('Export CSV', style: TextStyle(fontSize: 9)),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppColors.primaryPurple,
-                              side: const BorderSide(color: AppColors.primaryPurple),
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                            ),
+                          Row(
+                            children: [
+                              for (final pdf in const [false, true]) ...[
+                                if (pdf) const SizedBox(width: 8),
+                                OutlinedButton.icon(
+                                  onPressed: _isExporting
+                                      ? null
+                                      : report.$4 == null
+                                      ? () => _showMessage('${report.$2} is not available yet.')
+                                      : () => report.$4!(pdf: pdf),
+                                  icon: Icon(
+                                    pdf ? Icons.picture_as_pdf_outlined : Icons.download_outlined,
+                                    size: 13,
+                                  ),
+                                  label: Text(
+                                    pdf ? 'Export PDF' : 'Export CSV',
+                                    style: const TextStyle(fontSize: 9),
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppColors.primaryPurple,
+                                    side: const BorderSide(color: AppColors.primaryPurple),
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ],
                       ),

@@ -6,20 +6,15 @@ import '../../theme/app_theme.dart';
 import '../../widgets/gradient_pill_button.dart';
 import 'staff_qr_scan_screen.dart';
 
-/// Entry-staff access screen: paste the scanner link the organizer shared
-/// (see OrganizerScannerSessionScreen), enter the 4-digit PIN, and get
-/// into the QR scanning screen for that event.
+/// Entry-staff access screen: enter the 4-digit PIN the organizer shared
+/// (see OrganizerScannerSessionScreen) and get into the QR scanning screen
+/// for that event.
 ///
 /// Deliberately account-free — entry staff don't sign in to FairTix at
-/// all; knowing the link + PIN pair (handed out by the organizer,
-/// separately, per FairTix's design) is what authorizes scanning for one
-/// event. See validate_scanner_session in supabase/scanner_functions.sql.
-///
-/// NOTE: real deep-linking (tapping the shared link opening this screen
-/// directly, with the token pre-filled) isn't wired up in this pass —
-/// that needs platform-level App Links/Universal Links configuration,
-/// tracked separately. For now staff reach this screen via the "Entry
-/// Staff?" link on the sign-in screen and paste the link manually.
+/// all; knowing the PIN (handed out by the organizer) is what authorizes
+/// scanning for one event. See validate_scanner_session in
+/// supabase/scanner_functions.sql. Staff reach this screen via the "Entry
+/// Staff?" link on the sign-in screen.
 class StaffPinEntryScreen extends StatefulWidget {
   const StaffPinEntryScreen({super.key});
 
@@ -28,7 +23,6 @@ class StaffPinEntryScreen extends StatefulWidget {
 }
 
 class _StaffPinEntryScreenState extends State<StaffPinEntryScreen> {
-  final _linkController = TextEditingController();
   final List<TextEditingController> _pinControllers = List.generate(4, (_) => TextEditingController());
   final List<FocusNode> _pinFocusNodes = List.generate(4, (_) => FocusNode());
 
@@ -37,7 +31,6 @@ class _StaffPinEntryScreenState extends State<StaffPinEntryScreen> {
 
   @override
   void dispose() {
-    _linkController.dispose();
     for (final c in _pinControllers) {
       c.dispose();
     }
@@ -50,13 +43,8 @@ class _StaffPinEntryScreenState extends State<StaffPinEntryScreen> {
   String get _pin => _pinControllers.map((c) => c.text).join();
 
   Future<void> _handleSubmit() async {
-    final link = _linkController.text.trim();
     final pin = _pin;
 
-    if (link.isEmpty) {
-      setState(() => _errorMessage = 'Enter the scanner link the organizer shared with you.');
-      return;
-    }
     if (pin.length != 4) {
       setState(() => _errorMessage = 'Enter the full 4-digit PIN.');
       return;
@@ -68,14 +56,14 @@ class _StaffPinEntryScreenState extends State<StaffPinEntryScreen> {
     });
 
     try {
-      final access = await ScannerRepository.instance.validateAccess(linkOrToken: link, pin: pin);
+      final access = await ScannerRepository.instance.validateAccess(pin: pin);
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => StaffQrScanScreen(access: access)),
       );
     } on ScannerRepositoryException catch (e) {
       if (!mounted) return;
-      // Wrong PIN (or a revoked/expired link): clear the boxes so staff
+      // Wrong PIN (or a revoked/expired session): clear the boxes so staff
       // can retype straight away instead of editing digit by digit.
       for (final c in _pinControllers) {
         c.clear();
@@ -121,28 +109,10 @@ class _StaffPinEntryScreenState extends State<StaffPinEntryScreen> {
                 const Text('Entry Staff Access', style: AppTextStyles.sectionHeading),
                 const SizedBox(height: 6),
                 const Text(
-                  'Paste the scanner link and enter the 4-digit PIN your organizer shared with you.',
+                  'Enter the 4-digit PIN your organizer shared with you.',
                   style: AppTextStyles.bodyMuted,
                 ),
                 const SizedBox(height: 28),
-                const Text('SCANNER LINK', style: AppTextStyles.cardLabel),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _linkController,
-                  keyboardType: TextInputType.url,
-                  style: AppTextStyles.fieldInputLight,
-                  decoration: InputDecoration(
-                    hintText: 'https://fairtix.app/scan/...',
-                    filled: true,
-                    fillColor: AppColors.inputFillLight,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 22),
                 const Text('4-DIGIT PIN', style: AppTextStyles.cardLabel),
                 const SizedBox(height: 8),
                 Row(

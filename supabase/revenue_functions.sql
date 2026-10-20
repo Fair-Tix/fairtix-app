@@ -5,8 +5,8 @@
 -- Safe to re-run.
 --
 -- Fee model (see purchase_functions.sql): the buyer pays the listed ticket
--- price; FairTix's fee (Basic 8% / Standard 9% / Premium 10%, by the
--- organizer's plan) is taken out of the organizer's proceeds. Each completed
+-- price; FairTix's fee (the rate on the organizer's plan, from
+-- subscription_plans) is taken out of the organizer's proceeds. Each completed
 -- primary purchase therefore has transactions.amount = ticket price and
 -- transactions.platform_fee = FairTix's cut, and this file records the same
 -- numbers per organizer in organizer_fees (the table built for it), one row
@@ -96,8 +96,12 @@ where tr.transaction_type = 'purchase'
 on conflict (transaction_id) do nothing;
 
 -- ── Admin summary: totals per plan ──────────────────────────────────────
--- Returns only plans that have at least one fee row; the app fills in zero
--- rows for the rest. Admin-only (the table's RLS already limits reads, and
+-- Returns one row per fee rate that has at least one fee row; the app adds
+-- zero rows for active plans with no sales. The plan name is looked up in
+-- public.subscription_plans by fee rate (plans sharing a rate are joined with
+-- ' / '). organizer_fees records the rate charged, not the plan, so a rate no
+-- plan uses any more (the admin changed it later) is labelled with the rate.
+-- Admin-only (the table's RLS already limits reads, and
 -- this raises for anyone else too, since it runs as SECURITY DEFINER).
 -- Optional date range (p_from inclusive, p_to exclusive) filters on the date of
 -- the underlying purchase; null means no limit on that side.
@@ -125,7 +129,13 @@ begin
 
   return query
   select
-    case f.fee_rate when 0.0800 then 'Basic' when 0.0900 then 'Standard' else 'Premium' end,
+    coalesce(
+      (select string_agg(p.name, ' / ' order by p.sort_order, p.name)
+         from public.subscription_plans p
+        where p.platform_fee_rate = f.fee_rate),
+      trim(trailing '.' from trim(trailing '0' from round(f.fee_rate * 100, 2)::text))
+        || '% (former rate)'
+    ),
     f.fee_rate::numeric,
     count(*),
     sum(f.gross_amount),

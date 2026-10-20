@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'app_colors.dart';
 import '../../services/organizer_auth_service.dart';
-import 'organizer-application-submitted.dart';
+import 'organizer-otp-verification.dart';
 
 class OrganizerRegisterScreen extends StatefulWidget {
   const OrganizerRegisterScreen({super.key});
@@ -111,43 +111,23 @@ class _OrganizerRegisterScreenState extends State<OrganizerRegisterScreen> {
       if (mounted) setState(() => _isSubmitting = false);
     }
 
-    // Supabase only hands back an active session immediately on signUp()
-    // when "Confirm email" is disabled for the project. With
-    // confirmations enabled (the current setup — see
-    // docs/FairTix-Backend-Roadmap.md), there's no session yet at this
-    // point, and Storage RLS requires one, so the documents can't be
-    // uploaded until the organizer confirms their email and logs in.
-    // Uploading opportunistically here means this keeps working the
-    // moment that changes, without another code change. If it's skipped
-    // (the common case today), OrganizerLoginScreen's post-login check
-    // (account.hasSubmittedDocuments) routes to
-    // OrganizerDocumentUploadScreen as a backstop, so the documents still
-    // get collected — just one step later than originally intended.
-    if (OrganizerAuthService.instance.hasActiveSession) {
-      try {
-        await OrganizerAuthService.instance.uploadOrganizerDocument(
-          docKind: 'venue_proof',
-          bytes: _venueProofBytes!,
-          fileExtension: _venueProofExt ?? 'pdf',
-        );
-        await OrganizerAuthService.instance.uploadOrganizerDocument(
-          docKind: 'event_permit',
-          bytes: _permitBytes!,
-          fileExtension: _permitExt ?? 'pdf',
-        );
-      } on OrganizerAuthException catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Your account was created, but document upload failed: ${e.message}')),
-        );
-      }
-    }
-
+    // Email verification comes before the application counts as submitted,
+    // same as the eventgoer flow. Supabase has Confirm email enabled, so
+    // signUp() returns no session yet and Storage RLS would reject the
+    // document uploads. The OTP screen therefore holds the picked files,
+    // verifies the code (which creates the session), uploads both documents,
+    // and only then continues to OrganizerApplicationSubmittedScreen.
     if (!mounted) return;
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => const OrganizerApplicationSubmittedScreen(),
+        builder: (_) => OrganizerOtpVerificationScreen(
+          email: _emailController.text.trim().toLowerCase(),
+          venueProofBytes: _venueProofBytes!,
+          venueProofExt: _venueProofExt ?? 'pdf',
+          permitBytes: _permitBytes!,
+          permitExt: _permitExt ?? 'pdf',
+        ),
       ),
     );
   }

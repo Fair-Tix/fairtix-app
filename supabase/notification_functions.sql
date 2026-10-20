@@ -27,15 +27,26 @@
 create index if not exists notifications_user_channel_read_idx
   on public.notifications (user_id, channel, is_read);
 
--- ── Helper: write the in-app row (+ optional email row) ──────────────────
+-- ── Helper: write the in-app row (+ optional email and push rows) ────────
 -- Only the trigger functions below call this; nobody can invoke it from
 -- the client (a user must not be able to mint notifications for others).
+--
+-- A 'push' row is delivered by the app itself over Supabase Realtime, which
+-- shows a system notification (see supabase/push_notifications.sql and
+-- lib/services/push_service.dart). No Firebase involved. Push is opt-in per
+-- call (p_send_push), so only events that should alert a phone create one.
+--
+-- The old 5-argument version is dropped first: keeping both would make calls
+-- with fewer arguments ambiguous.
+drop function if exists public.notify_user(uuid, text, text, notification_type, boolean);
+
 create or replace function public.notify_user(
   p_user_id uuid,
   p_title text,
   p_message text,
   p_type notification_type,
-  p_send_email boolean default true
+  p_send_email boolean default true,
+  p_send_push boolean default false
 )
 returns void
 language plpgsql
@@ -53,10 +64,15 @@ begin
     insert into public.notifications (user_id, title, message, type, channel)
     values (p_user_id, p_title, p_message, p_type, 'email');
   end if;
+
+  if p_send_push then
+    insert into public.notifications (user_id, title, message, type, channel)
+    values (p_user_id, p_title, p_message, p_type, 'push');
+  end if;
 end;
 $$;
 
-revoke all on function public.notify_user(uuid, text, text, notification_type, boolean)
+revoke all on function public.notify_user(uuid, text, text, notification_type, boolean, boolean)
   from public, anon, authenticated;
 
 -- ── 1. Signup (OTP) ──────────────────────────────────────────────────────
@@ -88,6 +104,16 @@ create trigger notify_on_user_signup
 -- Fires when an admin flips id_verification_status (Admin → Accounts /
 -- Organizer Applications), and when an organizer finishes uploading their
 -- proof documents (which is when admins need to hear about it).
+--
+-- An approval notifies on all three channels: in-app, email AND push, for
+-- both event goers and organizers.
+--
+-- schema.sql also ships an older trigger (on_user_verification_change) that
+-- writes its own in-app 'Account Activated' row on the same change. With
+-- this trigger in place that would show every approval twice, so it is
+-- removed here.
+drop trigger if exists on_user_verification_change on public.users;
+
 create or replace function public.trg_notify_user_review()
 returns trigger
 language plpgsql
@@ -103,14 +129,18 @@ begin
           new.id,
           'Organizer application approved',
           'Your organizer account has been approved. Choose a subscription plan to start creating events.',
-          'system'
+          'system',
+          true,
+          true
         );
       else
         perform public.notify_user(
           new.id,
           'Account activated',
           'Your account has been verified. You can now browse events and buy tickets.',
-          'system'
+          'system',
+          true,
+          true
         );
       end if;
     elsif new.id_verification_status = 'rejected' then

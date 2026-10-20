@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 
 import 'app_colors.dart';
+import '../../services/access_control.dart';
 import '../../services/organizer_session.dart';
 import 'organizer-dashboard.dart';
+import 'organizer-subscription-plan.dart';
 import 'organizer-my-events.dart';
 import 'organizer-analytics-sales.dart';
+import 'organizer-escrow.dart';
 import 'organizer-profile.dart';
 import '../user/all_events_screen.dart';
 import '../../widgets/notification_bell.dart';
 
-enum OrganizerNavItem { dashboard, myEvents, analytics, profile }
+enum OrganizerNavItem { dashboard, myEvents, analytics, escrow, profile }
 
 /// Shared sidebar + top bar shell wrapping every internal organizer screen,
 /// matching the purple sidebar layout seen across all dashboard-family
@@ -74,12 +77,105 @@ class OrganizerScaffold extends StatelessWidget {
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(32),
-                    child: body,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [const _OrganizerLockBanner(), body],
+                    ),
                   ),
                 ),
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Explains, at the top of every organizer page, why some features are locked
+/// (waiting for admin approval, subscription expired, or no plan yet). Renders
+/// nothing for an approved organizer with a current subscription, so their
+/// pages look exactly as before.
+class _OrganizerLockBanner extends StatelessWidget {
+  const _OrganizerLockBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final account = OrganizerSession.instance.account;
+    final message = organizerLockMessage(
+      account,
+      OrganizerRequirement.subscription,
+    );
+    if (account == null || message == null) return const SizedBox.shrink();
+
+    final String title;
+    if (!account.isApproved) {
+      title = account.idVerificationStatus == 'rejected'
+          ? 'Application rejected'
+          : 'Waiting for admin approval';
+    } else if (account.subscriptionExpired) {
+      title = 'Subscription expired';
+    } else {
+      title = 'No active subscription';
+    }
+    final canFixWithPlan = account.isApproved;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7E6),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFF5D58A)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.lock_outline, color: Color(0xFFB45309), size: 22),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF92400E),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  message,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.4,
+                    color: Color(0xFF92400E),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (canFixWithPlan) ...[
+            const SizedBox(width: 12),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const OrganizerSubscriptionPlanScreen(),
+                  ),
+                );
+              },
+              child: Text(
+                account.subscriptionExpired ? 'Renew plan' : 'Choose a plan',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.primaryPurple,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -212,6 +308,12 @@ class _Sidebar extends StatelessWidget {
               onTap: () => _navigate(context, OrganizerNavItem.analytics),
             ),
             _NavTile(
+              icon: Icons.lock_outline,
+              label: 'Escrow & Payouts',
+              isActive: activeItem == OrganizerNavItem.escrow,
+              onTap: () => _navigate(context, OrganizerNavItem.escrow),
+            ),
+            _NavTile(
               icon: Icons.person_outline,
               label: 'Profile',
               isActive: activeItem == OrganizerNavItem.profile,
@@ -250,6 +352,9 @@ class _Sidebar extends StatelessWidget {
         break;
       case OrganizerNavItem.analytics:
         target = const OrganizerAnalyticsSalesScreen();
+        break;
+      case OrganizerNavItem.escrow:
+        target = const OrganizerEscrowScreen();
         break;
       case OrganizerNavItem.profile:
         target = const OrganizerProfileScreen();

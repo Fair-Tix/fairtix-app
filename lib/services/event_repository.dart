@@ -78,6 +78,11 @@ class EventRepository {
       return;
     }
     try {
+      // Mark events whose last day has passed as completed (idempotent).
+      try {
+        await Supabase.instance.client.rpc('complete_finished_events');
+      } catch (_) {}
+
       final eventRows =
           await Supabase.instance.client
                   .from('events')
@@ -161,6 +166,31 @@ class EventRepository {
     } on PostgrestException catch (e) {
       throw EventRepositoryException(
         'Could not load your events: ${e.message}',
+      );
+    }
+  }
+
+  /// Post-event summary for a completed event (rolled up across all days
+  /// of a multi-day event). Backed by `get_event_summary`.
+  Future<Map<String, num>> fetchSummary(String eventId) async {
+    try {
+      final rows = await Supabase.instance.client.rpc(
+        'get_event_summary',
+        params: {'p_event_id': eventId},
+      ) as List;
+      final row = rows.isEmpty ? const <String, dynamic>{} : rows.first as Map;
+      return {
+        'tickets_sold': (row['tickets_sold'] as num?) ?? 0,
+        'gross_revenue': (row['gross_revenue'] as num?) ?? 0,
+        'platform_fees': (row['platform_fees'] as num?) ?? 0,
+        'net_revenue': (row['net_revenue'] as num?) ?? 0,
+        'tickets_checked_in': (row['tickets_checked_in'] as num?) ?? 0,
+        'no_shows': (row['no_shows'] as num?) ?? 0,
+        'resale_count': (row['resale_count'] as num?) ?? 0,
+      };
+    } on PostgrestException catch (e) {
+      throw EventRepositoryException(
+        'Could not load the event summary: ${e.message}',
       );
     }
   }
@@ -487,8 +517,14 @@ class EventRepository {
       supportingDocumentUrls:
           (row['supporting_document_urls'] as List?)?.cast<String>() ??
           const [],
+      unpublishedAt: _parseTs(row['unpublished_at']),
+      unpublishReason: row['unpublish_reason'] as String?,
+      complianceDeadline: _parseTs(row['compliance_deadline']),
     );
   }
+
+  DateTime? _parseTs(dynamic raw) =>
+      raw == null ? null : DateTime.parse(raw as String).toLocal();
 
   String _formatDate(DateTime d) => '${d.month}/${d.day}/${d.year}';
 

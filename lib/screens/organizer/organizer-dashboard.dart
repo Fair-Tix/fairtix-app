@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'app_colors.dart';
 import '../../models/organizer_event.dart';
 import '../../services/event_repository.dart';
+import '../../services/access_control.dart';
 import '../../services/organizer_session.dart';
 import 'organizer-scaffold.dart';
 import 'organizer-create-event.dart';
@@ -79,7 +80,14 @@ class _OrganizerDashboardScreenState extends State<OrganizerDashboardScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         OutlinedButton.icon(
-                          onPressed: () {
+                          onPressed: () async {
+                            // Needs approval + a current subscription; says why
+                            // when locked instead of opening the form.
+                            final allowed = await ensureOrganizerAccess(
+                              context,
+                              OrganizerRequirement.subscription,
+                            );
+                            if (!allowed || !context.mounted) return;
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -111,6 +119,11 @@ class _OrganizerDashboardScreenState extends State<OrganizerDashboardScreen> {
                         const SizedBox(width: 12),
                         ElevatedButton.icon(
                           onPressed: () async {
+                            final allowed = await ensureOrganizerAccess(
+                              context,
+                              OrganizerRequirement.subscription,
+                            );
+                            if (!allowed || !context.mounted) return;
                             await Navigator.push(
                               context,
                               MaterialPageRoute(

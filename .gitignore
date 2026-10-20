@@ -121,3 +121,4 @@ app.*.symbols
 _deprecated_firebase/
 .env
 .idea/
+supabase/.temp/

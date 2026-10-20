@@ -2,46 +2,44 @@ import 'package:flutter/material.dart';
 import 'app_colors.dart';
 import '../../services/event_repository.dart';
 import '../../services/organizer_session.dart';
-import 'organizer-scaffold.dart';
 
-/// TODO(backend): Once ticket sales are recorded with real timestamps
-/// (Transactions collection - see Chapter III Data Dictionary), replace the
-/// per-event summary table below with the true daily revenue trend. For now
-/// this screen reports real per-event totals computed from
-/// [EventRepository] rather than fabricated daily figures.
-class OrganizerRevenueReportScreen extends StatelessWidget {
-  const OrganizerRevenueReportScreen({super.key});
+/// Per-event revenue totals from [EventRepository] (gross, platform fee,
+/// net). Shown inside Analytics so it does not stack a second dashboard.
+class OrganizerRevenueReportBody extends StatelessWidget {
+  const OrganizerRevenueReportBody({super.key});
 
-  static double _feeRateFor(String? plan) {
-    switch (plan) {
-      case 'Standard':
-        return 0.09;
-      case 'Premium':
-        return 0.10;
-      case 'Basic':
-      default:
-        return 0.08;
+  /// Percent label such as 8% or 8.5%. Admin-set rates are not always whole numbers.
+  static String _percentLabel(double rate) {
+    final percent = rate * 100;
+    if (percent == percent.roundToDouble()) {
+      return '${percent.toStringAsFixed(0)}%';
     }
+    return '${percent.toStringAsFixed(2).replaceFirst(RegExp(r'0+$'), '')}%';
   }
+
+  static String _peso(double? amount) =>
+      amount == null ? '\u2014' : '\u20B1${amount.toStringAsFixed(0)}';
 
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isWide = screenWidth > 900;
     final events = EventRepository.instance.events;
-    final plan = OrganizerSession.instance.account?.subscriptionPlan;
-    final feeRate = _feeRateFor(plan);
+    final account = OrganizerSession.instance.account;
+    final plan = account?.subscriptionPlan;
+    // The fee rate saved on the organizer's own plan (Admin > Platform
+    // Settings). Null when there is no active plan: the fee and net are then
+    // shown as unknown rather than guessed.
+    final feeRate = account?.subscriptionFeeRate;
 
     final gross = EventRepository.instance.totalGrossRevenue;
-    final fees = gross * feeRate;
-    final net = gross - fees;
-    final feePercentLabel = '${(feeRate * 100).toStringAsFixed(0)}%';
-    final planLabel = plan == null ? 'no active plan' : '$plan tier';
+    final fees = feeRate == null ? null : gross * feeRate;
+    final net = fees == null ? null : gross - fees;
+    final feeLabel = feeRate == null
+        ? 'Platform Fees (no active plan)'
+        : 'Platform Fees (${_percentLabel(feeRate)} \u2014 $plan plan)';
 
-    return OrganizerScaffold(
-      pageTitle: 'Revenue Report',
-      activeItem: OrganizerNavItem.analytics,
-      body: Column(
+    return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           LayoutBuilder(
@@ -50,18 +48,18 @@ class OrganizerRevenueReportScreen extends StatelessWidget {
                 _StatCard(
                   icon: Icons.paid_outlined,
                   label: 'Gross Revenue',
-                  value: '\u20B1${gross.toStringAsFixed(0)}',
+                  value: _peso(gross),
                 ),
                 _StatCard(
                   icon: Icons.remove_circle_outline,
-                  label: 'Platform Fees ($feePercentLabel \u2014 $planLabel)',
-                  value: '\u20B1${fees.toStringAsFixed(0)}',
+                  label: feeLabel,
+                  value: _peso(fees),
                   valueColor: AppColors.dangerRed,
                 ),
                 _StatCard(
                   icon: Icons.account_balance_wallet_outlined,
                   label: 'Net Payout',
-                  value: '\u20B1${net.toStringAsFixed(0)}',
+                  value: _peso(net),
                   valueColor: AppColors.successGreen,
                 ),
               ];
@@ -142,8 +140,10 @@ class OrganizerRevenueReportScreen extends StatelessWidget {
                       ],
                       rows: events.map((e) {
                         final eventGross = e.grossRevenue;
-                        final eventFee = eventGross * feeRate;
-                        final eventNet = eventGross - eventFee;
+                        final eventFee =
+                            feeRate == null ? null : eventGross * feeRate;
+                        final eventNet =
+                            eventFee == null ? null : eventGross - eventFee;
                         return DataRow(
                           cells: [
                             DataCell(Text(e.name, style: AppTextStyles.label)),
@@ -158,13 +158,13 @@ class OrganizerRevenueReportScreen extends StatelessWidget {
                             ),
                             DataCell(
                               Text(
-                                '\u20B1${eventGross.toStringAsFixed(0)}',
+                                _peso(eventGross),
                                 style: AppTextStyles.body,
                               ),
                             ),
                             DataCell(
                               Text(
-                                '\u20B1${eventFee.toStringAsFixed(0)}',
+                                _peso(eventFee),
                                 style: const TextStyle(
                                   color: AppColors.dangerRed,
                                 ),
@@ -172,7 +172,7 @@ class OrganizerRevenueReportScreen extends StatelessWidget {
                             ),
                             DataCell(
                               Text(
-                                '\u20B1${eventNet.toStringAsFixed(0)}',
+                                _peso(eventNet),
                                 style: const TextStyle(
                                   color: AppColors.successGreen,
                                   fontWeight: FontWeight.w700,
@@ -188,7 +188,6 @@ class OrganizerRevenueReportScreen extends StatelessWidget {
             ),
           ),
         ],
-      ),
     );
   }
 }

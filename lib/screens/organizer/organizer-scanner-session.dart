@@ -3,13 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'app_colors.dart';
+import '../../services/access_control.dart';
 import '../../services/event_repository.dart';
 import '../../services/scanner_repository.dart';
 import 'organizer-scaffold.dart';
 
 /// Live scanner session screen for a single event.
 ///
-/// On open, generates a real scanner session (link + 4-digit PIN) via
+/// On open, generates a real scanner session (4-digit PIN) via
 /// `generate_scanner_session` (see supabase/scanner_functions.sql) that
 /// entry staff can use — no FairTix account needed on their end — through
 /// the Staff PIN entry / QR Scan screens (lib/screens/staff/).
@@ -35,6 +36,22 @@ class _OrganizerScannerSessionScreenState extends State<OrganizerScannerSessionS
   @override
   void initState() {
     super.initState();
+    _startIfAllowed();
+  }
+
+  /// Scanner sessions need admin approval and a current subscription (the
+  /// database refuses otherwise). Check first so a locked organizer gets the
+  /// reason up front, and no session is requested.
+  Future<void> _startIfAllowed() async {
+    final allowed = await ensureOrganizerAccess(
+      context,
+      OrganizerRequirement.subscription,
+    );
+    if (!mounted) return;
+    if (!allowed) {
+      Navigator.of(context).maybePop();
+      return;
+    }
     _generateSession();
   }
 
@@ -119,7 +136,7 @@ class _OrganizerScannerSessionScreenState extends State<OrganizerScannerSessionS
                   builder: (ctx) => AlertDialog(
                     title: const Text('End Session?'),
                     content: const Text(
-                      'This will immediately disable the scanner link and PIN for '
+                      'This will immediately disable the scanner PIN for '
                       'all entry staff.',
                     ),
                     actions: [
@@ -209,52 +226,6 @@ class _OrganizerScannerSessionScreenState extends State<OrganizerScannerSessionS
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _label('SCANNER LINK'),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF9FAFB),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppColors.borderLight),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.lock_outline, size: 16, color: AppColors.textGray),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              session.link,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppTextStyles.body,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  OutlinedButton(
-                    onPressed: () async {
-                      await Clipboard.setData(ClipboardData(text: session.link));
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Scanner link copied to clipboard.')),
-                      );
-                    },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.primaryPurple,
-                      side: const BorderSide(color: AppColors.primaryPurple),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-                    ),
-                    child: const Text('Copy Link'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
               _label('ENTRY PIN'),
               const SizedBox(height: 8),
               Row(
@@ -291,7 +262,7 @@ class _OrganizerScannerSessionScreenState extends State<OrganizerScannerSessionS
               ),
               const SizedBox(height: 10),
               Text(
-                'Share the link and PIN with entry staff separately.',
+                'Share this PIN with entry staff. They enter it on the Entry Staff screen.',
                 style: AppTextStyles.bodyGray.copyWith(fontSize: 12),
               ),
             ],
@@ -301,7 +272,7 @@ class _OrganizerScannerSessionScreenState extends State<OrganizerScannerSessionS
         OutlinedButton.icon(
           onPressed: _generateSession,
           icon: const Icon(Icons.refresh_rounded, size: 18),
-          label: const Text('Regenerate Link & PIN'),
+          label: const Text('Regenerate PIN'),
           style: OutlinedButton.styleFrom(
             foregroundColor: AppColors.primaryPurple,
             side: const BorderSide(color: AppColors.primaryPurple),

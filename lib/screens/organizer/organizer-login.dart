@@ -6,7 +6,6 @@ import 'organizer-document-upload.dart';
 import 'organizer-register.dart';
 import 'organizer-dashboard.dart';
 import 'organizer-subscription-plan.dart';
-import 'organizer-verification-pending.dart';
 
 class OrganizerLoginScreen extends StatefulWidget {
   const OrganizerLoginScreen({super.key});
@@ -58,11 +57,12 @@ class _OrganizerLoginScreenState extends State<OrganizerLoginScreen> {
     // than always going to the Dashboard:
     //  - documents missing -> "One More Step" upload screen (registration
     //    couldn't upload them earlier because no session existed yet)
-    //  - not verified yet  -> "Verification Pending" (admin hasn't
-    //    approved the application; covers both 'pending' and 'rejected',
-    //    since there's no separate resubmission screen for organizers yet)
-    //  - verified, no plan -> pick a subscription plan first
-    //  - verified, has plan -> straight into the Dashboard
+    //  - not approved yet -> Dashboard, browse-only. Approval-gated features
+    //    stay locked (with a banner saying why) until an admin approves.
+    //  - approved, never subscribed -> pick a subscription plan first
+    //  - approved, plan expired -> Dashboard; login is never blocked, only the
+    //    subscription features lock until they renew
+    //  - approved, has plan -> straight into the Dashboard
     if (!account.hasSubmittedDocuments) {
       Navigator.pushAndRemoveUntil(
         context,
@@ -74,22 +74,34 @@ class _OrganizerLoginScreenState extends State<OrganizerLoginScreen> {
       return;
     }
 
-    if (account.idVerificationStatus != 'verified') {
+    if (!account.isApproved) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Welcome back! Your application is still under review.')),
+        const SnackBar(
+          content: Text(
+            'Welcome back! Your application is still under review. You can browse '
+            'for now; other features unlock once an admin approves it.',
+          ),
+        ),
       );
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const OrganizerVerificationPendingScreen()),
+        MaterialPageRoute(builder: (_) => const OrganizerDashboardScreen()),
         (route) => false,
       );
       return;
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Welcome back! Login successful.')),
+      SnackBar(
+        content: Text(
+          account.subscriptionExpired
+              ? 'Welcome back! Your subscription has expired. You can still view your '
+                  'account; renew your plan to unlock event tools.'
+              : 'Welcome back! Login successful.',
+        ),
+      ),
     );
-    if (account.subscriptionPlan == null) {
+    if (account.subscriptionPlan == null && !account.subscriptionExpired) {
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const OrganizerSubscriptionPlanScreen()),

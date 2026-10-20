@@ -7,16 +7,23 @@ class OrganizerSubscriptionConfirmedScreen extends StatelessWidget {
   final String price;
   final DateTime renewsAt;
 
+  /// The benefit lines the admin wrote for this plan (the same ones shown on
+  /// the plan card). Empty falls back to a single generic line.
+  final List<String> features;
+
   const OrganizerSubscriptionConfirmedScreen({
     super.key,
     required this.planName,
     required this.price,
     required this.renewsAt,
+    this.features = const [],
   });
 
   @override
   Widget build(BuildContext context) {
-    final isPremium = planName == 'Premium';
+    final shownFeatures = features.isEmpty
+        ? const ['All features of your plan are now unlocked']
+        : features.take(4).toList();
 
     return Scaffold(
       body: Row(
@@ -82,13 +89,10 @@ class OrganizerSubscriptionConfirmedScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 20),
-                      _featureCheck(isPremium
-                          ? 'Unlimited events & ticket capacity'
-                          : 'Expanded event & ticket capacity'),
-                      const SizedBox(height: 12),
-                      _featureCheck('CSV export & enhanced analytics'),
-                      const SizedBox(height: 12),
-                      _featureCheck('Priority support'),
+                      for (var i = 0; i < shownFeatures.length; i++) ...[
+                        if (i > 0) const SizedBox(height: 12),
+                        _featureCheck(shownFeatures[i]),
+                      ],
                     ],
                   ),
                 ],

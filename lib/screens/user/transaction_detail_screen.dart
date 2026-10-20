@@ -19,6 +19,14 @@ class TransactionDetailScreen extends StatelessWidget {
         TransactionStatus.completed => AppColors.success,
         TransactionStatus.pending => AppColors.warning,
         TransactionStatus.failed => AppColors.error,
+        TransactionStatus.refunded => AppColors.warning,
+      };
+
+  IconData get _statusIcon => switch (transaction.status) {
+        TransactionStatus.completed => Icons.check_circle_rounded,
+        TransactionStatus.pending => Icons.schedule_rounded,
+        TransactionStatus.failed => Icons.cancel_rounded,
+        TransactionStatus.refunded => Icons.undo_rounded,
       };
 
   @override
@@ -60,7 +68,7 @@ class TransactionDetailScreen extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.check_circle_rounded, size: 13, color: _statusColor),
+                  Icon(_statusIcon, size: 13, color: _statusColor),
                   const SizedBox(width: 5),
                   Text(transaction.statusLabel, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _statusColor)),
                 ],

@@ -3,6 +3,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../models/event.dart';
 import '../../models/ticket.dart';
+import '../../services/access_control.dart';
 import '../../services/resale_repository.dart';
 import '../../services/screen_protection.dart';
 import '../../services/ticket_repository.dart';
@@ -51,7 +52,11 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     super.dispose();
   }
 
-  void _handleListForResale(BuildContext context) {
+  Future<void> _handleListForResale(BuildContext context) async {
+    // Reselling needs an admin-approved account; otherwise explain why it's
+    // locked (the database refuses the listing as well).
+    if (!await ensureBuyerApproved(context)) return;
+    if (!context.mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => ResaleListingScreen(ticket: ticket)),
     );

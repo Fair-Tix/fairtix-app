@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'subscription_plan_service.dart';
+
 /// Thrown when loading platform revenue fails.
 class AdminRevenueException implements Exception {
   final String message;
@@ -26,27 +28,31 @@ class PlanRevenue {
   final double fees;
   final double net;
 
-  String get rateLabel => '${(rate * 100).round()}%';
+  /// Percent label such as 8% or 8.5% (admin-set rates need not be whole).
+  String get rateLabel => formatFeeRate(rate);
+}
+
+/// Formats a fee fraction as a percent: 0.08 -> 8%, 0.085 -> 8.5%.
+String formatFeeRate(double rate) {
+  final percent = rate * 100;
+  if (percent == percent.roundToDouble()) {
+    return '${percent.toStringAsFixed(0)}%';
+  }
+  return '${percent.toStringAsFixed(2).replaceFirst(RegExp(r'0+$'), '')}%';
 }
 
 /// Admin-only platform revenue, backed by the `admin_revenue_by_plan()`
 /// Postgres function (supabase/revenue_functions.sql), which sums the rows
 /// the purchase trigger writes to `public.organizer_fees`.
 ///
-/// Fee rate by plan (matches organizer-subscription-plan.dart):
-/// Basic 8%, Standard 9%, Premium 10%.
+/// Plans and their fee rates are admin-editable (`public.subscription_plans`),
+/// so nothing about them is hardcoded here.
 class AdminRevenueService {
   AdminRevenueService._();
   static final AdminRevenueService instance = AdminRevenueService._();
 
-  static const List<(String, double)> plans = [
-    ('Basic', 0.08),
-    ('Standard', 0.09),
-    ('Premium', 0.10),
-  ];
-
-  /// Always returns one entry per plan, in Basic/Standard/Premium order,
-  /// with zeros for plans that have no sales yet. [from] is inclusive and
+  /// One entry per fee rate that has sales, plus a zero entry for every active
+  /// plan whose rate has none yet, lowest rate first. [from] is inclusive and
   /// [to] exclusive; either may be null for no limit on that side.
   Future<List<PlanRevenue>> fetchByPlan({DateTime? from, DateTime? to}) async {
     try {
@@ -59,21 +65,46 @@ class AdminRevenueService {
                 },
               )
               as List;
-      final byPlan = <String, Map<String, dynamic>>{
-        for (final row in rows)
-          (row as Map<String, dynamic>)['plan'] as String: row,
-      };
-      return [
-        for (final (name, rate) in plans)
-          PlanRevenue(
-            plan: name,
-            rate: rate,
-            tickets: (byPlan[name]?['tickets'] as num?)?.toInt() ?? 0,
-            gross: (byPlan[name]?['gross'] as num?)?.toDouble() ?? 0,
-            fees: (byPlan[name]?['fees'] as num?)?.toDouble() ?? 0,
-            net: (byPlan[name]?['net'] as num?)?.toDouble() ?? 0,
-          ),
-      ];
+
+      int key(double rate) => (rate * 10000).round();
+      final byRate = <int, PlanRevenue>{};
+      for (final raw in rows) {
+        final row = raw as Map<String, dynamic>;
+        final rate = (row['rate'] as num?)?.toDouble() ?? 0;
+        byRate[key(rate)] = PlanRevenue(
+          plan: (row['plan'] as String?) ?? formatFeeRate(rate),
+          rate: rate,
+          tickets: (row['tickets'] as num?)?.toInt() ?? 0,
+          gross: (row['gross'] as num?)?.toDouble() ?? 0,
+          fees: (row['fees'] as num?)?.toDouble() ?? 0,
+          net: (row['net'] as num?)?.toDouble() ?? 0,
+        );
+      }
+
+      // Active plans with no sales in this range still get a zero row. If the
+      // plan list can't be loaded, show just the rows that have sales.
+      try {
+        final plans = await SubscriptionPlanService.instance.fetchPlans();
+        final names = <int, List<String>>{};
+        for (final plan in plans) {
+          names.putIfAbsent(key(plan.feeRate), () => []).add(plan.name);
+        }
+        for (final entry in names.entries) {
+          byRate.putIfAbsent(
+            entry.key,
+            () => PlanRevenue(
+              plan: entry.value.join(' / '),
+              rate: entry.key / 10000,
+              tickets: 0,
+              gross: 0,
+              fees: 0,
+              net: 0,
+            ),
+          );
+        }
+      } catch (_) {}
+
+      return byRate.values.toList()..sort((a, b) => a.rate.compareTo(b.rate));
     } on PostgrestException catch (e) {
       throw AdminRevenueException(
         'Could not load platform revenue: ${e.message}',

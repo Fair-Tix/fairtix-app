@@ -1,50 +1,76 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'organizer_session.dart';
+import 'subscription_plan_service.dart';
 
-/// Thrown when persisting a subscription plan choice fails.
+/// Thrown when starting or confirming a subscription payment fails.
 class OrganizerSubscriptionException implements Exception {
   final String message;
-  const OrganizerSubscriptionException(this.message);
+
+  /// True when PayMongo does not (yet) show the payment as paid. This is
+  /// expected while the organizer is still on the payment page, so the plan
+  /// screen keeps waiting instead of showing an error.
+  final bool paymentPending;
+
+  const OrganizerSubscriptionException(
+    this.message, {
+    this.paymentPending = false,
+  });
 }
 
-/// Persists the organizer's plan choice from
-/// `organizer-subscription-plan.dart` to `public.organizer_subscriptions`.
+/// A PayMongo Checkout Session created for a plan purchase.
+class SubscriptionCheckout {
+  final String checkoutUrl;
+  final String sessionId;
+
+  const SubscriptionCheckout({
+    required this.checkoutUrl,
+    required this.sessionId,
+  });
+}
+
+/// The plan that was activated after a confirmed payment.
+class SubscriptionActivation {
+  final String planName;
+  final DateTime renewsAt;
+
+  const SubscriptionActivation({
+    required this.planName,
+    required this.renewsAt,
+  });
+}
+
+/// Buys an organizer plan through PayMongo.
 ///
-/// `organizer_subscriptions` (Table 7 in the Data Dictionary) has no
-/// plan-name column, only `monthly_fee` — this mirrors the same fee↔name
-/// mapping `OrganizerAuthService._planNameFromMonthlyFee` uses on login
-/// (₱299 = Basic, ₱699 = Standard, ₱1,499 = Premium).
+/// Flow (same Edge Functions the ticket checkout uses):
+///  1. [startCheckout] asks `paymongo-checkout` for a PayMongo Sandbox
+///     Checkout Session for the plan. The price is decided on the server;
+///     nothing about the amount is sent from the app.
+///  2. The organizer pays on PayMongo's own checkout page.
+///  3. [confirmPayment] asks `paymongo-verify`, which checks with PayMongo
+///     that the session is PAID and only then activates the plan in
+///     `public.organizer_subscriptions` (`fulfill_organizer_subscription`,
+///     supabase/organizer_subscription_payment.sql). `paymongo-webhook`
+///     activates the same plan independently if the organizer closes the page
+///     after paying; both use the session id as the payment reference, so a
+///     payment can only ever activate or extend a plan once.
 ///
-/// Requires the `org_subs_insert_own` / `org_subs_update_own_or_admin` RLS
-/// policies added to supabase/policies.sql — the original schema only
-/// allowed admin writes here, which would have silently rejected every
-/// plan selection.
+/// The app can no longer write `organizer_subscriptions` itself: those client
+/// write policies are dropped by organizer_subscription_payment.sql so a plan
+/// can't be activated without paying.
 class OrganizerSubscriptionService {
   OrganizerSubscriptionService._();
   static final OrganizerSubscriptionService instance =
       OrganizerSubscriptionService._();
 
-  static const Map<String, num> _feeForPlan = {
-    'Basic': 299,
-    'Standard': 699,
-    'Premium': 1499,
-  };
-
-  /// Selects (or switches to) [planName] for the signed-in organizer.
-  ///
-  /// If the organizer already has an active subscription row, it's updated
-  /// in place (new fee + a fresh 30-day period) rather than inserting a
-  /// second "active" row for the same organizer — the schema has no unique
-  /// constraint preventing that, and `OrganizerAuthService.login()` only
-  /// ever reads the single most-recent active row back, so keeping one row
-  /// per organizer avoids ambiguity.
-  Future<DateTime> selectPlan(String planName) async {
-    final fee = _feeForPlan[planName];
-    if (fee == null) {
-      throw OrganizerSubscriptionException('Unknown plan "$planName".');
-    }
-
+  /// Creates the PayMongo Checkout Session for a plan. Pass [planId] (the
+  /// `subscription_plans.plan_id` shown on the plan card) whenever you have
+  /// it: the server looks the plan up by id, so a rename by the admin can't
+  /// point the payment at the wrong plan. [planName] is the fallback.
+  Future<SubscriptionCheckout> startCheckout(
+    String planName, {
+    String? planId,
+  }) async {
     final userId = Supabase.instance.client.auth.currentUser?.id;
     if (userId == null) {
       throw const OrganizerSubscriptionException(
@@ -52,53 +78,105 @@ class OrganizerSubscriptionService {
       );
     }
 
-    final now = DateTime.now();
-    final renewsAt = now.add(const Duration(days: 30));
-
     try {
-      final existing = await Supabase.instance.client
-          .from('organizer_subscriptions')
-          .select('subscription_id')
-          .eq('user_id', userId)
-          .eq('status', 'active')
-          .order('start_date', ascending: false)
-          .limit(1)
-          .maybeSingle();
-
-      final payload = {
-        'user_id': userId,
-        'start_date': now.toIso8601String().split('T').first,
-        'end_date': renewsAt.toIso8601String().split('T').first,
-        'status': 'active',
-        'monthly_fee': fee,
-      };
-
-      if (existing != null) {
-        await Supabase.instance.client
-            .from('organizer_subscriptions')
-            .update(payload)
-            .eq('subscription_id', existing['subscription_id']);
-      } else {
-        await Supabase.instance.client
-            .from('organizer_subscriptions')
-            .insert(payload);
+      final response = await Supabase.instance.client.functions.invoke(
+        'paymongo-checkout',
+        body: planId != null && planId.isNotEmpty
+            ? {'planId': planId}
+            : {'planName': planName},
+      );
+      final data = response.data;
+      if (data is! Map ||
+          data['checkout_url'] == null ||
+          data['session_id'] == null) {
+        throw OrganizerSubscriptionException(
+          (data is Map ? data['error'] as String? : null) ??
+              'Could not start the PayMongo checkout.',
+        );
       }
-    } on PostgrestException catch (e) {
+      return SubscriptionCheckout(
+        checkoutUrl: data['checkout_url'] as String,
+        sessionId: data['session_id'] as String,
+      );
+    } on FunctionException catch (e) {
+      final details = e.details;
       throw OrganizerSubscriptionException(
-        'Could not save your plan: ${e.message}',
+        (details is Map ? details['error'] as String? : null) ??
+            'Could not start the PayMongo checkout. Please try again.',
       );
     }
+  }
 
-    final currentAccount = OrganizerSession.instance.account;
-    if (currentAccount != null) {
-      OrganizerSession.instance.updateAccount(
-        currentAccount.copyWith(
-          subscriptionPlan: planName,
-          subscriptionRenewsAt: renewsAt,
-        ),
+  /// Checks the payment for [sessionId] and, once PayMongo reports it paid,
+  /// returns the activated plan and updates the signed-in organizer session.
+  ///
+  /// Throws an [OrganizerSubscriptionException] with `paymentPending: true`
+  /// while the payment hasn't gone through yet.
+  Future<SubscriptionActivation> confirmPayment(String sessionId) async {
+    try {
+      final response = await Supabase.instance.client.functions.invoke(
+        'paymongo-verify',
+        body: {'sessionId': sessionId},
+      );
+      final data = response.data;
+      if (data is! Map || data['subscription'] != true) {
+        throw OrganizerSubscriptionException(
+          (data is Map ? data['error'] as String? : null) ??
+              'Could not confirm your payment.',
+        );
+      }
+
+      final planName = data['plan_name'] as String;
+      final renewsAt =
+          DateTime.tryParse('${data['renews_at']}') ??
+          DateTime.now().add(const Duration(days: 30));
+
+      final currentAccount = OrganizerSession.instance.account;
+      if (currentAccount != null) {
+        // The name alone says nothing about what the plan allows or charges
+        // (the admin edits both), so also pull the plan's own export switch
+        // and fee rate. If that lookup fails the account keeps its previous
+        // values and the next login reloads them from the server.
+        var canExport = currentAccount.subscriptionCanExport;
+        double? feeRate = currentAccount.subscriptionFeeRate;
+        try {
+          final plan = await SubscriptionPlanService.instance.fetchPlanByName(
+            planName,
+          );
+          if (plan != null) {
+            canExport = plan.canExport;
+            feeRate = plan.feeRate;
+          }
+        } catch (_) {}
+        OrganizerSession.instance.updateAccount(
+          currentAccount.copyWith(
+            subscriptionPlan: planName,
+            subscriptionFeeRate: feeRate,
+            subscriptionCanExport: canExport,
+            subscriptionRenewsAt: renewsAt,
+          ),
+        );
+      }
+      return SubscriptionActivation(planName: planName, renewsAt: renewsAt);
+    } on FunctionException catch (e) {
+      final details = e.details;
+      final message =
+          (details is Map ? details['error'] as String? : null) ??
+          'Could not confirm your payment.';
+      // 402 = PayMongo doesn't show it as paid (yet).
+      throw OrganizerSubscriptionException(
+        message,
+        paymentPending: e.status == 402,
       );
     }
+  }
 
-    return renewsAt;
+  /// Removed: plans can no longer be written straight from the app. Use
+  /// [startCheckout] and [confirmPayment].
+  @Deprecated('Plans are paid through PayMongo: use startCheckout/confirmPayment.')
+  Future<DateTime> selectPlan(String planName) async {
+    throw const OrganizerSubscriptionException(
+      'Plans must be purchased through PayMongo.',
+    );
   }
 }

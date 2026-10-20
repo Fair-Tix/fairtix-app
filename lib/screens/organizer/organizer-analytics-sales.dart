@@ -6,6 +6,7 @@ import '../../models/organizer_event.dart';
 import '../../services/event_repository.dart';
 import 'organizer-scaffold.dart';
 import 'organizer-revenue-report.dart';
+import 'widgets/organizer_export_button.dart';
 
 /// Sales overview for the signed-in organizer.
 ///
@@ -29,6 +30,7 @@ class OrganizerAnalyticsSalesScreen extends StatefulWidget {
 class _OrganizerAnalyticsSalesScreenState
     extends State<OrganizerAnalyticsSalesScreen> {
   bool _isLoading = true;
+  bool _showRevenueReport = false;
   String? _loadError;
   VoidCallback? _stopListening;
   Timer? _poll;
@@ -96,23 +98,33 @@ class _OrganizerAnalyticsSalesScreenState
     }
 
     return OrganizerScaffold(
-      pageTitle: 'Sales Overview',
+      pageTitle: _showRevenueReport ? 'Revenue Report' : 'Sales Overview',
       activeItem: OrganizerNavItem.analytics,
-      topBarTrailing: TextButton.icon(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => const OrganizerRevenueReportScreen(),
+      topBarTrailing: _showRevenueReport
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextButton.icon(
+                  onPressed: () => setState(() => _showRevenueReport = false),
+                  icon: const Icon(Icons.arrow_back, size: 18,
+                      color: AppColors.primaryPurple),
+                  label: const Text('Sales Overview',
+                      style: TextStyle(color: AppColors.primaryPurple)),
+                ),
+                const SizedBox(width: 8),
+                const OrganizerExportButton(),
+              ],
+            )
+          : TextButton.icon(
+              onPressed: () => setState(() => _showRevenueReport = true),
+              icon: const Icon(Icons.receipt_long_outlined,
+                  size: 18, color: AppColors.primaryPurple),
+              label: const Text('Revenue Report',
+                  style: TextStyle(color: AppColors.primaryPurple)),
             ),
-          );
-        },
-        icon: const Icon(Icons.receipt_long_outlined,
-            size: 18, color: AppColors.primaryPurple),
-        label: const Text('Revenue Report',
-            style: TextStyle(color: AppColors.primaryPurple)),
-      ),
-      body: _isLoading
+      body: _showRevenueReport
+          ? const OrganizerRevenueReportBody()
+          : _isLoading
           ? const Padding(
               padding: EdgeInsets.all(48),
               child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),

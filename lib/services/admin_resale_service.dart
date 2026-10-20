@@ -88,18 +88,24 @@ class ResaleListingEntry {
 /// listing). Used by both the Resale Monitoring export and the Resale
 /// Activity report on Revenue & Reports, so the two always match.
 String resaleListingsToCsv(List<ResaleListingEntry> rows) {
-  return toCsv([
+  return toSafeCsv(resaleListingsToRows(rows));
+}
+
+/// The same report as raw rows (first row = header), shared by the CSV and
+/// PDF exports.
+List<List<Object?>> resaleListingsToRows(List<ResaleListingEntry> rows) {
+  return [
     [
-      'Listing ID', 'Seller', 'Seller Email', 'Event', 'Tier', 'Original Price',
-      'Resale Price', '% of Original', 'Status', 'Listed At', 'Sold At',
+      'Listing ID', 'Seller', 'Seller Email', 'Event', 'Tier', 'Original Price (PHP)',
+      'Resale Price (PHP)', '% of Original', 'Status', 'Listed At', 'Sold At',
     ],
     for (final l in rows)
       [
         l.id,
-        csvSafe(l.sellerName),
-        csvSafe(l.sellerEmail),
-        csvSafe(l.eventTitle),
-        csvSafe(l.tierName),
+        l.sellerName,
+        l.sellerEmail,
+        l.eventTitle,
+        l.tierName,
         l.originalPrice.toStringAsFixed(2),
         l.listingPrice.toStringAsFixed(2),
         (l.fractionOfOriginal * 100).round(),
@@ -107,7 +113,7 @@ String resaleListingsToCsv(List<ResaleListingEntry> rows) {
         l.listedAt.toIso8601String(),
         l.soldAt?.toIso8601String() ?? '',
       ],
-  ]);
+  ];
 }
 
 /// One fraud alert / price flag (`public.fraud_alerts`).

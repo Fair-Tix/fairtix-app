@@ -1,46 +1,36 @@
 // FairTix — send-notification-email (Supabase Edge Function)
 //
-// Sends the EMAIL half of a notification. The database triggers in
-// supabase/notification_functions.sql write two rows per event into
-// public.notifications: one with channel 'in_app' (shown in the app) and
-// one with channel 'email'. A Database Webhook calls this function every
-// time a new row is inserted; this function emails the 'email' ones and
-// ignores everything else. Works for every role (event goer, organizer,
-// admin) because it simply emails whoever the notification is addressed to.
+// Sends the EMAIL half of a notification through Gmail SMTP. The database
+// triggers in supabase/notification_functions.sql write two rows per event
+// into public.notifications: channel 'in_app' (shown in the app) and
+// channel 'email'. A Database Webhook calls this function on every INSERT;
+// it emails the 'email' rows and ignores the rest. Works for every role.
 //
-// ONE-TIME SETUP
-//   1. Create a free Resend account (https://resend.com) and make an API key.
-//        NOTE: until you verify a sending domain in Resend, Resend only
-//        delivers to the email address that owns the Resend account. To
-//        email other people (e.g. testers), verify a domain and set
-//        NOTIFICATION_FROM_EMAIL below to an address on it.
-//   2. Add these Edge Function secrets
-//      (Supabase Dashboard → Edge Functions → Secrets, or the CLI):
-//        RESEND_API_KEY=re_...
-//        NOTIFICATION_WEBHOOK_SECRET=<any long random string you make up>
-//        NOTIFICATION_FROM_EMAIL=FairTix <notifications@yourdomain.com>   (optional;
-//          defaults to Resend's test sender, which only reaches your own email)
-//      SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided automatically.
-//   3. Deploy this function (Dashboard → Edge Functions → Deploy a new
-//      function → paste this file, name it exactly "send-notification-email",
-//      or: supabase functions deploy send-notification-email).
-//   4. Create the webhook (Dashboard → Database → Webhooks → Create a new hook):
-//        Name:   send-notification-email
-//        Table:  notifications           Events: Insert
-//        Type:   Supabase Edge Functions → send-notification-email
-//        HTTP Headers: add   x-webhook-secret = <the same string as step 2>
+// SETUP
+//   1. In the Gmail account that will send mail, turn on 2-Step Verification,
+//      then create an App Password (Google Account -> Security -> App passwords).
+//   2. Add these Edge Function secrets (Dashboard -> Edge Functions -> Secrets):
+//        GMAIL_USER=yourname@gmail.com
+//        GMAIL_APP_PASSWORD=<16-character app password, no spaces>
+//        NOTIFICATION_WEBHOOK_SECRET=<same value the webhook sends>   (already set)
+//   3. Deploy (done via Supabase). Webhook header x-webhook-secret stays as is.
 //
-// SECURITY: the function refuses any call without the matching
-// x-webhook-secret header, and it never trusts the request body for the
-// email's content — it re-reads the notification row from the database by
-// id, and only sends if that row exists and is an 'email' notification.
+// NOTES
+//   * Uses port 465 (implicit TLS); Supabase blocks ports 25 and 587.
+//   * Gmail always sends "from" the authenticated account. Free Gmail allows
+//     roughly 500 recipients/day, plenty for a capstone demo.
+//
+// SECURITY: refuses any call without the matching x-webhook-secret header and
+// re-reads the notification row from the database by id instead of trusting
+// the request body.
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
+import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
 
-const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? '';
+const GMAIL_USER = Deno.env.get('GMAIL_USER') ?? '';
+const GMAIL_APP_PASSWORD = (Deno.env.get('GMAIL_APP_PASSWORD') ?? '').replace(/\s+/g, '');
 const WEBHOOK_SECRET = Deno.env.get('NOTIFICATION_WEBHOOK_SECRET') ?? '';
-const FROM_EMAIL = Deno.env.get('NOTIFICATION_FROM_EMAIL') ?? 'FairTix <onboarding@resend.dev>';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
@@ -85,8 +75,8 @@ serve(async (req) => {
     return json({ error: 'Unauthorized' }, 401);
   }
 
-  if (!RESEND_API_KEY) {
-    return json({ error: 'RESEND_API_KEY is not set for this function.' }, 500);
+  if (!GMAIL_USER || !GMAIL_APP_PASSWORD) {
+    return json({ error: 'GMAIL_USER / GMAIL_APP_PASSWORD are not set for this function.' }, 500);
   }
 
   try {
@@ -125,29 +115,36 @@ serve(async (req) => {
       return json({ ignored: 'recipient has no email address' });
     }
 
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-        'Content-Type': 'application/json',
+    const client = new SMTPClient({
+      connection: {
+        hostname: 'smtp.gmail.com',
+        port: 465,
+        tls: true,
+        auth: { username: GMAIL_USER, password: GMAIL_APP_PASSWORD },
       },
-      body: JSON.stringify({
-        from: FROM_EMAIL,
-        to: [user.email],
-        subject: `FairTix: ${notification.title}`,
-        html: renderHtml(user.full_name ?? 'there', notification.title, notification.message),
-        text: `${notification.title}\n\n${notification.message}`,
-      }),
     });
 
-    if (!response.ok) {
-      // Non-2xx shows up in the webhook's delivery log, which is where to
-      // look first if emails stop arriving (e.g. unverified domain).
-      throw new Error(`Resend rejected the email (${response.status}): ${await response.text()}`);
+    try {
+      await client.send({
+        from: `FairTix <${GMAIL_USER}>`,
+        to: user.email,
+        subject: `FairTix: ${notification.title}`,
+        content: `${notification.title}\n\n${notification.message}`,
+        html: renderHtml(user.full_name ?? 'there', notification.title, notification.message),
+      });
+    } finally {
+      try {
+        await client.close();
+      } catch (_) {
+        // ignore close errors
+      }
     }
 
     return json({ sent: true });
   } catch (err) {
+    // Non-2xx shows up in the webhook's delivery log and in
+    // Supabase -> Edge Functions -> Logs (e.g. wrong app password).
+    console.error('send-notification-email failed:', (err as Error).message);
     return json({ error: (err as Error).message }, 500);
   }
 });

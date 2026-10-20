@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/admin_event_service.dart';
 import '../../services/csv_export.dart';
+import '../../widgets/admin_document_viewer.dart';
 import '../../widgets/admin_shell.dart';
 import '../../widgets/admin_widgets.dart';
 import '../organizer/app_colors.dart';
@@ -23,7 +24,7 @@ class AdminEventsTicketsScreen extends StatefulWidget {
 }
 
 class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
-  static const _statusFilters = ['All', 'Published', 'Draft', 'Cancelled', 'Completed'];
+  static const _statusFilters = ['All', 'Published', 'Unpublished', 'Draft', 'Cancelled', 'Completed'];
 
   final _searchController = TextEditingController();
   List<AdminEventSummary> _events = const [];
@@ -119,14 +120,131 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
     );
   }
 
+  Future<void> _viewDocuments(AdminEventSummary event) {
+    return showAdminReviewDialog(
+      context: context,
+      title: 'Supporting documents',
+      subtitle: '${event.title} \u2022 ${event.organizerName}',
+      documents: [
+        for (final path in event.documentPaths)
+          AdminReviewDocument(
+            label: path.split('/').last.replaceFirst(RegExp(r'^\d+_'), ''),
+            bucket: 'event_documents',
+            path: path,
+          ),
+      ],
+      // Anything other than 'pending' shows a plain Close button.
+      currentStatus: event.status,
+    );
+  }
+
   Future<void> _unpublishEvent(AdminEventSummary event) async {
+    final reasonController = TextEditingController();
+    var deadlineDays = 7;
+    var showReasonError = false;
+    final sold = event.ticketsSold;
+    final refundNote = sold == 0
+        ? 'No tickets have been sold yet.'
+        : 'All $sold ticket${sold == 1 ? '' : 's'} sold (${formatPeso(event.grossRevenue)}) '
+              'will be refunded automatically and every holder notified.';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Unpublish this event?'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '"${event.title}" will be hidden from event goers but not deleted. '
+                  '$refundNote',
+                  style: const TextStyle(fontSize: 12.5),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: reasonController,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    labelText: 'Reason (shown to the organizer)',
+                    hintText: 'e.g. LGU permit is missing or expired',
+                    errorText: showReasonError ? 'A reason is required.' : null,
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Time to submit proper documents',
+                        style: TextStyle(fontSize: 12.5),
+                      ),
+                    ),
+                    DropdownButton<int>(
+                      value: deadlineDays,
+                      items: [
+                        for (final d in const [3, 7, 14, 30])
+                          DropdownMenuItem(value: d, child: Text('$d days')),
+                      ],
+                      onChanged: (v) => setDialogState(() => deadlineDays = v ?? 7),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'If the organizer does not comply in time, the event is cancelled.',
+                  style: TextStyle(fontSize: 11, color: AppColors.textGray),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (reasonController.text.trim().isEmpty) {
+                  setDialogState(() => showReasonError = true);
+                  return;
+                }
+                Navigator.pop(context, true);
+              },
+              child: const Text('Unpublish'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final reason = reasonController.text.trim();
+    reasonController.dispose();
+    if (confirmed != true) return;
+    await _changeStatus(
+      event,
+      () async {
+        await AdminEventService.instance.unpublishEvent(
+          event.id,
+          reason: reason,
+          deadlineDays: deadlineDays,
+        );
+      },
+      sold == 0
+          ? 'Event unpublished. The organizer has $deadlineDays days to comply.'
+          : 'Event unpublished and ticket holders refunded. The organizer has $deadlineDays days to comply.',
+    );
+  }
+
+  Future<void> _republishEvent(AdminEventSummary event) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Unpublish this event?'),
+        title: const Text('Republish this event?'),
         content: Text(
-          '"${event.title}" will no longer be visible or on sale. Tickets already sold stay valid '
-          'and nothing is refunded. The organizer can publish it again.',
+          '"${event.title}" will be visible and on sale again. Make sure you reviewed '
+          'the new documents first. Previously refunded tickets are not restored.',
         ),
         actions: [
           TextButton(
@@ -135,7 +253,7 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Unpublish'),
+            child: const Text('Republish'),
           ),
         ],
       ),
@@ -143,8 +261,8 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
     if (confirmed != true) return;
     await _changeStatus(
       event,
-      () => AdminEventService.instance.unpublishEvent(event.id),
-      'Event unpublished.',
+      () => AdminEventService.instance.republishEvent(event.id),
+      'Event republished.',
     );
   }
 
@@ -348,7 +466,7 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
                     Expanded(flex: 2, child: Text('DATE', style: adminHeaderStyle)),
                     Expanded(child: Text('SOLD', style: adminHeaderStyle)),
                     Expanded(child: Text('STATUS', style: adminHeaderStyle)),
-                    SizedBox(width: 200, child: Text('ACTIONS', style: adminHeaderStyle)),
+                    SizedBox(width: 300, child: Text('ACTIONS', style: adminHeaderStyle)),
                   ],
                 ),
               ),
@@ -363,6 +481,8 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
                   if (!_expanded.add(event.id)) _expanded.remove(event.id);
                 }),
                 onUnpublish: () => _unpublishEvent(event),
+                onRepublish: () => _republishEvent(event),
+                onViewDocuments: () => _viewDocuments(event),
                 onCancel: () => _cancelEvent(event),
               ),
             Padding(
@@ -383,6 +503,7 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
 }
 
 AdminBadge _statusBadge(AdminEventSummary event) => switch (event.status) {
+  'draft' when event.isUnpublished => AdminBadge.danger(event.statusLabel),
   'published' => AdminBadge.success(event.statusLabel),
   'canceled' => AdminBadge.danger(event.statusLabel),
   'completed' => AdminBadge.info(event.statusLabel),
@@ -397,6 +518,8 @@ class _EventRow extends StatelessWidget {
     required this.busy,
     required this.onToggle,
     required this.onUnpublish,
+    required this.onRepublish,
+    required this.onViewDocuments,
     required this.onCancel,
   });
 
@@ -406,6 +529,8 @@ class _EventRow extends StatelessWidget {
   final bool busy;
   final VoidCallback onToggle;
   final VoidCallback onUnpublish;
+  final VoidCallback onRepublish;
+  final VoidCallback onViewDocuments;
   final VoidCallback onCancel;
 
   Widget _actions() => Wrap(
@@ -416,6 +541,21 @@ class _EventRow extends StatelessWidget {
         style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 6), minimumSize: Size.zero),
         child: Text(expanded ? 'Hide tiers' : 'Tiers', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
       ),
+      TextButton(
+        onPressed: onViewDocuments,
+        style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 6), minimumSize: Size.zero),
+        child: const Text('Documents', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+      ),
+      if (event.canRepublish)
+        TextButton(
+          onPressed: busy ? null : onRepublish,
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            minimumSize: Size.zero,
+            foregroundColor: AppColors.successGreen,
+          ),
+          child: const Text('Republish', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+        ),
       if (event.canUnpublish)
         TextButton(
           onPressed: busy ? null : onUnpublish,
@@ -480,6 +620,8 @@ class _EventRow extends StatelessWidget {
                     children: [
                       Text(event.title, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
                       Text(event.venue, style: const TextStyle(fontSize: 10.5, color: AppColors.textGray)),
+                      if (event.complianceLabel != null)
+                        Text(event.complianceLabel!, style: const TextStyle(fontSize: 10.5, color: AppColors.dangerRed)),
                     ],
                   ),
                 ),
@@ -487,7 +629,7 @@ class _EventRow extends StatelessWidget {
                 Expanded(flex: 2, child: Text(event.dateLabel, style: const TextStyle(fontSize: 11))),
                 Expanded(child: Text(event.soldLabel, style: const TextStyle(fontSize: 11))),
                 Expanded(child: Align(alignment: Alignment.centerLeft, child: _statusBadge(event))),
-                SizedBox(width: 200, child: _actions()),
+                SizedBox(width: 300, child: _actions()),
               ],
             ),
           )
@@ -506,6 +648,8 @@ class _EventRow extends StatelessWidget {
                 Text('${event.organizerName} \u2022 ${event.venue}', style: const TextStyle(fontSize: 10.5, color: AppColors.textGray)),
                 const SizedBox(height: 4),
                 Text('${event.dateLabel} \u2022 ${event.soldLabel} sold', style: const TextStyle(fontSize: 11)),
+                if (event.complianceLabel != null)
+                  Text(event.complianceLabel!, style: const TextStyle(fontSize: 10.5, color: AppColors.dangerRed)),
                 const SizedBox(height: 6),
                 _actions(),
               ],

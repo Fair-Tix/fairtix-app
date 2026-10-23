@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
-import 'app_colors.dart';
+
 import '../../services/password_service.dart';
+import '../../theme/fairtix_palette.dart';
+import '../../widgets/organizer_ui.dart';
+import '../../widgets/theme_mode_switch.dart';
 import 'organizer-scaffold.dart';
 
-/// Lets the signed-in organizer change their password via Supabase Auth.
-/// This is the only self-service edit reachable from
-/// [OrganizerProfileScreen] — full name and email stay locked to the
-/// organizer's verified ID/proof-of-organization documents per the
-/// capstone's Account Verification rules.
+/// Change Password (Mahilum design): "Profile" crumb, big title, and one card
+/// with the three password fields plus Cancel / Update Password.
+///
+/// This is the only self-service edit reachable from [OrganizerProfileScreen]:
+/// full name and email stay locked to the organizer's verified ID and
+/// proof-of-organization documents (capstone Account Verification rules).
 class OrganizerChangePasswordScreen extends StatefulWidget {
   const OrganizerChangePasswordScreen({super.key});
 
@@ -25,7 +29,6 @@ class _OrganizerChangePasswordScreenState
 
   bool _showCurrent = false;
   bool _showNew = false;
-  bool _showConfirm = false;
   bool _isSaving = false;
 
   @override
@@ -53,137 +56,155 @@ class _OrganizerChangePasswordScreenState
     } on PasswordChangeException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message), backgroundColor: AppColors.dangerRed),
+        SnackBar(
+          content: Text(e.message),
+          backgroundColor: FairTixPalette.of(context).danger,
+        ),
       );
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return OrganizerScaffold(
-      pageTitle: 'Change Password',
-      activeItem: OrganizerNavItem.profile,
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
-          child: Container(
-            padding: const EdgeInsets.all(28),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.borderLight),
-            ),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text('Change Password', style: AppTextStyles.h2),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Your name and email stay locked to your verified identity documents. Only your password can be changed here.',
-                    style: AppTextStyles.bodyGray,
-                  ),
-                  const SizedBox(height: 24),
-                  _field(
-                    'Current Password',
-                    _currentController,
-                    _showCurrent,
-                    () => setState(() => _showCurrent = !_showCurrent),
-                    validator: (v) => (v == null || v.isEmpty)
-                        ? 'Enter your current password.'
-                        : null,
-                  ),
-                  const SizedBox(height: 16),
-                  _field(
-                    'New Password',
-                    _newController,
-                    _showNew,
-                    () => setState(() => _showNew = !_showNew),
-                    validator: (v) => (v == null || v.length < 8)
-                        ? 'Use at least 8 characters.'
-                        : null,
-                  ),
-                  const SizedBox(height: 16),
-                  _field(
-                    'Confirm New Password',
-                    _confirmController,
-                    _showConfirm,
-                    () => setState(() => _showConfirm = !_showConfirm),
-                    validator: (v) => v != _newController.text
-                        ? 'Passwords do not match.'
-                        : null,
-                  ),
-                  const SizedBox(height: 26),
-                  PrimaryButton(
-                    label: _isSaving ? 'Saving...' : 'Save New Password',
-                    onPressed: _isSaving ? null : _submit,
-                  ),
-                  const SizedBox(height: 12),
-                  OutlineButtonWidget(
-                    label: 'Cancel',
-                    onPressed: _isSaving ? null : () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
+  Widget _eye(FairTixPalette p, bool visible, VoidCallback onToggle) {
+    return IconButton(
+      tooltip: visible ? 'Hide password' : 'Show password',
+      onPressed: onToggle,
+      icon: Icon(
+        visible ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+        size: 20,
+        color: p.accentLabel,
       ),
     );
   }
 
-  Widget _field(
-    String label,
-    TextEditingController controller,
-    bool visible,
-    VoidCallback onToggle, {
-    String? Function(String?)? validator,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: AppTextStyles.label),
-        const SizedBox(height: 8),
-        TextFormField(
-          controller: controller,
-          obscureText: !visible,
-          validator: validator,
-          autovalidateMode: AutovalidateMode.onUserInteraction,
-          style: AppTextStyles.body,
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: Colors.white,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            suffixIcon: IconButton(
-              onPressed: onToggle,
-              icon: Icon(
-                visible ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                color: AppColors.textGray,
-                size: 20,
+  @override
+  Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
+
+    return OrganizerScaffold(
+      pageTitle: 'Change Password',
+      activeItem: OrganizerNavItem.profile,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Profile',
+                      style: orgText(p, size: 15, color: p.textSecondary),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Change Password',
+                      style: orgText(
+                        p,
+                        size: 36,
+                        weight: FontWeight.w800,
+                        letterSpacing: -1,
+                        height: 1.15,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const ThemeModeSwitch(),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 620),
+              child: OrganizerCard(
+                padding: const EdgeInsets.all(28),
+                child: Form(
+                  key: _formKey,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const OrganizerFieldLabel('Current password'),
+                      const SizedBox(height: 7.5),
+                      OrganizerTextField(
+                        controller: _currentController,
+                        hint: 'Current password',
+                        obscureText: !_showCurrent,
+                        suffix: _eye(
+                          p,
+                          _showCurrent,
+                          () => setState(() => _showCurrent = !_showCurrent),
+                        ),
+                        validator: (v) => (v == null || v.isEmpty)
+                            ? 'Enter your current password.'
+                            : null,
+                      ),
+                      const SizedBox(height: 18),
+                      const OrganizerFieldLabel('New password'),
+                      const SizedBox(height: 7.5),
+                      OrganizerTextField(
+                        controller: _newController,
+                        hint: 'At least 8 characters',
+                        obscureText: !_showNew,
+                        suffix: _eye(
+                          p,
+                          _showNew,
+                          () => setState(() => _showNew = !_showNew),
+                        ),
+                        validator: (v) => (v == null || v.length < 8)
+                            ? 'Use at least 8 characters.'
+                            : null,
+                      ),
+                      const SizedBox(height: 18),
+                      const OrganizerFieldLabel('Confirm new password'),
+                      const SizedBox(height: 7.5),
+                      OrganizerTextField(
+                        controller: _confirmController,
+                        hint: 'Re-enter new password',
+                        obscureText: !_showNew,
+                        onSubmitted: (_) => _isSaving ? null : _submit(),
+                        validator: (v) => v != _newController.text
+                            ? 'Passwords do not match.'
+                            : null,
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 96,
+                            child: OrganizerSecondaryButton(
+                              label: 'Cancel',
+                              height: 44,
+                              onPressed: _isSaving
+                                  ? null
+                                  : () => Navigator.pop(context),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          SizedBox(
+                            width: 176,
+                            child: OrganizerPrimaryButton(
+                              label: 'Update Password',
+                              height: 44,
+                              loading: _isSaving,
+                              onPressed: _submit,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.borderLight),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.borderLight),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.primaryPurple),
-            ),
-            errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.dangerRed),
-            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

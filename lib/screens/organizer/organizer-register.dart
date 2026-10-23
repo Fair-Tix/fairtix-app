@@ -1,10 +1,23 @@
-import 'package:flutter/material.dart';
 import 'dart:typed_data';
+
 import 'package:file_picker/file_picker.dart';
-import 'app_colors.dart';
+import 'package:flutter/material.dart';
+
 import '../../services/organizer_auth_service.dart';
+import '../../theme/fairtix_palette.dart';
+import '../../widgets/fairtix_mark.dart';
+import '../../widgets/organizer_ui.dart';
+import 'organizer-login.dart';
 import 'organizer-otp-verification.dart';
 
+/// "Apply as an organizer" (Mahilum design): one wide card with the mark, a
+/// 2-column form, two document drop zones and the submit button.
+///
+/// Notes on the redesign:
+///  * The design has no "Confirm password" field, so it was removed.
+///  * The two upload boxes are labelled "Government or school ID" and "Proof
+///    of organization" as in the design. They still use the existing storage
+///    slots (`venue_proof` and `event_permit`) so the backend is unchanged.
 class OrganizerRegisterScreen extends StatefulWidget {
   const OrganizerRegisterScreen({super.key});
 
@@ -19,17 +32,17 @@ class _OrganizerRegisterScreenState extends State<OrganizerRegisterScreen> {
       TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _confirmPasswordController =
-      TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   bool _isSubmitting = false;
   String? _errorText;
 
+  // Slot 1: government / school ID (stored as `venue_proof`).
   Uint8List? _venueProofBytes;
   String? _venueProofFileName;
   String? _venueProofExt;
 
+  // Slot 2: proof of organization (stored as `event_permit`).
   Uint8List? _permitBytes;
   String? _permitFileName;
   String? _permitExt;
@@ -40,7 +53,6 @@ class _OrganizerRegisterScreenState extends State<OrganizerRegisterScreen> {
     _organizationNameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
-    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -57,7 +69,9 @@ class _OrganizerRegisterScreenState extends State<OrganizerRegisterScreen> {
     if (bytes == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not read that file. Please try another one.')),
+        const SnackBar(
+          content: Text('Could not read that file. Please try another one.'),
+        ),
       );
       return;
     }
@@ -85,7 +99,8 @@ class _OrganizerRegisterScreenState extends State<OrganizerRegisterScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-              'Please upload both verification documents before submitting.'),
+            'Please upload both verification documents before submitting.',
+          ),
         ),
       );
       return;
@@ -111,12 +126,12 @@ class _OrganizerRegisterScreenState extends State<OrganizerRegisterScreen> {
       if (mounted) setState(() => _isSubmitting = false);
     }
 
-    // Email verification comes before the application counts as submitted,
-    // same as the eventgoer flow. Supabase has Confirm email enabled, so
-    // signUp() returns no session yet and Storage RLS would reject the
-    // document uploads. The OTP screen therefore holds the picked files,
-    // verifies the code (which creates the session), uploads both documents,
-    // and only then continues to OrganizerApplicationSubmittedScreen.
+    // Email verification comes before the application counts as submitted.
+    // Supabase has Confirm email enabled, so signUp() returns no session yet
+    // and Storage RLS would reject the document uploads. The OTP screen holds
+    // the picked files, verifies the code (which creates the session),
+    // uploads both documents, then continues to the Application Submitted
+    // screen.
     if (!mounted) return;
     Navigator.push(
       context,
@@ -132,324 +147,191 @@ class _OrganizerRegisterScreenState extends State<OrganizerRegisterScreen> {
     );
   }
 
+  void _goToLogin() {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const OrganizerLoginScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isWide = screenWidth > 900;
+    final p = FairTixPalette.of(context);
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Row(
-        children: [
-          if (isWide)
-            Expanded(
-              flex: 5,
-              child: AuthSidePanel(
-                child: Column(
+    return OrganizerAuthPage(
+      maxWidth: 760,
+      onBack: Navigator.of(context).canPop()
+          ? () => Navigator.of(context).maybePop()
+          : null,
+      child: OrganizerCard(
+        padding: const EdgeInsets.all(32),
+        child: Form(
+          key: _formKey,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final twoColumns = constraints.maxWidth >= 560;
+
+              Widget pair(Widget a, Widget b) {
+                if (!twoColumns) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [a, const SizedBox(height: 16), b],
+                  );
+                }
+                return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const FairTixLogo(fontSize: 22),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Start selling tickets in minutes',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.white.withValues(alpha: 0.8),
-                      ),
-                    ),
-                    const Spacer(),
-                    _featureCheck('Verified organizer badge'),
-                    const SizedBox(height: 16),
-                    _featureCheck('Real-time analytics dashboard'),
-                    const SizedBox(height: 16),
-                    _featureCheck('Instant payout system'),
-                    const Spacer(),
+                    Expanded(child: a),
+                    const SizedBox(width: 16),
+                    Expanded(child: b),
                   ],
-                ),
-              ),
-            ),
-          Expanded(
-            flex: 6,
-            child: Center(
-              child: SingleChildScrollView(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 520),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text(
-                        'Register as Organizer',
-                        style: AppTextStyles.h1,
-                      ),
-                      const SizedBox(height: 28),
-                      _validatedField(
-                        label: 'Organization Name',
-                        hint: 'e.g. UC Main Student Council',
-                        controller: _organizationNameController,
-                        validator: (v) => (v == null || v.trim().isEmpty)
-                            ? 'Organization name is required'
-                            : null,
-                      ),
-                      const SizedBox(height: 18),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: _validatedField(
-                              label: 'Full Name',
-                              hint: 'e.g. Juan Dela Cruz',
-                              controller: _fullNameController,
-                              validator: (v) => (v == null || v.trim().isEmpty)
-                                  ? 'Full name is required'
-                                  : null,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _validatedField(
-                              label: 'Email Address',
-                              hint: 'you@organization.com',
-                              controller: _emailController,
-                              keyboardType: TextInputType.emailAddress,
-                              validator: (v) {
-                                if (v == null || v.trim().isEmpty) {
-                                  return 'Email is required';
-                                }
-                                if (!v.contains('@')) {
-                                  return 'Enter a valid email address';
-                                }
-                                return null;
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 18),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: _validatedField(
-                              label: 'Password',
-                              hint: '••••••••',
-                              obscureText: true,
-                              controller: _passwordController,
-                              validator: (v) {
-                                if (v == null || v.isEmpty) {
-                                  return 'Password is required';
-                                }
-                                if (v.length < 8) {
-                                  return 'Use at least 8 characters';
-                                }
-                                return null;
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _validatedField(
-                              label: 'Confirm Password',
-                              hint: '••••••••',
-                              obscureText: true,
-                              controller: _confirmPasswordController,
-                              validator: (v) {
-                                if (v == null || v.isEmpty) {
-                                  return 'Please confirm your password';
-                                }
-                                if (v != _passwordController.text) {
-                                  return 'Passwords do not match';
-                                }
-                                return null;
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-                      const Text(
-                        'Verification Documents',
-                        style: AppTextStyles.label,
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _uploadBox(
-                              label: _venueProofFileName ??
-                                  'Proof of Venue Booking',
-                              uploaded: _venueProofBytes != null,
-                              onTap: () => _pickDocument(isVenueProof: true),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _uploadBox(
-                              label: _permitFileName ?? 'Valid Event Permit',
-                              uploaded: _permitBytes != null,
-                              onTap: () => _pickDocument(isVenueProof: false),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 28),
-                      if (_errorText != null) ...[
-                        Text(
-                          _errorText!,
-                          style: const TextStyle(
-                            color: AppColors.dangerRed,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      _isSubmitting
-                          ? const SizedBox(
-                              height: 52,
-                              child: Center(
-                                child: SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(strokeWidth: 2.5),
-                                ),
-                              ),
-                            )
-                          : PrimaryButton(
-                              label: 'Submit Application',
-                              color: AppColors.primaryPurpleDarker,
-                              onPressed: _handleSubmit,
-                            ),
-                      const SizedBox(height: 16),
-                    ],
+                );
+              }
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: FairTixMark(width: 44),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Apply as an organizer',
+                    style: orgText(
+                      p,
+                      size: 28,
+                      weight: FontWeight.w800,
+                      height: 1.2,
+                      letterSpacing: -0.3,
                     ),
                   ),
-                ),
-              ),
-            ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'An admin reviews every application before you can '
+                    'create events.',
+                    style: orgText(p, size: 13.5, color: p.textSecondary),
+                  ),
+                  const SizedBox(height: 22),
+                  pair(
+                    OrganizerLabeledField(
+                      label: 'Organization name',
+                      hint: 'Your organization',
+                      controller: _organizationNameController,
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Organization name is required'
+                          : null,
+                    ),
+                    OrganizerLabeledField(
+                      label: 'Full name',
+                      hint: 'As shown on your ID',
+                      controller: _fullNameController,
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Full name is required'
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  pair(
+                    OrganizerLabeledField(
+                      label: 'Email',
+                      hint: 'you@organization.com',
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) {
+                          return 'Email is required';
+                        }
+                        if (!v.contains('@')) {
+                          return 'Enter a valid email address';
+                        }
+                        return null;
+                      },
+                    ),
+                    OrganizerLabeledField(
+                      label: 'Password',
+                      hint: 'At least 8 characters',
+                      controller: _passwordController,
+                      obscureText: true,
+                      validator: (v) {
+                        if (v == null || v.isEmpty) {
+                          return 'Password is required';
+                        }
+                        if (v.length < 8) return 'Use at least 8 characters';
+                        return null;
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  pair(
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const OrganizerFieldLabel('Government or school ID'),
+                        const SizedBox(height: 7.5),
+                        OrganizerUploadBox(
+                          title: 'Upload ID',
+                          hint: 'JPG or PNG',
+                          fileName: _venueProofFileName,
+                          onTap: () => _pickDocument(isVenueProof: true),
+                        ),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const OrganizerFieldLabel('Proof of organization'),
+                        const SizedBox(height: 7.5),
+                        OrganizerUploadBox(
+                          title: 'Upload document',
+                          hint:
+                              'Org certificate, DTI registration or business permit',
+                          fileName: _permitFileName,
+                          onTap: () => _pickDocument(isVenueProof: false),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_errorText != null) ...[
+                    const SizedBox(height: 14),
+                    Text(
+                      _errorText!,
+                      style: orgText(
+                        p,
+                        size: 13,
+                        weight: FontWeight.w600,
+                        color: p.danger,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 22),
+                  OrganizerPrimaryButton(
+                    label: 'Submit Application',
+                    loading: _isSubmitting,
+                    onPressed: _handleSubmit,
+                  ),
+                  const SizedBox(height: 18),
+                  Center(
+                    child: Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          'Already have an account? ',
+                          style: orgText(
+                            p,
+                            size: 13,
+                            height: 1.3,
+                            color: p.textSecondary,
+                          ),
+                        ),
+                        OrganizerTextLink(label: 'Log in', onTap: _goToLogin),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _validatedField({
-    required String label,
-    required String hint,
-    required TextEditingController controller,
-    required FormFieldValidator<String> validator,
-    bool obscureText = false,
-    TextInputType? keyboardType,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: AppTextStyles.label),
-        const SizedBox(height: 8),
-        TextFormField(
-          controller: controller,
-          obscureText: obscureText,
-          keyboardType: keyboardType,
-          validator: validator,
-          style: AppTextStyles.body,
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: AppTextStyles.bodyGray,
-            filled: true,
-            fillColor: Colors.white,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.borderLight),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.borderLight),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.primaryPurple),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _featureCheck(String text) {
-    return Row(
-      children: [
-        Container(
-          width: 24,
-          height: 24,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
-          ),
-          alignment: Alignment.center,
-          child: const Icon(Icons.check, size: 14, color: AppColors.primaryPurple),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _uploadBox({
-    required String label,
-    required VoidCallback onTap,
-    bool uploaded = false,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        height: 110,
-        decoration: BoxDecoration(
-          color: const Color(0xFFF5F3FF),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: AppColors.primaryPurple.withValues(alpha: 0.4),
-            width: 1.4,
-            style: BorderStyle.solid,
-          ),
-        ),
-        padding: const EdgeInsets.all(12),
-        alignment: Alignment.center,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              uploaded ? Icons.check_circle : Icons.upload_file_outlined,
-              color: AppColors.primaryPurple,
-              size: 26,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppColors.primaryPurple,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-              ),
-            ),
-          ],
         ),
       ),
     );

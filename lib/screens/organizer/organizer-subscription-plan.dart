@@ -1,12 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'app_colors.dart';
+
 import '../../models/subscription_plan.dart';
 import '../../services/organizer_session.dart';
 import '../../services/organizer_subscription_service.dart';
 import '../../services/subscription_plan_service.dart';
+import '../../theme/fairtix_palette.dart';
+import '../../widgets/organizer_ui.dart';
 import 'organizer-subscription-confirmed.dart';
+import 'organizer-subscription-review.dart';
 
+/// "Choose your plan" (Mahilum design): the plans side by side, one marked
+/// "Selected", and a "Continue with <plan>" button underneath.
+///
+/// Flow: pick a plan -> Continue -> "Confirm your subscription" review ->
+/// PayMongo checkout -> wait for the server to confirm payment ->
+/// [OrganizerSubscriptionConfirmedScreen]. The payment logic is unchanged;
+/// only the screens in front of it are new.
 class OrganizerSubscriptionPlanScreen extends StatefulWidget {
   const OrganizerSubscriptionPlanScreen({super.key});
 
@@ -18,7 +28,7 @@ class OrganizerSubscriptionPlanScreen extends StatefulWidget {
 class _OrganizerSubscriptionPlanScreenState
     extends State<OrganizerSubscriptionPlanScreen> {
   /// True while a PayMongo checkout is being created or is waiting to be
-  /// paid; it disables every plan button so only one payment runs at a time.
+  /// paid; it disables the buttons so only one payment runs at a time.
   bool _isSaving = false;
 
   /// The plan checkout the organizer is currently paying for, if any.
@@ -31,10 +41,37 @@ class _OrganizerSubscriptionPlanScreenState
   String? _plansError;
   bool _loadingPlans = true;
 
+  /// Which plan is highlighted (`id`, or `name` for an unsaved plan).
+  String? _selectedKey;
+
   @override
   void initState() {
     super.initState();
     _loadPlans();
+  }
+
+  String _keyOf(SubscriptionPlan plan) => plan.id ?? plan.name;
+
+  SubscriptionPlan? get _selectedPlan {
+    final plans = _plans;
+    if (plans == null) return null;
+    for (final plan in plans) {
+      if (_keyOf(plan) == _selectedKey) return plan;
+    }
+    return null;
+  }
+
+  /// Current plan first, then the plan the admin badged, then the middle one.
+  String? _defaultSelection(List<SubscriptionPlan> plans) {
+    if (plans.isEmpty) return null;
+    final current = OrganizerSession.instance.account?.subscriptionPlan;
+    for (final plan in plans) {
+      if (plan.name == current) return _keyOf(plan);
+    }
+    for (final plan in plans) {
+      if (plan.hasBadge) return _keyOf(plan);
+    }
+    return _keyOf(plans[plans.length > 1 ? 1 : 0]);
   }
 
   Future<void> _loadPlans() async {
@@ -45,6 +82,7 @@ class _OrganizerSubscriptionPlanScreenState
         _plans = plans;
         _plansError = null;
         _loadingPlans = false;
+        _selectedKey ??= _defaultSelection(plans);
       });
     } on SubscriptionPlanException catch (e) {
       if (!mounted) return;
@@ -73,92 +111,62 @@ class _OrganizerSubscriptionPlanScreenState
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isWide = screenWidth > 900;
+    final p = FairTixPalette.of(context);
     final currentPlan = OrganizerSession.instance.account?.subscriptionPlan;
 
-    return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: AppColors.authGradient,
-          ),
-        ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    // Back button: shown whenever there is a screen to go back
-                    // to (viewing/managing the plan from Profile). On first-time
-                    // onboarding this is the root, so nothing is shown.
-                    if (Navigator.of(context).canPop()) ...[
-                      IconButton(
-                        tooltip: 'Back',
-                        onPressed: () => Navigator.of(context).maybePop(),
-                        icon: const Icon(
-                          Icons.arrow_back_rounded,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    const FairTixLogo(fontSize: 22),
-                  ],
-                ),
-                const SizedBox(height: 40),
-                const Text(
-                  'Choose Your Plan',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Scale your events with the right tools',
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: Colors.white.withValues(alpha: 0.85),
-                  ),
-                ),
-                const SizedBox(height: 40),
-                if (_pending != null) ...[
-                  _paymentBanner(_pending!),
-                  const SizedBox(height: 24),
-                ],
-                _plansSection(context, isWide, currentPlan),
-                const SizedBox(height: 28),
-                Text(
-                  'Secure payment via PayMongo · Instant activation · No hidden fees',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.white.withValues(alpha: 0.7),
-                  ),
-                ),
-              ],
+    return OrganizerAuthPage(
+      maxWidth: 1120,
+      // Back whenever there is a screen to go back to (managing the plan from
+      // Profile). On first-time onboarding this is the root, so nothing shows.
+      onBack: Navigator.of(context).canPop()
+          ? () => Navigator.of(context).maybePop()
+          : null,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Choose your plan',
+            textAlign: TextAlign.center,
+            style: orgText(
+              p,
+              size: 40,
+              weight: FontWeight.w800,
+              height: 1.15,
+              letterSpacing: -1.2,
             ),
           ),
-        ),
+          const SizedBox(height: 10),
+          Text(
+            'Billed monthly and renews automatically. Change plans any time.',
+            textAlign: TextAlign.center,
+            style: orgText(p, size: 14.5, color: p.textSecondary),
+          ),
+          const SizedBox(height: 32),
+          if (_pending != null) ...[
+            Center(child: _paymentBanner(p, _pending!)),
+            const SizedBox(height: 24),
+          ],
+          _plansSection(p, currentPlan),
+          const SizedBox(height: 28),
+          Text(
+            'Secure payment via PayMongo \u00b7 Instant activation \u00b7 '
+            'No hidden fees',
+            textAlign: TextAlign.center,
+            style: orgText(p, size: 12, color: p.textSecondary),
+          ),
+        ],
       ),
     );
   }
 
-  /// The plan cards, built from the plans the admin saved. A plan with a
-  /// badge (e.g. BEST VALUE) gets the highlighted style.
-  Widget _plansSection(BuildContext context, bool isWide, String? currentPlan) {
+  Widget _plansSection(FairTixPalette p, String? currentPlan) {
     if (_loadingPlans) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 40),
-        child: CircularProgressIndicator(color: Colors.white),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: Center(
+          child: CircularProgressIndicator(color: p.primary, strokeWidth: 2.6),
+        ),
       );
     }
 
@@ -169,59 +177,97 @@ class _OrganizerSubscriptionPlanScreenState
           Text(
             _plansError ?? 'No subscription plans are available right now.',
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white, fontSize: 14),
+            style: orgText(p, size: 14, color: p.textSecondary),
           ),
           const SizedBox(height: 16),
-          OutlinedButton(
-            onPressed: _retryLoadPlans,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.white,
-              side: const BorderSide(color: Colors.white),
+          Center(
+            child: SizedBox(
+              width: 200,
+              child: OrganizerSecondaryButton(
+                label: 'Try again',
+                onPressed: _retryLoadPlans,
+              ),
             ),
-            child: const Text('Try again'),
           ),
         ],
       );
     }
 
-    final cards = [
-      for (final plan in plans)
-        _planCard(
-          context,
-          _toPlanInfo(plan, currentPlan),
-          highlighted: plan.hasBadge,
+    final selected = _selectedPlan;
+    final selectedIsCurrent = selected != null && selected.name == currentPlan;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) {
+            const gap = 24.0;
+            final columns = constraints.maxWidth >= 900
+                ? (plans.length < 3 ? plans.length : 3)
+                : (constraints.maxWidth >= 600 ? 2 : 1);
+            final cardWidth =
+                (constraints.maxWidth - gap * (columns - 1)) / columns;
+
+            return Wrap(
+              alignment: WrapAlignment.center,
+              spacing: gap,
+              runSpacing: gap,
+              children: [
+                for (final plan in plans)
+                  SizedBox(
+                    width: cardWidth,
+                    child: _PlanCard(
+                      plan: plan,
+                      selected: _keyOf(plan) == _selectedKey,
+                      isCurrent: plan.name == currentPlan,
+                      currentNote: plan.name == currentPlan
+                          ? _currentPlanNote()
+                          : null,
+                      onSelect: _isSaving
+                          ? null
+                          : () => setState(() => _selectedKey = _keyOf(plan)),
+                    ),
+                  ),
+              ],
+            );
+          },
         ),
-    ];
-
-    if (!isWide) {
-      return Column(
-        children: [
-          for (var i = 0; i < cards.length; i++) ...[
-            if (i > 0) const SizedBox(height: 20),
-            cards[i],
-          ],
-        ],
-      );
-    }
-
-    // Three or fewer plans share the row; more wrap onto extra rows.
-    if (cards.length <= 3) {
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (var i = 0; i < cards.length; i++) ...[
-            if (i > 0) const SizedBox(width: 20),
-            Expanded(child: cards[i]),
-          ],
-        ],
-      );
-    }
-    return Wrap(
-      spacing: 20,
-      runSpacing: 20,
-      alignment: WrapAlignment.center,
-      children: [for (final card in cards) SizedBox(width: 300, child: card)],
+        const SizedBox(height: 28),
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: OrganizerPrimaryButton(
+              label: selected == null
+                  ? 'Choose a plan'
+                  : selectedIsCurrent
+                  ? 'Renew ${selected.name} (+30 days)'
+                  : 'Continue with ${selected.name}',
+              loading: _isSaving,
+              onPressed: selected == null ? null : _continue,
+            ),
+          ),
+        ),
+      ],
     );
+  }
+
+  /// Opens the review screen; only a "Confirm Subscription" there starts the
+  /// PayMongo checkout.
+  Future<void> _continue() async {
+    final plan = _selectedPlan;
+    if (plan == null || _isSaving) return;
+    final currentPlan = OrganizerSession.instance.account?.subscriptionPlan;
+
+    final confirmed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => OrganizerSubscriptionReviewScreen(
+          plan: plan,
+          isRenewal: plan.name == currentPlan,
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await _selectPlan(context, _toPlanInfo(plan, currentPlan));
   }
 
   _PlanInfo _toPlanInfo(SubscriptionPlan plan, String? currentPlan) =>
@@ -234,176 +280,8 @@ class _OrganizerSubscriptionPlanScreenState
         isCurrent: currentPlan == plan.name,
       );
 
-  Widget _planCard(
-    BuildContext context,
-    _PlanInfo plan, {
-    bool highlighted = false,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(28),
-      decoration: BoxDecoration(
-        color: highlighted ? AppColors.primaryPurpleDarker : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: highlighted
-            ? Border.all(color: Colors.white.withValues(alpha: 0.3))
-            : null,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (plan.badge != null)
-            Align(
-              alignment: Alignment.centerRight,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.warningOrange,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  plan.badge!,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 10,
-                  ),
-                ),
-              ),
-            ),
-          Text(
-            plan.name,
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              color: highlighted ? Colors.white : AppColors.textDark,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                plan.price,
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w800,
-                  color: highlighted ? Colors.white : AppColors.textDark,
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 5, left: 4),
-                child: Text(
-                  '/mo',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: highlighted
-                        ? Colors.white.withValues(alpha: 0.8)
-                        : AppColors.textGray,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          ...plan.features.map(
-            (f) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    Icons.check,
-                    size: 18,
-                    color: highlighted ? Colors.white : AppColors.primaryPurple,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      f,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: highlighted ? Colors.white : AppColors.textDark,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          if (plan.isCurrent)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Text(
-                _currentPlanNote(),
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: highlighted
-                      ? Colors.white.withValues(alpha: 0.9)
-                      : AppColors.primaryPurple,
-                ),
-              ),
-            ),
-          SizedBox(
-            width: double.infinity,
-            height: 46,
-            child: highlighted
-                ? ElevatedButton(
-                    onPressed: _isSaving
-                        ? null
-                        : () => _selectPlan(context, plan),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: AppColors.primaryPurpleDarker,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
-                    child: _isSaving
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : Text(plan.buttonLabel),
-                  )
-                : OutlinedButton(
-                    onPressed: _isSaving
-                        ? null
-                        : () => _selectPlan(context, plan),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.primaryPurple,
-                      side: const BorderSide(color: AppColors.primaryPurple),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
-                    child: _isSaving
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.2,
-                              color: AppColors.primaryPurple,
-                            ),
-                          )
-                        : Text(plan.buttonLabel),
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// "Current plan - renews Nov 12, 2026". Renewing before that date adds 30
-  /// days to it (the server stacks same-plan renewals).
+  /// "Your current plan - renews Nov 12, 2026". Renewing before that date
+  /// adds 30 days to it (the server stacks same-plan renewals).
   String _currentPlanNote() {
     final renewsAt = OrganizerSession.instance.account?.subscriptionRenewsAt;
     if (renewsAt == null) return 'Your current plan';
@@ -450,7 +328,9 @@ class _OrganizerSubscriptionPlanScreenState
       });
       messenger?.showSnackBar(
         const SnackBar(
-          content: Text('Could not start the PayMongo checkout. Please try again.'),
+          content: Text(
+            'Could not start the PayMongo checkout. Please try again.',
+          ),
         ),
       );
     }
@@ -529,8 +409,9 @@ class _OrganizerSubscriptionPlanScreenState
         ScaffoldMessenger.maybeOf(context)?.showSnackBar(
           const SnackBar(
             content: Text(
-              'We have not received your payment yet. If you already paid, your '
-              'plan will activate automatically; otherwise please try again.',
+              'We have not received your payment yet. If you already paid, '
+              'your plan will activate automatically; otherwise please try '
+              'again.',
             ),
           ),
         );
@@ -547,66 +428,202 @@ class _OrganizerSubscriptionPlanScreenState
     });
   }
 
-  Widget _paymentBanner(_PendingPayment pending) {
-    return Container(
-      width: double.infinity,
+  Widget _paymentBanner(FairTixPalette p, _PendingPayment pending) {
+    return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 640),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.2,
-                  color: AppColors.primaryPurple,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Waiting for your ${pending.plan.name} plan payment...',
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textDark,
+      child: OrganizerCard(
+        padding: const EdgeInsets.all(20),
+        radius: 20,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.2,
+                    color: p.primary,
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            'A PayMongo Sandbox payment page opened in a new tab (test mode, no '
-            'real money is charged). Pay there and your plan activates '
-            'automatically once the payment is confirmed.',
-            style: TextStyle(
-              fontSize: 13,
-              height: 1.4,
-              color: AppColors.textGray,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Waiting for your ${pending.plan.name} plan payment...',
+                    style: orgText(p, size: 15, weight: FontWeight.w800),
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 8),
-          Row(
+            const SizedBox(height: 10),
+            Text(
+              'A PayMongo Sandbox payment page opened in a new tab (test mode, '
+              'no real money is charged). Pay there and your plan activates '
+              'automatically once the payment is confirmed.',
+              style: orgText(p, size: 13, height: 1.45, color: p.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                OrganizerTextLink(
+                  label: 'Reopen payment page',
+                  onTap: () => _openCheckout(pending.checkoutUrl),
+                ),
+                const SizedBox(width: 20),
+                OrganizerTextLink(label: 'Cancel', onTap: _cancelPayment),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One plan column: name, price, benefit ticks and the select button. The
+/// selected card gets a purple outline, a "Selected" pill and a filled button.
+class _PlanCard extends StatelessWidget {
+  const _PlanCard({
+    required this.plan,
+    required this.selected,
+    required this.isCurrent,
+    required this.currentNote,
+    required this.onSelect,
+  });
+
+  final SubscriptionPlan plan;
+  final bool selected;
+  final bool isCurrent;
+  final String? currentNote;
+  final VoidCallback? onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
+    final pillText = selected ? 'Selected' : (plan.hasBadge ? plan.badge!.trim() : null);
+
+    return MouseRegion(
+      cursor: onSelect == null ? MouseCursor.defer : SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onSelect,
+        child: OrganizerCard(
+          radius: 28,
+          padding: const EdgeInsets.fromLTRB(32, 32, 32, 28),
+          borderColor: selected ? p.accentLabel : p.border,
+          borderWidth: selected ? 2 : 1,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TextButton(
-                onPressed: () => _openCheckout(pending.checkoutUrl),
-                child: const Text('Reopen payment page'),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      plan.name,
+                      style: orgText(
+                        p,
+                        size: 22,
+                        weight: FontWeight.w800,
+                        height: 1.2,
+                      ),
+                    ),
+                  ),
+                  if (pillText != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: p.progressTrack,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        pillText,
+                        style: orgText(
+                          p,
+                          size: 12,
+                          weight: FontWeight.w700,
+                          height: 1.2,
+                          color: p.accentLabel,
+                        ),
+                      ),
+                    ),
+                ],
               ),
-              TextButton(
-                onPressed: _cancelPayment,
-                child: const Text('Cancel'),
+              const SizedBox(height: 14),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    plan.priceLabel,
+                    style: orgText(
+                      p,
+                      size: 44,
+                      weight: FontWeight.w800,
+                      height: 1.0,
+                      letterSpacing: -1.5,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4, bottom: 4),
+                    child: Text(
+                      '/month',
+                      style: orgText(p, size: 14, color: p.textSecondary),
+                    ),
+                  ),
+                ],
               ),
+              const SizedBox(height: 22),
+              for (final line in plan.benefits)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 11),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 1),
+                        child: Icon(
+                          Icons.check_rounded,
+                          size: 18,
+                          color: p.success,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          line,
+                          style: orgText(p, size: 14.5, height: 1.35),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (isCurrent && currentNote != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  currentNote!,
+                  style: orgText(
+                    p,
+                    size: 12,
+                    weight: FontWeight.w700,
+                    color: p.accentLabel,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 18),
+              if (selected)
+                // Filled like the design; tapping it does nothing new.
+                OrganizerPrimaryButton(label: 'Selected', onPressed: () {})
+              else
+                OrganizerSecondaryButton(
+                  label: 'Select ${plan.name}',
+                  onPressed: onSelect,
+                ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -642,7 +659,4 @@ class _PlanInfo {
     this.badge,
     this.isCurrent = false,
   });
-
-  /// The organizer's current plan can be bought again: that is a renewal.
-  String get buttonLabel => isCurrent ? 'Renew Plan (+30 days)' : 'Select $name';
 }

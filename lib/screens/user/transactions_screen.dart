@@ -8,10 +8,10 @@ import '../../widgets/transaction_tile.dart';
 import 'transaction_detail_screen.dart';
 
 /// "Transactions" screen — every payment the current user has made or
-/// received (ticket purchases, resale purchases, resale sales), newest
-/// first, backed by [TransactionRepository] (real query against
-/// `public.transactions`). Reached from the Profile tab, or directly from
-/// a "your ticket has been bought" notification.
+/// received (ticket purchases, resale purchases, resale sales, refunds),
+/// newest first, backed by [TransactionRepository] (the
+/// `get_my_transactions()` Supabase function). Reached from the Profile
+/// tab, or directly from a "your ticket has been bought" notification.
 class TransactionsScreen extends StatefulWidget {
   const TransactionsScreen({super.key});
 
@@ -90,7 +90,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                                 const SizedBox(height: 14),
                                 const Text('No transactions yet', style: AppTextStyles.sectionHeading),
                                 const SizedBox(height: 6),
-                                const Text('Purchases and resale sales will show up here.', style: AppTextStyles.bodyMuted),
+                                const Text('Purchases, resales and refunds will show up here.', style: AppTextStyles.bodyMuted),
                               ],
                             ),
                           ),

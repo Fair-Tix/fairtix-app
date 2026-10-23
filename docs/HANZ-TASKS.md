@@ -277,7 +277,9 @@ scanner link fails.
 6. `scanner_functions.sql` 7. `resale_functions.sql`
 8. `resale_purchase.sql` (new, Task 5) 9. `fee_model_migration.sql` (optional)
 10. `revenue_functions.sql` 11. `refund_functions.sql` 12. `report_functions.sql`
-13. `admin_overview_functions.sql` 14. `fraud_alerts.sql` 15. `security_patch.sql`
+13. `organizer_report_functions.sql` (organizer export, Standard/Premium only)
+14. `admin_overview_functions.sql` 15. `fraud_alerts.sql` 16. `security_patch.sql`
+17. `push_notifications.sql` (turns on Realtime for notifications; after `notification_functions.sql`)
 
 Then redeploy the Edge Functions `paymongo-checkout`, `paymongo-verify` and
 `paymongo-webhook`, and confirm the `PAYMONGO_SECRET_KEY` secret is set.

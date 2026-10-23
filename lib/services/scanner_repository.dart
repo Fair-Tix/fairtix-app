@@ -6,10 +6,10 @@ class ScannerRepositoryException implements Exception {
   final String message;
   const ScannerRepositoryException(this.message);
 
-  /// True when the server says the link/PIN is no longer good (wrong PIN,
+  /// True when the server says the PIN is no longer good (wrong PIN,
   /// revoked by the organizer, or expired). The scan screen uses this to
   /// send staff back to PIN entry instead of showing a ticket rejection.
-  bool get isSessionEnded => message.contains('invalid or have expired');
+  bool get isSessionEnded => message.contains('invalid or has expired');
 
   @override
   String toString() => message;
@@ -18,8 +18,8 @@ class ScannerRepositoryException implements Exception {
 const String _connectionErrorMessage =
     'Could not reach the server. Check your connection and try again.';
 
-/// A live scanner session for one event — the link + 4-digit PIN an
-/// organizer hands to entry staff. Backed by `public.scanner_sessions`.
+/// A live scanner session for one event — the 4-digit PIN an organizer
+/// hands to entry staff. Backed by `public.scanner_sessions`.
 class ScannerSession {
   const ScannerSession({
     required this.sessionId,
@@ -35,12 +35,6 @@ class ScannerSession {
   final String pin;
   final DateTime expiresAt;
 
-  /// The link entry staff open to reach the PIN-entry screen. Not yet
-  /// backed by real deep-linking (see StaffPinEntryScreen docs) — for now
-  /// staff paste this same string into that screen's "Scanner link"
-  /// field, which extracts the token from it.
-  String get link => 'https://fairtix.app/scan/$token';
-
   factory ScannerSession.fromRow(Map<String, dynamic> row) => ScannerSession(
         sessionId: row['session_id'] as String,
         eventId: row['event_id'] as String,
@@ -50,14 +44,13 @@ class ScannerSession {
       );
 }
 
-/// Result of a staff member entering a link + PIN — confirms which event
+/// Result of a staff member entering a PIN — confirms which event
 /// they're now scanning for.
 class ScannerAccess {
   const ScannerAccess({
     required this.sessionId,
     required this.eventId,
     required this.eventTitle,
-    required this.token,
     required this.pin,
   });
 
@@ -68,7 +61,6 @@ class ScannerAccess {
   /// Kept alongside the validated access so [ScanOutcome]-producing scans
   /// can be authorized the same way, without asking staff to re-enter
   /// their PIN before every single scan.
-  final String token;
   final String pin;
 }
 
@@ -185,26 +177,23 @@ class ScannerRepository {
     }
   }
 
-  /// Validates a staff-entered scanner link (or bare token) + PIN.
-  /// Accepts either the full `https://fairtix.app/scan/<token>` link or
-  /// just the token itself, since staff might paste either.
-  Future<ScannerAccess> validateAccess({required String linkOrToken, required String pin}) async {
-    final token = _extractToken(linkOrToken);
+  /// Validates a staff-entered 4-digit PIN. The PIN alone identifies the
+  /// live session (no link needed).
+  Future<ScannerAccess> validateAccess({required String pin}) async {
     try {
       final result = await Supabase.instance.client.rpc(
         'validate_scanner_session',
-        params: {'p_token': token, 'p_pin': pin},
+        params: {'p_pin': pin},
       );
       final rows = result is List ? result : [result];
       if (rows.isEmpty || rows.first == null) {
-        throw const ScannerRepositoryException('That link and PIN are invalid or have expired.');
+        throw const ScannerRepositoryException('That PIN is invalid or has expired.');
       }
       final row = rows.first as Map<String, dynamic>;
       return ScannerAccess(
         sessionId: row['session_id'] as String,
         eventId: row['event_id'] as String,
         eventTitle: row['event_title'] as String,
-        token: token,
         pin: pin,
       );
     } on PostgrestException catch (e) {
@@ -224,7 +213,7 @@ class ScannerRepository {
     try {
       final result = await Supabase.instance.client.rpc(
         'scan_ticket',
-        params: {'p_token': access.token, 'p_pin': access.pin, 'p_qr_code_token': qrToken},
+        params: {'p_pin': access.pin, 'p_qr_code_token': qrToken},
       );
       final row = _firstRow(result);
       return ScanOutcome.fromRow(row);
@@ -264,14 +253,5 @@ class ScannerRepository {
       return result.first as Map<String, dynamic>;
     }
     return result as Map<String, dynamic>;
-  }
-
-  String _extractToken(String input) {
-    final trimmed = input.trim();
-    if (trimmed.isEmpty) return trimmed;
-    // Strip a trailing slash, then take whatever's after the last "/" so
-    // both a bare token and a full link work.
-    final withoutTrailingSlash = trimmed.endsWith('/') ? trimmed.substring(0, trimmed.length - 1) : trimmed;
-    return withoutTrailingSlash.contains('/') ? withoutTrailingSlash.split('/').last : withoutTrailingSlash;
   }
 }

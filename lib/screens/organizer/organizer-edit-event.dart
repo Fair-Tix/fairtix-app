@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import 'app_colors.dart';
 import '../../models/organizer_event.dart';
+import '../../services/access_control.dart';
 import '../../services/event_repository.dart';
 import 'organizer-scaffold.dart';
 import 'organizer-event-edited.dart';
@@ -48,6 +50,7 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
   String? _formError;
   bool _isLoading = true;
   bool _isSaving = false;
+  bool _isUploadingDocs = false;
   final Map<String, String> _errors = {};
 
   void _clearError(String key) {
@@ -62,6 +65,16 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
     _venueController = TextEditingController();
     _descriptionController = TextEditingController();
     _load();
+    // Editing an event needs a current subscription (the server enforces it
+    // too). Explain up front and go back instead of showing a form that can't
+    // be saved. Viewing events stays available from My Events.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final allowed = await ensureOrganizerAccess(
+        context,
+        OrganizerRequirement.subscription,
+      );
+      if (!allowed && mounted) Navigator.of(context).maybePop();
+    });
   }
 
   /// Use the current event snapshot immediately when Manage is opened from a
@@ -244,6 +257,75 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
         ],
       ),
     );
+  }
+
+  /// Lets the organizer attach supporting documents from the Manage page,
+  /// mainly after an admin unpublished the event and asked for new ones.
+  /// The admin is notified and republishes once the documents are valid.
+  Future<void> _uploadDocuments() async {
+    if (_event == null || _isUploadingDocs) return;
+    FilePickerResult? result;
+    try {
+      result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png'],
+        allowMultiple: true,
+        withData: true,
+      );
+    } catch (err) {
+      debugPrint('Upload Documents: file picker failed: $err');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open the file picker: $err')),
+      );
+      return;
+    }
+    if (result == null || result.files.isEmpty) return;
+
+    setState(() => _isUploadingDocs = true);
+    String message;
+    var uploaded = 0;
+    try {
+      for (final f in result.files) {
+        final bytes = f.bytes;
+        if (bytes == null) continue;
+        await EventRepository.instance.uploadEventDocument(
+          eventId: _event!.id,
+          bytes: bytes,
+          fileName: f.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_'),
+        );
+        uploaded++;
+      }
+      message = uploaded == 0
+          ? 'Could not read the selected file(s). Please try again.'
+          : (_event!.isUnpublishedByAdmin
+                ? 'Documents submitted. An admin will review them and republish your event.'
+                : 'Documents uploaded.');
+    } on EventRepositoryException catch (err) {
+      message = err.message;
+    } catch (err) {
+      debugPrint('Upload Documents failed: $err');
+      message = 'Could not upload the document: $err';
+    }
+    if (!mounted) return;
+    // Refresh only the snapshot (status / document count); don't overwrite
+    // whatever the organizer has typed into the form.
+    final fresh = EventRepository.instance.getById(widget.eventId);
+    setState(() {
+      if (fresh != null) _event = fresh;
+      _isUploadingDocs = false;
+    });
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  String _formatDeadline(DateTime d) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${months[d.month - 1]} ${d.day}, ${d.year}';
   }
 
   Future<void> _saveChanges({bool publish = false}) async {
@@ -436,7 +518,11 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
                 onPressed: _isSaving
                     ? null
                     : () => _saveChanges(
-                        publish: _event!.status == EventStatus.draft,
+                        // Admin-unpublished events can only be republished
+                        // by an admin, so never try to publish them here.
+                        publish:
+                            _event!.status == EventStatus.draft &&
+                            !_event!.isUnpublishedByAdmin,
                       ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryPurple,
@@ -459,14 +545,18 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
                         ),
                       )
                     : Text(
-                        _event!.status == EventStatus.draft
+                        _event!.isUnpublishedByAdmin
+                            ? 'Save Changes'
+                            : _event!.status == EventStatus.draft
                             ? 'Publish Event'
                             : 'Update Event',
                       ),
               );
               final trailingButtons = [
                 cancelButton,
-                if (_event!.status == EventStatus.draft) draftButton,
+                if (_event!.status == EventStatus.draft &&
+                    !_event!.isUnpublishedByAdmin)
+                  draftButton,
                 saveButton,
               ];
               if (constraints.maxWidth < 760) {
@@ -739,12 +829,69 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
         const SizedBox(height: 20),
         _card(
           title: 'Supporting Documents',
-          child: Text(
-            (_event?.supportingDocumentUrls.isEmpty ?? true)
-                ? 'No supporting documents uploaded yet.'
-                : '${_event!.supportingDocumentUrls.length} document'
-                      '${_event!.supportingDocumentUrls.length == 1 ? '' : 's'} on file.',
-            style: AppTextStyles.bodyGray.copyWith(fontSize: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_event?.isUnpublishedByAdmin ?? false) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEE2E2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Unpublished by an admin',
+                        style: TextStyle(
+                          color: AppColors.dangerRed,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
+                      ),
+                      if ((_event!.unpublishReason ?? '').isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          _event!.unpublishReason!,
+                          style: const TextStyle(
+                            color: AppColors.textDark,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                      if (_event!.complianceDeadline != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Upload valid documents by '
+                          '${_formatDeadline(_event!.complianceDeadline!)} '
+                          'or the event will be canceled.',
+                          style: const TextStyle(
+                            color: AppColors.dangerRed,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              Text(
+                (_event?.supportingDocumentUrls.isEmpty ?? true)
+                    ? 'No supporting documents uploaded yet.'
+                    : '${_event!.supportingDocumentUrls.length} document'
+                          '${_event!.supportingDocumentUrls.length == 1 ? '' : 's'} on file.',
+                style: AppTextStyles.bodyGray.copyWith(fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              OutlineButtonWidget(
+                label: _isUploadingDocs ? 'Uploading...' : 'Upload Documents',
+                height: 48,
+                onPressed: _isUploadingDocs ? null : _uploadDocuments,
+              ),
+            ],
           ),
         ),
       ],

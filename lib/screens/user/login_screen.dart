@@ -7,26 +7,18 @@ import '../../theme/app_theme.dart';
 import '../../widgets/gradient_background.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
-import 'identity_verification_screen.dart';
-import 'registration_pending_screen.dart';
 import 'registration_screen.dart';
 import '../staff/staff_pin_entry_screen.dart';
 
-/// Picks the first screen for a signed-in eventgoer based on their real
-/// id_verification_status. Shared by the login flow and app startup
-/// (session restore) so both land in the same place:
-///  - verified            -> straight into the app
-///  - pending, no ID yet  -> still mid-registration; resume ID upload
-///  - pending, ID on file -> "Verification Pending" (under admin review)
-///  - rejected            -> treat like "no ID yet" so they can resubmit
-Widget userHomeFor(AppUser account) {
-  if (account.idVerificationStatus == 'verified') {
-    return const MainShell();
-  } else if (account.idDocumentUrl == null || account.idVerificationStatus == 'rejected') {
-    return const IdentityVerificationScreen();
-  }
-  return RegistrationPendingScreen(idType: account.idType);
-}
+/// Picks the first screen for a signed-in eventgoer. Shared by the login flow
+/// and app startup (session restore) so both land in the same place.
+///
+/// Every signed-in eventgoer lands on Home, whatever their approval status.
+/// Until an admin approves the account they can browse and view events, but
+/// buying tickets and reselling stay locked: the app explains why (and offers
+/// to submit or resubmit the ID) when they try, via `ensureBuyerApproved` in
+/// services/access_control.dart, and the database enforces the same rule.
+Widget userHomeFor(AppUser account) => const MainShell();
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});

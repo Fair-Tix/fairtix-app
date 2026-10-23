@@ -1,265 +1,141 @@
 import 'package:flutter/material.dart';
-import 'app_colors.dart';
+
+import '../../theme/fairtix_palette.dart';
+import '../../widgets/organizer_ui.dart';
+import 'app_colors.dart' show formatFriendlyDate;
 import 'organizer-dashboard.dart';
 
+/// Shown after a subscription payment is confirmed.
+///
+/// There is no Mahilum design for this exact screen (the design's
+/// "Subscription Confirmation" is the pre-payment review, see
+/// `organizer-subscription-review.dart`), so it reuses the same card style:
+/// green tick, plan summary and a "Go to Dashboard" button.
 class OrganizerSubscriptionConfirmedScreen extends StatelessWidget {
   final String planName;
   final String price;
   final DateTime renewsAt;
+
+  /// The benefit lines the admin wrote for this plan (the same ones shown on
+  /// the plan card). Empty falls back to a single generic line.
+  final List<String> features;
 
   const OrganizerSubscriptionConfirmedScreen({
     super.key,
     required this.planName,
     required this.price,
     required this.renewsAt,
+    this.features = const [],
   });
 
   @override
   Widget build(BuildContext context) {
-    final isPremium = planName == 'Premium';
+    final p = FairTixPalette.of(context);
+    final shownFeatures = features.isEmpty
+        ? const ['All features of your plan are now unlocked']
+        : features.take(4).toList();
 
-    return Scaffold(
-      body: Row(
-        children: [
-          Expanded(
-            flex: 5,
-            child: AuthSidePanel(
+    return OrganizerAuthPage(
+      maxWidth: 520,
+      child: OrganizerCard(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: OrganizerStatusIcon(
+                icon: Icons.check_rounded,
+                color: p.success,
+                background: p.successSurface,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Subscription active',
+              textAlign: TextAlign.center,
+              style: orgText(
+                p,
+                size: 28,
+                weight: FontWeight.w800,
+                height: 1.2,
+                letterSpacing: -0.3,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Your $planName plan is unlocked. Start creating your next '
+              'event.',
+              textAlign: TextAlign.center,
+              style: orgText(p, size: 14, height: 1.5, color: p.textSecondary),
+            ),
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: p.border),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      if (Navigator.of(context).canPop()) ...[
-                        IconButton(
-                          tooltip: 'Back',
-                          onPressed: () => Navigator.of(context).maybePop(),
-                          icon: const Icon(
-                            Icons.arrow_back_rounded,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                      const FairTixLogo(fontSize: 24),
+                      Text(
+                        '$planName \u2014 Monthly',
+                        style: orgText(p, size: 16, weight: FontWeight.w800),
+                      ),
+                      Text(
+                        price,
+                        style: orgText(p, size: 16, weight: FontWeight.w800),
+                      ),
                     ],
                   ),
-                  Center(
-                    child: Container(
-                      width: 130,
-                      height: 130,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      alignment: Alignment.center,
-                      child: Icon(
-                        Icons.rocket_launch_outlined,
-                        size: 56,
-                        color: Colors.white.withValues(alpha: 0.85),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Next renewal: ${formatFriendlyDate(renewsAt)}',
+                    style: orgText(p, size: 13, color: p.textSecondary),
+                  ),
+                  const SizedBox(height: 14),
+                  Divider(height: 1, color: p.border),
+                  const SizedBox(height: 14),
+                  for (final line in shownFeatures)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 9),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.check_rounded, size: 18, color: p.success),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              line,
+                              style: orgText(p, size: 13.5, height: 1.35),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "You're All Set!",
-                        style: TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Unlock the full power of FairTix and start selling '
-                        'tickets today.',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.white.withValues(alpha: 0.85),
-                          height: 1.5,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      _featureCheck(isPremium
-                          ? 'Unlimited events & ticket capacity'
-                          : 'Expanded event & ticket capacity'),
-                      const SizedBox(height: 12),
-                      _featureCheck('CSV export & enhanced analytics'),
-                      const SizedBox(height: 12),
-                      _featureCheck('Priority support'),
-                    ],
-                  ),
                 ],
               ),
             ),
-          ),
-          Expanded(
-            flex: 6,
-            child: Center(
-              child: SingleChildScrollView(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 420),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 64,
-                        height: 64,
-                        decoration: const BoxDecoration(
-                          color: AppColors.primaryPurple,
-                          shape: BoxShape.circle,
-                        ),
-                        alignment: Alignment.center,
-                        child: const Icon(Icons.check,
-                            color: Colors.white, size: 32),
-                      ),
-                      const SizedBox(height: 24),
-                      const Text(
-                        'Subscription Active!',
-                        style: AppTextStyles.h1,
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Your $planName Plan features have been unlocked. '
-                        'Start creating your next big event.',
-                        textAlign: TextAlign.center,
-                        style: AppTextStyles.bodyGray.copyWith(height: 1.5),
-                      ),
-                      const SizedBox(height: 28),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF9FAFB),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          children: [
-                            Row(
-                              mainAxisAlignment:
-                                  MainAxisAlignment.spaceBetween,
-                              children: [
-                                Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: [
-                                    Text('CURRENT PLAN',
-                                        style: AppTextStyles.bodyGray
-                                            .copyWith(fontSize: 11)),
-                                    const SizedBox(height: 4),
-                                    Text('$planName Monthly',
-                                        style: AppTextStyles.h3),
-                                  ],
-                                ),
-                                Text(
-                                  price,
-                                  style: const TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w800,
-                                    color: AppColors.primaryPurple,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 12),
-                              child: Divider(
-                                  height: 1, color: AppColors.borderLight),
-                            ),
-                            Row(
-                              mainAxisAlignment:
-                                  MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text('Renews ${formatFriendlyDate(renewsAt)}',
-                                    style: AppTextStyles.bodyGray),
-                                GestureDetector(
-                                  onTap: () {
-                                    ScaffoldMessenger.of(context)
-                                        .showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                            'Billing management is coming soon.'),
-                                      ),
-                                    );
-                                  },
-                                  child: const Text(
-                                    'Manage Billing',
-                                    style: TextStyle(
-                                      color: AppColors.primaryPurple,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 28),
-                      PrimaryButton(
-                        label: 'Go to Dashboard',
-                        onPressed: () {
-                          Navigator.pushAndRemoveUntil(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const OrganizerDashboardScreen(),
-                            ),
-                            (route) => false,
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 14),
-                      TextButton(
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                  'Manage your subscription anytime from your Profile page.'),
-                            ),
-                          );
-                        },
-                        child: const Text(
-                          'View Subscription Settings',
-                          style: TextStyle(
-                            color: AppColors.textGray,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
+            const SizedBox(height: 24),
+            OrganizerPrimaryButton(
+              label: 'Go to Dashboard',
+              onPressed: () {
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const OrganizerDashboardScreen(),
                   ),
-                ),
-              ),
+                  (route) => false,
+                );
+              },
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _featureCheck(String text) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Icon(Icons.check, size: 18, color: Colors.white),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

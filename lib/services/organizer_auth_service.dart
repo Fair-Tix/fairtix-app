@@ -1,10 +1,12 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
-
+import 'dart:async';
 import 'dart:typed_data';
+
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/organizer.dart';
 import 'account_status.dart';
 import 'organizer_session.dart';
+import 'push_service.dart';
 
 /// Thrown when an organizer auth action (login, register) fails.
 class OrganizerAuthException implements Exception {
@@ -117,6 +119,8 @@ class OrganizerAuthService {
       fallbackEmail: normalizedEmail,
     );
     OrganizerSession.instance.signIn(account);
+    // Push is best-effort (and a no-op on web); never delays or breaks login.
+    unawaited(PushService.instance.registerForCurrentUser());
     return account;
   }
 
@@ -161,6 +165,7 @@ class OrganizerAuthService {
         fallbackEmail: authUser.email ?? '',
       );
       OrganizerSession.instance.signIn(account);
+      unawaited(PushService.instance.registerForCurrentUser());
       return account;
     } on PostgrestException {
       OrganizerSession.instance.signOut();
@@ -177,24 +182,70 @@ class OrganizerAuthService {
     required String fallbackEmail,
   }) async {
     String? subscriptionPlan;
+    double? subscriptionFeeRate;
     DateTime? subscriptionRenewsAt;
+    bool subscriptionCanExport = false;
+    DateTime? subscriptionExpiredAt;
     try {
+      // Only a subscription that has not run out counts. This is the same
+      // rule the server uses for plan limits (current_date between start_date
+      // and end_date, in UTC), so an expired organizer lands on the plan
+      // screen to renew through PayMongo instead of looking subscribed.
+      final today = DateTime.now().toUtc().toIso8601String().split('T').first;
       final subRow = await Supabase.instance.client
           .from('organizer_subscriptions')
-          .select()
+          .select('*, subscription_plans(name, can_export, platform_fee_rate)')
           .eq('user_id', userId)
           .eq('status', 'active')
+          .gte('end_date', today)
           .order('start_date', ascending: false)
           .limit(1)
           .maybeSingle();
       if (subRow != null) {
-        subscriptionPlan = planNameFromMonthlyFee(
-          subRow['monthly_fee'] as num?,
-        );
+        // The plan the organizer actually paid for (plan_id, set by
+        // fulfill_organizer_subscription). Matching by fee is only the
+        // fallback for old rows with no plan_id: fees are admin-editable now,
+        // so a fee match alone can no longer be trusted.
+        final paidPlan = subRow['subscription_plans'];
+        subscriptionPlan =
+            (paidPlan is Map ? paidPlan['name'] as String? : null) ??
+            planNameFromMonthlyFee(subRow['monthly_fee'] as num?);
+        // Same rule as the server's organizer_can_export(): the plan's export
+        // switch, or (for an old row with no plan) a fee of 699 or more.
+        subscriptionCanExport =
+            (paidPlan is Map ? paidPlan['can_export'] as bool? : null) ??
+            ((subRow['monthly_fee'] as num?) ?? 0) >= 699;
+        // The plan's own fee rate, as the admin last saved it. Null for an old
+        // row with no linked plan: the report then shows the fee as unknown
+        // instead of guessing a rate.
+        subscriptionFeeRate = (paidPlan is Map
+                ? paidPlan['platform_fee_rate'] as num?
+                : null)
+            ?.toDouble();
         final endDate = subRow['end_date'] as String?;
         subscriptionRenewsAt = endDate != null
             ? DateTime.tryParse(endDate)
             : null;
+      } else {
+        // No current plan. If they had one that ran out, remember when so the
+        // app can say "expired on <date>" and keep subscription features
+        // locked until they renew. This never blocks login.
+        try {
+          final expiredRow = await Supabase.instance.client
+              .from('organizer_subscriptions')
+              .select('end_date')
+              .eq('user_id', userId)
+              .inFilter('status', ['active', 'expired'])
+              .order('end_date', ascending: false)
+              .limit(1)
+              .maybeSingle();
+          final expiredEnd = expiredRow?['end_date'] as String?;
+          if (expiredEnd != null) {
+            subscriptionExpiredAt = DateTime.tryParse(expiredEnd);
+          }
+        } on PostgrestException {
+          // Non-fatal: the organizer is simply treated as having no plan.
+        }
       }
     } on PostgrestException {
       // Non-fatal: the organizer just hasn't picked (or synced) a plan yet;
@@ -213,58 +264,62 @@ class OrganizerAuthService {
           ? organizationName
           : 'Your Organization',
       subscriptionPlan: subscriptionPlan,
+      subscriptionFeeRate: subscriptionFeeRate,
       subscriptionRenewsAt: subscriptionRenewsAt,
+      subscriptionCanExport: subscriptionCanExport,
       idVerificationStatus:
           (row['id_verification_status'] as String?) ?? 'pending',
       venueProofUrl: row['venue_proof_url'] as String?,
       eventPermitUrl: row['event_permit_url'] as String?,
+      subscriptionExpiredAt: subscriptionExpiredAt,
     );
   }
 
+  /// Re-reads the signed-in organizer's account from the server and updates
+  /// [OrganizerSession], so an admin approval or a renewed subscription takes
+  /// effect without logging out. Returns the fresh account, or null when it
+  /// can't be loaded (offline, signed out); callers should then keep using
+  /// the account already in the session.
+  Future<OrganizerAccount?> refreshAccount() async {
+    final client = Supabase.instance.client;
+    final authUser = client.auth.currentUser;
+    if (authUser == null) return null;
+    try {
+      final row = await client
+          .from('users')
+          .select()
+          .eq('id', authUser.id)
+          .maybeSingle();
+      if (row == null || row['role'] != 'organizer') return null;
+      final account = await _buildAccount(
+        userId: authUser.id,
+        row: row,
+        fallbackEmail: authUser.email ?? '',
+      );
+      OrganizerSession.instance.updateAccount(account);
+      return account;
+    } on PostgrestException {
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Removed: a plan can no longer be written straight from the app. The
+  /// client write policies on `organizer_subscriptions` are dropped
+  /// (supabase/organizer_subscription_payment.sql); a plan is only activated
+  /// after PayMongo confirms payment. Use
+  /// `OrganizerSubscriptionService.startCheckout` / `confirmPayment`.
+  @Deprecated(
+    'Plans are paid through PayMongo: use OrganizerSubscriptionService.',
+  )
   Future<void> selectSubscriptionPlan({
     required String planName,
     required DateTime renewsAt,
   }) async {
-    final userId = Supabase.instance.client.auth.currentUser?.id;
-    if (userId == null) {
-      throw const OrganizerAuthException(
-        'You must be signed in to choose a subscription plan.',
-      );
-    }
-
-    final monthlyFee = monthlyFeeForPlanName(planName);
-    if (monthlyFee == null) {
-      throw OrganizerAuthException('Unknown organizer plan: $planName');
-    }
-
-    final startDate = DateTime.now();
-    final row = {
-      'user_id': userId,
-      'start_date': startDate.toIso8601String().split('T').first,
-      'end_date': renewsAt.toIso8601String().split('T').first,
-      'status': 'active',
-      'monthly_fee': monthlyFee,
-    };
-
-    try {
-      await Supabase.instance.client
-          .from('organizer_subscriptions')
-          .insert(row);
-    } on PostgrestException catch (e) {
-      throw OrganizerAuthException(
-        'Could not save your subscription plan: ${e.message}',
-      );
-    }
-
-    final currentAccount = OrganizerSession.instance.account;
-    if (currentAccount != null) {
-      OrganizerSession.instance.updateAccount(
-        currentAccount.copyWith(
-          subscriptionPlan: planName,
-          subscriptionRenewsAt: renewsAt,
-        ),
-      );
-    }
+    throw const OrganizerAuthException(
+      'Plans must be purchased through PayMongo.',
+    );
   }
 
   /// Creates a new organizer account in Supabase Auth. A `public.users`
@@ -318,7 +373,46 @@ class OrganizerAuthService {
     }
   }
 
+  /// Confirms the 6-digit code from Supabase's "Confirm signup" email,
+  /// completing organizer registration and creating a session. Same flow as
+  /// the eventgoer's `UserAuthService.verifyRegistrationOtp`; the session it
+  /// creates is what lets the proof-of-organization documents be uploaded
+  /// right after (Storage RLS requires an authenticated user).
+  ///
+  /// The Supabase "Confirm signup" email template must use `{{ .Token }}`
+  /// (not `{{ .ConfirmationURL }}`) for this to be a code instead of a link.
+  Future<void> verifyRegistrationOtp({
+    required String email,
+    required String token,
+  }) async {
+    try {
+      await Supabase.instance.client.auth.verifyOTP(
+        type: OtpType.signup,
+        email: email.trim().toLowerCase(),
+        token: token.trim(),
+      );
+    } on AuthException catch (e) {
+      throw OrganizerAuthException(e.message);
+    }
+  }
+
+  /// Asks Supabase Auth to send a fresh signup confirmation code to
+  /// [email], for the OTP screen's "Resend" link.
+  Future<void> resendRegistrationOtp({required String email}) async {
+    try {
+      await Supabase.instance.client.auth.resend(
+        type: OtpType.signup,
+        email: email.trim().toLowerCase(),
+      );
+    } on AuthException catch (e) {
+      throw OrganizerAuthException(e.message);
+    }
+  }
+
   void logout() {
+    // Stop listening for this account's notifications. Fire-and-forget so
+    // logging out stays instant, exactly as before.
+    unawaited(PushService.instance.unregister());
     OrganizerSession.instance.signOut();
     Supabase.instance.client.auth.signOut();
   }

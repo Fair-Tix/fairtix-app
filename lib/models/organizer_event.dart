@@ -101,6 +101,15 @@ class OrganizerEvent {
   /// roll-up tier figures can be shown per day. 0 for single-day events.
   final int dayCount;
 
+  /// Set when an admin unpublished this event (status is then draft).
+  /// The organizer must upload valid documents before [complianceDeadline].
+  final DateTime? unpublishedAt;
+  final String? unpublishReason;
+  final DateTime? complianceDeadline;
+
+  bool get isUnpublishedByAdmin =>
+      status == EventStatus.draft && unpublishedAt != null;
+
   const OrganizerEvent({
     required this.id,
     required this.name,
@@ -115,6 +124,9 @@ class OrganizerEvent {
     this.bannerUrl,
     this.supportingDocumentUrls = const [],
     this.dayCount = 0,
+    this.unpublishedAt,
+    this.unpublishReason,
+    this.complianceDeadline,
   });
 
   /// Formats a start/end date pair given as "M/D/YYYY" (or "MM/DD/YYYY")
@@ -193,6 +205,9 @@ class OrganizerEvent {
       supportingDocumentUrls:
           supportingDocumentUrls ?? this.supportingDocumentUrls,
       dayCount: dayCount ?? this.dayCount,
+      unpublishedAt: unpublishedAt,
+      unpublishReason: unpublishReason,
+      complianceDeadline: complianceDeadline,
     );
   }
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -6,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/app_user.dart';
 import 'account_status.dart';
+import 'push_service.dart';
 import 'ticket_repository.dart';
 import 'user_session.dart';
 
@@ -73,6 +75,8 @@ class UserAuthService {
     final account = AppUser.fromRow(row);
     UserSession.instance.signIn(account);
     await _saveProfileCache(authUser.id, row);
+    // Push is best-effort and must never delay or break login.
+    unawaited(PushService.instance.registerForCurrentUser());
     return account;
   }
 
@@ -105,6 +109,37 @@ class UserAuthService {
     try {
       await _secureStorage.delete(key: _profileKey(userId));
     } catch (_) {}
+  }
+
+  /// Re-reads the signed-in eventgoer's `public.users` row and updates
+  /// [UserSession], so an admin approval takes effect without logging out.
+  /// Also (re)establishes the session for someone who has just finished
+  /// registration (the email OTP signs them in, but nothing had loaded their
+  /// profile yet). Returns null when there is no signed-in eventgoer or the
+  /// server can't be reached; callers then keep the account already in the
+  /// session.
+  Future<AppUser?> refreshAccount() async {
+    final client = Supabase.instance.client;
+    final authUser = client.auth.currentUser;
+    if (authUser == null) return null;
+    try {
+      final row = await client
+          .from('users')
+          .select()
+          .eq('id', authUser.id)
+          .maybeSingle();
+      if (row == null) return null;
+      final role = row['role'] as String?;
+      if (role == 'organizer' || role == 'admin') return null;
+      final account = AppUser.fromRow(row);
+      UserSession.instance.signIn(account);
+      await _saveProfileCache(authUser.id, row);
+      return account;
+    } on PostgrestException {
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Creates a new eventgoer account in Supabase Auth. A `public.users`
@@ -182,6 +217,10 @@ class UserAuthService {
         email: email.trim().toLowerCase(),
         token: token,
       );
+      // The OTP creates a session. Start listening for push alerts now so the
+      // "account approved" alert can reach the phone while the user waits on
+      // the pending screen (login/restore only run later).
+      unawaited(PushService.instance.registerForCurrentUser());
     } on AuthException catch (e) {
       throw UserAuthException(e.message);
     }
@@ -450,6 +489,7 @@ class UserAuthService {
 
     final account = AppUser.fromRow(row);
     UserSession.instance.signIn(account);
+    unawaited(PushService.instance.registerForCurrentUser());
     return account;
   }
 
@@ -464,6 +504,8 @@ class UserAuthService {
     final userId = Supabase.instance.client.auth.currentUser?.id;
     if (userId != null) await _clearProfileCache(userId);
     await TicketRepository.instance.clearForLogout();
+    // Fire-and-forget so a slow connection can never delay logging out.
+    unawaited(PushService.instance.unregister());
     UserSession.instance.signOut();
     await Supabase.instance.client.auth.signOut();
   }

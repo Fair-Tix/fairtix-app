@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import 'app_colors.dart';
@@ -214,6 +215,87 @@ class _OrganizerMyEventsScreenState extends State<OrganizerMyEventsScreen> {
     );
   }
 
+  Widget _statusCell(OrganizerEvent e, Widget badge) {
+    if (!e.isUnpublishedByAdmin) return badge;
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    final d = e.complianceDeadline;
+    final due = d == null
+        ? null
+        : 'Documents due ${months[d.month - 1]} ${d.day}, ${d.year}';
+    return Tooltip(
+      message: e.unpublishReason ?? 'Unpublished by an admin',
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          badge,
+          if (due != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                due,
+                style: const TextStyle(
+                  color: AppColors.dangerRed,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Lets the organizer send proper documents for an event an admin
+  /// unpublished. The admin reviews them and republishes.
+  Future<void> _uploadDocuments(OrganizerEvent e) async {
+    FilePickerResult? result;
+    try {
+      result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png'],
+        allowMultiple: true,
+        withData: true,
+      );
+    } catch (err) {
+      debugPrint('Upload Docs: file picker failed: $err');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open the file picker: $err')),
+      );
+      return;
+    }
+    if (result == null || result.files.isEmpty) return;
+    String message;
+    var uploaded = 0;
+    try {
+      for (final f in result.files) {
+        final bytes = f.bytes;
+        if (bytes == null) continue;
+        await EventRepository.instance.uploadEventDocument(
+          eventId: e.id,
+          bytes: bytes,
+          fileName: f.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_'),
+        );
+        uploaded++;
+      }
+      message = uploaded == 0
+          ? 'Could not read the selected file(s). Please try again.'
+          : 'Documents submitted. An admin will review them and republish your event.';
+    } on EventRepositoryException catch (err) {
+      message = err.message;
+    } catch (err) {
+      debugPrint('Upload Docs failed: $err');
+      message = 'Could not upload the document: $err';
+    }
+    if (!mounted) return;
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   DataRow _row(BuildContext context, OrganizerEvent e) {
     final isPublished = e.status == EventStatus.published;
     return DataRow(
@@ -260,25 +342,29 @@ class _OrganizerMyEventsScreenState extends State<OrganizerMyEventsScreen> {
         ),
         DataCell(Text(e.soldLabel, style: AppTextStyles.label)),
         DataCell(
-          Container(
+          _statusCell(e, Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              color: isPublished
+              color: e.isUnpublishedByAdmin
+                  ? const Color(0xFFFEE2E2)
+                  : isPublished
                   ? AppColors.successGreenBg
                   : const Color(0xFFF3F4F6),
               borderRadius: BorderRadius.circular(999),
             ),
             child: Text(
-              e.status.label,
+              e.isUnpublishedByAdmin ? 'Unpublished' : e.status.label,
               style: TextStyle(
-                color: isPublished
+                color: e.isUnpublishedByAdmin
+                    ? AppColors.dangerRed
+                    : isPublished
                     ? AppColors.successGreen
                     : AppColors.textGray,
                 fontWeight: FontWeight.w700,
                 fontSize: 11,
               ),
             ),
-          ),
+          )),
         ),
         DataCell(
           Row(
@@ -311,6 +397,14 @@ class _OrganizerMyEventsScreenState extends State<OrganizerMyEventsScreen> {
                   },
                   child: const Text(
                     'Scan',
+                    style: TextStyle(color: AppColors.primaryPurple),
+                  ),
+                ),
+              if (e.isUnpublishedByAdmin)
+                TextButton(
+                  onPressed: () => _uploadDocuments(e),
+                  child: const Text(
+                    'Upload Docs',
                     style: TextStyle(color: AppColors.primaryPurple),
                   ),
                 ),

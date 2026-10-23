@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/sample_tickets.dart';
 import '../../models/ticket.dart';
 import '../../navigation/tab_index_notifier.dart';
+import '../../services/access_control.dart';
 import '../../services/resale_repository.dart';
 import '../../services/ticket_repository.dart';
 import '../../theme/app_theme.dart';
@@ -106,8 +107,11 @@ class _ResaleMarketScreenState extends State<ResaleMarketScreen> {
     );
   }
 
-  void _buyListing(Ticket listing) {
+  Future<void> _buyListing(Ticket listing) async {
     if (isPurchaseLimitReached(listing.event.id)) return;
+    // Buying needs an admin-approved account; browsing the market stays open.
+    if (!await ensureBuyerApproved(context)) return;
+    if (!mounted) return;
     Navigator.of(context)
         .push(MaterialPageRoute(builder: (_) => ResaleCheckoutScreen(listing: listing)))
         // Back from checkout: the listing is gone if it was bought, and the

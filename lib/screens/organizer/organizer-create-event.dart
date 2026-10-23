@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 
 import 'app_colors.dart';
 import '../../models/organizer_event.dart';
+import '../../services/access_control.dart';
 import '../../services/event_repository.dart';
 import 'organizer-scaffold.dart';
 import 'organizer-event-created.dart';
@@ -84,6 +85,21 @@ class _OrganizerCreateEventScreenState
 
   void _clearError(String key) {
     if (_errors.containsKey(key)) setState(() => _errors.remove(key));
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Backstop for any entry point other than the dashboard button: creating
+    // an event needs admin approval and a current subscription. The server
+    // enforces the same rule; this explains it up front.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final allowed = await ensureOrganizerAccess(
+        context,
+        OrganizerRequirement.subscription,
+      );
+      if (!allowed && mounted) Navigator.of(context).maybePop();
+    });
   }
 
   @override

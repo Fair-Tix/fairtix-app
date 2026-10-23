@@ -59,6 +59,8 @@ declare
   v_event public.events;
   v_event_end timestamptz;
   v_session public.scanner_sessions;
+  v_pin text;
+  v_tries int := 0;
 begin
   if v_organizer_id is null then
     raise exception 'You need to be signed in to start a scanner session.';
@@ -88,19 +90,35 @@ begin
   -- Tidy up: anything past its expiry becomes 'expired', and any other
   -- still-active session for this event is revoked so there is only ever
   -- one live link/PIN pair per event.
+  -- Staff now get in with the PIN alone (no link), so the PIN has to
+  -- identify exactly one live session. Expire stale sessions everywhere
+  -- first, revoke this event's old one, then pick a PIN that no other
+  -- live session is using.
   update public.scanner_sessions
     set status = 'expired'
-    where event_id = p_event_id and status = 'active' and expires_at <= now();
+    where status = 'active' and expires_at <= now();
 
   update public.scanner_sessions
     set status = 'revoked', revoked_at = now()
     where event_id = p_event_id and status = 'active';
 
+  loop
+    v_pin := lpad((floor(random() * 10000))::int::text, 4, '0');
+    exit when not exists (
+      select 1 from public.scanner_sessions s
+      where s.session_pin = v_pin and s.status = 'active' and s.expires_at > now()
+    );
+    v_tries := v_tries + 1;
+    if v_tries >= 100 then
+      raise exception 'Could not allocate a free scanner PIN right now. Please try again in a moment.';
+    end if;
+  end loop;
+
   insert into public.scanner_sessions (
     session_pin, event_id, organizer_id, session_token, status, expires_at
   )
   values (
-    lpad((floor(random() * 10000))::int::text, 4, '0'),
+    v_pin,
     p_event_id,
     v_organizer_id,
     replace(gen_random_uuid()::text, '-', ''),
@@ -141,7 +159,13 @@ grant execute on function public.revoke_scanner_session(uuid) to authenticated;
 -- Callable by anyone holding the token+PIN — entry staff never sign in.
 -- A wrong PIN, a revoked session, and an expired session all give the same
 -- generic error on purpose, so a guesser learns nothing.
-create or replace function public.validate_scanner_session(p_token text, p_pin text)
+-- The link is no longer required: the PIN alone identifies the session
+-- (generate_scanner_session guarantees no two live sessions share a PIN).
+-- Drop the old (token, pin) overloads so they can't be called any more.
+drop function if exists public.validate_scanner_session(text, text);
+drop function if exists public.scan_ticket(text, text, text);
+
+create or replace function public.validate_scanner_session(p_pin text)
 returns table (session_id uuid, event_id uuid, event_title text)
 language plpgsql
 security definer set search_path = public
@@ -155,20 +179,19 @@ begin
     into v_session_id, v_event_id, v_title
     from public.scanner_sessions s
     join public.events e on e.event_id = s.event_id
-    where s.session_token = btrim(p_token)
-      and s.session_pin = btrim(p_pin)
+    where s.session_pin = btrim(p_pin)
       and s.status = 'active'
       and s.expires_at > now();
 
   if not found then
-    raise exception 'That link and PIN are invalid or have expired.';
+    raise exception 'That PIN is invalid or has expired.';
   end if;
 
   return query select v_session_id, v_event_id, v_title;
 end;
 $$;
 
-grant execute on function public.validate_scanner_session(text, text) to anon, authenticated;
+grant execute on function public.validate_scanner_session(text) to anon, authenticated;
 
 -- ── 4. Scan a ticket's QR at the door (roadmap items 26 & 27) ────────────
 -- This is where QR *invalidation* actually happens: a ticket scanned
@@ -179,7 +202,6 @@ grant execute on function public.validate_scanner_session(text, text) to anon, a
 -- Results: valid | already_used | wrong_event | invalid. Every call —
 -- including 'invalid' for an unknown QR — writes a qr_scan_logs row.
 create or replace function public.scan_ticket(
-  p_token text,
   p_pin text,
   p_qr_code_token text
 )
@@ -200,13 +222,12 @@ declare
 begin
   select s.* into v_session
     from public.scanner_sessions s
-    where s.session_token = btrim(p_token)
-      and s.session_pin = btrim(p_pin)
+    where s.session_pin = btrim(p_pin)
       and s.status = 'active'
       and s.expires_at > now();
 
   if not found then
-    raise exception 'That link and PIN are invalid or have expired.';
+    raise exception 'That PIN is invalid or has expired.';
   end if;
 
   select e.* into v_session_event
@@ -276,7 +297,7 @@ begin
 end;
 $$;
 
-grant execute on function public.scan_ticket(text, text, text) to anon, authenticated;
+grant execute on function public.scan_ticket(text, text) to anon, authenticated;
 
 -- ── 5. Live scan feed for the organizer ──────────────────────────────────
 -- Latest scans for one session, newest first. Organizer who owns the

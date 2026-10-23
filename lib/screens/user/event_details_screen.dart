@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import '../../data/sample_tickets.dart';
 import '../../models/event.dart';
 import '../../navigation/app_nav.dart';
+import '../../services/access_control.dart';
 import '../../services/public_event_repository.dart';
 import '../../services/ticket_repository.dart';
+import '../../services/user_session.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_pill_button.dart';
 import '../../widgets/ticket_tier_row.dart';
@@ -84,6 +86,13 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
   Future<void> _handleBuyTicket() async {
     final selected = _selectedTier;
     if (selected == null || _limitReached) return;
+    // Buying needs an admin-approved account. Browsing stays open; this
+    // explains why checkout is locked (the database refuses it as well).
+    if (!await ensureBuyerApproved(context)) {
+      if (mounted) setState(() {});
+      return;
+    }
+    if (!mounted) return;
     // Use the latest copy of the selected tier (matched by id) so checkout
     // sees current availability.
     final active = _activeEvent;
@@ -214,6 +223,13 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
+                      if (!widget.readOnly &&
+                          buyerLockMessage(UserSession.instance.account) != null) ...[
+                        _BuyerLockNotice(
+                          message: buyerLockMessage(UserSession.instance.account)!,
+                        ),
+                        const SizedBox(height: 16),
+                      ],
                       if (_limitReached) ...[
                         _PurchaseLimitNotice(onViewMyTicket: _handleViewMyTicket),
                         const SizedBox(height: 16),
@@ -332,6 +348,51 @@ class _PurchaseLimitNotice extends StatelessWidget {
                     'View My Ticket',
                     style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: AppColors.accentPurple, decoration: TextDecoration.underline),
                   ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shown on the Event Details screen while the signed-in eventgoer's account
+/// is not yet approved by an admin: they can read everything here, but buying
+/// is locked, and this says why.
+class _BuyerLockNotice extends StatelessWidget {
+  const _BuyerLockNotice({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.warningBackground,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.warning.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.lock_outline_rounded, size: 18, color: AppColors.warning),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Buying tickets is locked',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.warning),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  message,
+                  style: AppTextStyles.bodyMuted.copyWith(fontSize: 12, height: 1.35),
                 ),
               ],
             ),

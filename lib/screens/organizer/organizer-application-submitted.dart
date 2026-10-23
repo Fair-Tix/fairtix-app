@@ -1,176 +1,132 @@
 import 'package:flutter/material.dart';
-import 'app_colors.dart';
-import 'organizer-splash.dart';
-import 'organizer-verification-pending.dart';
 
+import '../../theme/fairtix_palette.dart';
+import '../../widgets/organizer_ui.dart';
+import 'organizer-login.dart';
+
+/// Shown after the email code is verified (Mahilum design): a clock icon, a
+/// three-step progress list and a "Back to Log In" button.
 class OrganizerApplicationSubmittedScreen extends StatelessWidget {
   const OrganizerApplicationSubmittedScreen({super.key});
 
-  @override
-  Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isWide = screenWidth > 900;
-
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Row(
-        children: [
-          if (isWide)
-            Expanded(
-              flex: 5,
-              child: AuthSidePanel(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const FairTixLogo(fontSize: 22),
-                    const Spacer(),
-                    Center(
-                      child: Container(
-                        width: 170,
-                        height: 170,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        alignment: Alignment.center,
-                        child: Icon(
-                          Icons.description_outlined,
-                          size: 64,
-                          color: Colors.white.withValues(alpha: 0.85),
-                        ),
-                      ),
-                    ),
-                    const Spacer(),
-                    const Text(
-                      'Almost There!',
-                      style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Your application is under review. We\'ll notify you '
-                      'within 2-3 business days.',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.white.withValues(alpha: 0.85),
-                        height: 1.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          Expanded(
-            flex: 6,
-            child: Center(
-              child: SingleChildScrollView(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 420),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 64,
-                        height: 64,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF3F0FF),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        alignment: Alignment.center,
-                        child: const Icon(
-                          Icons.description_outlined,
-                          color: AppColors.primaryPurple,
-                          size: 30,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      const Text(
-                        'Application Submitted',
-                        style: AppTextStyles.h1,
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'We\'ve received your application to become a FairTix '
-                        'organizer. Our team will review your documents to '
-                        'ensure the safety of our community.',
-                        textAlign: TextAlign.center,
-                        style: AppTextStyles.bodyGray.copyWith(height: 1.5),
-                      ),
-                      const SizedBox(height: 28),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF9FAFB),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          children: [
-                            _infoRow('Est. Review Time', '2-3 Business Days'),
-                            const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 10),
-                              child: Divider(
-                                  height: 1, color: AppColors.borderLight),
-                            ),
-                            _infoRow('Status', 'Pending Verification',
-                                valueColor: AppColors.warningOrange),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 28),
-                      PrimaryButton(
-                        label: 'Go to Home',
-                        onPressed: () {
-                          Navigator.pushAndRemoveUntil(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const OrganizerSplashScreen(),
-                            ),
-                            (route) => false,
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      OutlineButtonWidget(
-                        label: 'Check Verification Status',
-                        textColor: AppColors.textDark,
-                        borderColor: AppColors.borderLight,
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  const OrganizerVerificationPendingScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+  void _backToLogIn(BuildContext context) {
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const OrganizerLoginScreen()),
+      (route) => false,
     );
   }
 
-  Widget _infoRow(String label, String value, {Color? valueColor}) {
+  @override
+  Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
+
+    return OrganizerAuthPage(
+      maxWidth: 520,
+      child: OrganizerCard(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: OrganizerStatusIcon(
+                icon: Icons.schedule_rounded,
+                color: p.accentLabel,
+                background: p.progressTrack,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Application submitted',
+              textAlign: TextAlign.center,
+              style: orgText(
+                p,
+                size: 28,
+                weight: FontWeight.w800,
+                height: 1.2,
+                letterSpacing: -0.3,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'We\u2019ll review your ID and proof of organization. '
+              'You\u2019ll get an email once a decision is made.',
+              textAlign: TextAlign.center,
+              style: orgText(p, size: 14, height: 1.5, color: p.textSecondary),
+            ),
+            const SizedBox(height: 26),
+            const _StepRow(
+              label: 'Application received',
+              state: _StepState.done,
+            ),
+            const SizedBox(height: 14),
+            const _StepRow(label: 'Admin review', state: _StepState.current),
+            const SizedBox(height: 14),
+            const _StepRow(label: 'Account approved', state: _StepState.todo),
+            const SizedBox(height: 26),
+            OrganizerSecondaryButton(
+              label: 'Back to Log In',
+              onPressed: () => _backToLogIn(context),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+enum _StepState { done, current, todo }
+
+class _StepRow extends StatelessWidget {
+  const _StepRow({required this.label, required this.state});
+
+  final String label;
+  final _StepState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
+
+    final Widget marker = switch (state) {
+      _StepState.done => Container(
+        width: 28,
+        height: 28,
+        decoration: BoxDecoration(color: p.primary, shape: BoxShape.circle),
+        child: const Icon(Icons.check_rounded, size: 16, color: Colors.white),
+      ),
+      _StepState.current => Container(
+        width: 28,
+        height: 28,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: p.primary, width: 2),
+        ),
+      ),
+      _StepState.todo => Container(
+        width: 28,
+        height: 28,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: p.border, width: 2),
+        ),
+      ),
+    };
+
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: AppTextStyles.bodyGray),
+        marker,
+        const SizedBox(width: 14),
         Text(
-          value,
-          style: AppTextStyles.label.copyWith(
-            color: valueColor ?? AppColors.textDark,
+          label,
+          style: orgText(
+            p,
+            size: 14,
+            height: 1.3,
+            weight: state == _StepState.current
+                ? FontWeight.w700
+                : FontWeight.w400,
+            color: state == _StepState.todo ? p.textSecondary : p.textPrimary,
           ),
         ),
       ],

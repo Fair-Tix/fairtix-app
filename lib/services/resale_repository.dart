@@ -9,13 +9,12 @@ class ResaleException implements Exception {
   const ResaleException(this.message);
 }
 
-/// The ticket a successful resale purchase handed to the buyer.
-typedef BoughtTicket = ({String ticketId, String qrToken});
-
 /// The Resale Market and the signed-in user's own listings, through the
-/// `list_ticket_for_resale` / `cancel_resale_listing` / `get_resale_market` /
-/// `buy_resale_listing` database functions (see supabase/resale_functions.sql
-/// and supabase/resale_purchase.sql).
+/// `list_ticket_for_resale` / `cancel_resale_listing` / `get_resale_market`
+/// database functions (see supabase/resale_functions.sql and
+/// supabase/resale_purchase.sql). Buying a listing is NOT here: it goes
+/// through PayMongo like a primary purchase (see ResaleCheckoutScreen and
+/// supabase/resale_payment.sql).
 ///
 /// The rules (ticket ownership, valid/unused ticket, 24-hour cutoff, the
 /// 50%-100% price band, one ticket per account per event day, QR reissue on
@@ -49,21 +48,6 @@ class ResaleRepository {
     return rows
         .map((row) => Ticket.fromMarketRow(Map<String, dynamic>.from(row as Map)))
         .toList();
-  }
-
-  /// Buys the listing [listingId]. On success the ticket belongs to the
-  /// buyer and has a brand-new QR token (the seller's old one stops
-  /// working); the transaction and both notifications are written by the
-  /// database function.
-  Future<BoughtTicket> buyListing(String listingId) async {
-    final row = await _invoke('buy_resale_listing', {'p_listing_id': listingId});
-    if (row is! Map || row['ticket_id'] == null || row['qr_code_token'] == null) {
-      throw const ResaleException('Could not confirm your purchase. Please check My Tickets.');
-    }
-    return (
-      ticketId: row['ticket_id'] as String,
-      qrToken: row['qr_code_token'] as String,
-    );
   }
 
   Future<dynamic> _invoke(String function, Map<String, dynamic>? params) async {

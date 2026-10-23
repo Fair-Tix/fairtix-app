@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
+import '../../services/access_control.dart';
 import 'organizer-scaffold.dart';
 
 class OrganizerSendAnnouncementScreen extends StatefulWidget {
@@ -21,6 +22,14 @@ class _OrganizerSendAnnouncementScreenState
   void initState() {
     super.initState();
     _messageController.addListener(() => setState(() {}));
+    // Announcements are a subscription feature: explain and go back if locked.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final allowed = await ensureOrganizerAccess(
+        context,
+        OrganizerRequirement.subscription,
+      );
+      if (!allowed && mounted) Navigator.of(context).maybePop();
+    });
   }
 
   @override

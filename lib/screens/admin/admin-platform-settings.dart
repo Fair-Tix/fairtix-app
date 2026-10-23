@@ -12,6 +12,7 @@ import 'admin-organizer-applications.dart';
 import 'admin-resale-monitoring.dart';
 import 'admin-revenue-reports.dart';
 import 'admin-route.dart';
+import 'admin-subscription-plans-card.dart';
 import 'admin-user-registrations.dart';
 import 'admin-profile.dart';
 
@@ -333,6 +334,8 @@ class _AdminPlatformSettingsScreenState
           Column(
             children: [settings[0], const SizedBox(height: 14), settings[1]],
           ),
+        const SizedBox(height: 14),
+        const AdminSubscriptionPlansCard(),
       ],
     );
   }

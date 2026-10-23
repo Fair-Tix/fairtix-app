@@ -6,23 +6,22 @@ import 'package:flutter/material.dart';
 import '../../models/organizer.dart';
 import '../../services/organizer_auth_service.dart';
 import '../../services/organizer_session.dart';
-import 'app_colors.dart';
-import 'organizer-verification-pending.dart';
+import '../../theme/fairtix_palette.dart';
+import '../../widgets/fairtix_mark.dart';
+import '../../widgets/organizer_ui.dart';
+import 'organizer-application-submitted.dart';
 
 /// Shown right after an organizer's first successful login if their
-/// proof-of-organization documents never made it to Storage at
-/// registration time.
+/// proof-of-organization documents never made it to Storage at registration
+/// time (Mahilum styling, same look as the Registration card).
 ///
-/// Why this screen exists: `organizer-register.dart`'s "Submit
-/// Application" tries to upload the two documents immediately, but that
-/// only works if Supabase already handed back an active session from
-/// `signUp()` — which it doesn't when "Confirm email" is required (the
-/// current project setup, since the eventgoer flow needs it for the OTP
-/// screen). So registration succeeds, but the documents are silently
-/// skipped. This screen is the backstop: [OrganizerLoginScreen] checks
-/// `OrganizerAccount.hasSubmittedDocuments` after login and routes here
-/// if either file is still missing, using the now-real session to
-/// actually upload them via [OrganizerAuthService.uploadOrganizerDocument].
+/// Why this screen exists: registration now uploads both documents right
+/// after the email code is verified (see `organizer-otp-verification.dart`),
+/// but an account created earlier, or an upload that failed, can still be
+/// missing one. [OrganizerLoginScreen] and [organizerLandingFor] check
+/// `OrganizerAccount.hasSubmittedDocuments` and route here if either file is
+/// missing, using the now-real session to upload them via
+/// [OrganizerAuthService.uploadOrganizerDocument].
 class OrganizerDocumentUploadScreen extends StatefulWidget {
   const OrganizerDocumentUploadScreen({super.key, required this.account});
 
@@ -35,10 +34,12 @@ class OrganizerDocumentUploadScreen extends StatefulWidget {
 
 class _OrganizerDocumentUploadScreenState
     extends State<OrganizerDocumentUploadScreen> {
+  // Slot 1: government / school ID (stored as `venue_proof`).
   Uint8List? _venueProofBytes;
   String? _venueProofFileName;
   String? _venueProofExt;
 
+  // Slot 2: proof of organization (stored as `event_permit`).
   Uint8List? _permitBytes;
   String? _permitFileName;
   String? _permitExt;
@@ -62,7 +63,9 @@ class _OrganizerDocumentUploadScreenState
     if (bytes == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not read that file. Please try another one.')),
+        const SnackBar(
+          content: Text('Could not read that file. Please try another one.'),
+        ),
       );
       return;
     }
@@ -99,19 +102,21 @@ class _OrganizerDocumentUploadScreenState
 
     try {
       if (_needsVenueProof && _venueProofBytes != null) {
-        final path = await OrganizerAuthService.instance.uploadOrganizerDocument(
-          docKind: 'venue_proof',
-          bytes: _venueProofBytes!,
-          fileExtension: _venueProofExt ?? 'pdf',
-        );
+        final path = await OrganizerAuthService.instance
+            .uploadOrganizerDocument(
+              docKind: 'venue_proof',
+              bytes: _venueProofBytes!,
+              fileExtension: _venueProofExt ?? 'pdf',
+            );
         updated = updated.copyWith(venueProofUrl: path);
       }
       if (_needsPermit && _permitBytes != null) {
-        final path = await OrganizerAuthService.instance.uploadOrganizerDocument(
-          docKind: 'event_permit',
-          bytes: _permitBytes!,
-          fileExtension: _permitExt ?? 'pdf',
-        );
+        final path = await OrganizerAuthService.instance
+            .uploadOrganizerDocument(
+              docKind: 'event_permit',
+              bytes: _permitBytes!,
+              fileExtension: _permitExt ?? 'pdf',
+            );
         updated = updated.copyWith(eventPermitUrl: path);
       }
     } on OrganizerAuthException catch (e) {
@@ -129,151 +134,86 @@ class _OrganizerDocumentUploadScreenState
     setState(() => _isSubmitting = false);
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (_) => const OrganizerVerificationPendingScreen()),
+      MaterialPageRoute(
+        builder: (_) => const OrganizerApplicationSubmittedScreen(),
+      ),
       (route) => false,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF9F9FC),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: AppColors.textDark),
-        automaticallyImplyLeading: false,
-      ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: Container(
-              padding: const EdgeInsets.all(28),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.borderLight),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF3F0FF),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    alignment: Alignment.center,
-                    child: const Icon(
-                      Icons.upload_file_outlined,
-                      color: AppColors.primaryPurple,
-                      size: 26,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text('One More Step', style: AppTextStyles.h1),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Your account was created, but we couldn\u2019t finish uploading '
-                    'your verification documents earlier. Please upload them now '
-                    'so our team can review your application.',
-                    style: AppTextStyles.bodyGray,
-                  ),
-                  const SizedBox(height: 24),
-                  if (_needsVenueProof) ...[
-                    _uploadBox(
-                      label: _venueProofFileName ?? 'Proof of Venue Booking',
-                      uploaded: _venueProofBytes != null,
-                      onTap: () => _pickDocument(isVenueProof: true),
-                    ),
-                    const SizedBox(height: 14),
-                  ],
-                  if (_needsPermit) ...[
-                    _uploadBox(
-                      label: _permitFileName ?? 'Valid Event Permit',
-                      uploaded: _permitBytes != null,
-                      onTap: () => _pickDocument(isVenueProof: false),
-                    ),
-                    const SizedBox(height: 14),
-                  ],
-                  if (_errorText != null) ...[
-                    Text(
-                      _errorText!,
-                      style: const TextStyle(
-                        color: AppColors.dangerRed,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  const SizedBox(height: 8),
-                  _isSubmitting
-                      ? const SizedBox(
-                          height: 52,
-                          child: Center(
-                            child: SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(strokeWidth: 2.5),
-                            ),
-                          ),
-                        )
-                      : PrimaryButton(
-                          label: 'Submit Documents',
-                          onPressed: _canSubmit ? _handleSubmit : null,
-                        ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+    final p = FairTixPalette.of(context);
 
-  Widget _uploadBox({
-    required String label,
-    required VoidCallback onTap,
-    bool uploaded = false,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        height: 100,
-        decoration: BoxDecoration(
-          color: const Color(0xFFF5F3FF),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: AppColors.primaryPurple.withValues(alpha: 0.4),
-            width: 1.4,
-          ),
-        ),
-        padding: const EdgeInsets.all(12),
-        alignment: Alignment.center,
+    return OrganizerAuthPage(
+      maxWidth: 560,
+      child: OrganizerCard(
+        padding: const EdgeInsets.all(32),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Icon(
-              uploaded ? Icons.check_circle : Icons.upload_file_outlined,
-              color: AppColors.primaryPurple,
-              size: 24,
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: FairTixMark(width: 44),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 14),
             Text(
-              label,
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppColors.primaryPurple,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
+              'One more step',
+              style: orgText(
+                p,
+                size: 28,
+                weight: FontWeight.w800,
+                height: 1.2,
+                letterSpacing: -0.3,
               ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Your account was created, but we couldn’t finish uploading '
+              'your verification documents. Upload them now so an admin can '
+              'review your application.',
+              style: orgText(p, size: 13.5, color: p.textSecondary),
+            ),
+            const SizedBox(height: 22),
+            if (_needsVenueProof) ...[
+              const OrganizerFieldLabel('Government or school ID'),
+              const SizedBox(height: 7.5),
+              OrganizerUploadBox(
+                title: 'Upload ID',
+                hint: 'JPG or PNG',
+                fileName: _venueProofFileName,
+                onTap: () => _pickDocument(isVenueProof: true),
+              ),
+              const SizedBox(height: 16),
+            ],
+            if (_needsPermit) ...[
+              const OrganizerFieldLabel('Proof of organization'),
+              const SizedBox(height: 7.5),
+              OrganizerUploadBox(
+                title: 'Upload document',
+                hint: 'Org certificate, DTI registration or business permit',
+                fileName: _permitFileName,
+                onTap: () => _pickDocument(isVenueProof: false),
+              ),
+              const SizedBox(height: 16),
+            ],
+            if (_errorText != null) ...[
+              Text(
+                _errorText!,
+                style: orgText(
+                  p,
+                  size: 13,
+                  weight: FontWeight.w600,
+                  color: p.danger,
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
+            const SizedBox(height: 6),
+            OrganizerPrimaryButton(
+              label: 'Submit Documents',
+              loading: _isSubmitting,
+              onPressed: _canSubmit ? _handleSubmit : null,
             ),
           ],
         ),

@@ -35,13 +35,10 @@
 -- SELLER's proceeds: transactions.amount = listing price,
 -- transactions.platform_fee = 5% of it, seller receives the difference.
 --
--- PAYMENT: like the Resale Checkout screen says, resale payment is simulated
--- (no real money moves). That means any verified signed-in user can call
--- buy_resale_listing and take a listed ticket without paying. This is fine
--- for the sandbox/demo scope, but before real money is involved, resale must
--- go through a verified PayMongo payment the way primary purchases do
--- (paymongo-checkout / paymongo-verify), with this function becoming
--- service-role only.
+-- PAYMENT: buy_resale_listing below is the OLD simulated purchase. It has been
+-- replaced by the PayMongo-backed flow in resale_payment.sql (paymongo-checkout
+-- / paymongo-verify / paymongo-webhook -> fulfill_resale_purchase), and
+-- resale_payment.sql drops it. get_resale_market above is still in use.
 -- =============================================================================
 
 -- ── get_resale_market ───────────────────────────────────────────────────
@@ -229,5 +226,8 @@ begin
 end;
 $$;
 
-revoke all on function public.buy_resale_listing(uuid) from public, anon;
-grant execute on function public.buy_resale_listing(uuid) to authenticated;
+-- SUPERSEDED by resale_payment.sql: resale is now paid through PayMongo and
+-- fulfilled server-side (fulfill_resale_purchase). resale_payment.sql drops
+-- this function; if this file is re-run afterwards, make sure no client can
+-- call it (it would hand over a ticket without payment).
+revoke all on function public.buy_resale_listing(uuid) from public, anon, authenticated;

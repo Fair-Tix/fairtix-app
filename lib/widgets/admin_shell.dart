@@ -122,8 +122,14 @@ class _TopBar extends StatelessWidget {
                 onPressed: () => Scaffold.of(context).openDrawer(),
               ),
             ),
-          Text(title, style: AppTextStyles.label),
-          const Spacer(),
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.label,
+            ),
+          ),
           const NotificationBell(size: 19, color: AppColors.textGray),
           const SizedBox(width: 8),
           const CircleAvatar(
@@ -187,17 +193,26 @@ class _Sidebar extends StatelessWidget {
             ),
             const Divider(height: 1, color: AppColors.borderLight),
             const SizedBox(height: 14),
-            for (final item in AdminNavItem.values)
-              _SidebarItem(
-                icon: item.icon,
-                label: item.label,
-                selected: item == active,
-                onTap: () {
-                  if (item == active) return;
-                  adminPushReplacement(context, _pageFor(item));
-                },
+            // Scrolls on short screens (landscape phones, small windows) so the
+            // list can never overflow; the account footer stays pinned below.
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    for (final item in AdminNavItem.values)
+                      _SidebarItem(
+                        icon: item.icon,
+                        label: item.label,
+                        selected: item == active,
+                        onTap: () {
+                          if (item == active) return;
+                          adminPushReplacement(context, _pageFor(item));
+                        },
+                      ),
+                  ],
+                ),
               ),
-            const Spacer(),
+            ),
             const Divider(height: 1, color: AppColors.borderLight),
             Padding(
               padding: const EdgeInsets.all(14),

@@ -32,6 +32,7 @@ const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const PAYMONGO_API = 'https://api.paymongo.com/v1/checkout_sessions';
 
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -102,12 +103,75 @@ serve(async (req) => {
     }
 
     // Payment is confirmed. Read tier/buyer from the server-written metadata.
-    const remarks: { tier_id?: string; buyer_id?: string } = attrs.metadata ?? {};
-    if (!remarks.tier_id || !remarks.buyer_id) {
+    const remarks: {
+      tier_id?: string;
+      listing_id?: string;
+      plan_id?: string;
+      plan_name?: string;
+      plan_price?: string;
+      buyer_id?: string;
+    } = attrs.metadata ?? {};
+
+    // ORGANIZER SUBSCRIPTION payment: activate the plan the organizer paid
+    // for. The plan and organizer come from the server-written metadata, the
+    // paid amount must match the plan price, and the payment reference is the
+    // session id, so this and paymongo-webhook are idempotent together.
+    if (remarks.plan_id && remarks.buyer_id) {
+      if (remarks.buyer_id !== user.id) {
+        return json({ error: 'This payment belongs to a different account.' }, 403);
+      }
+      // plan_id / plan_price were written by paymongo-checkout from the saved
+      // plan at checkout time. The amount PayMongo collected must equal it.
+      const planFee = Number(remarks.plan_price);
+      const paidCentavos = Number(attrs.line_items?.[0]?.amount);
+      if (
+        !Number.isFinite(planFee) ||
+        (Number.isFinite(paidCentavos) && paidCentavos !== Math.round(planFee * 100))
+      ) {
+        return json({ error: 'The payment amount does not match this plan.' }, 400);
+      }
+      const adminSub = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const { data: subData, error: subError } = await adminSub.rpc('fulfill_organizer_subscription', {
+        p_user_id: remarks.buyer_id,
+        p_plan_id: remarks.plan_id,
+        p_fee: planFee,
+        p_payment_ref: `FTX-SUB-${sessionId}`,
+      });
+      if (subError) {
+        return json({ error: subError.message }, 400);
+      }
+      const sub = Array.isArray(subData) ? subData[0] : subData;
+      return json(
+        {
+          subscription: true,
+          plan_name: sub.plan_name,
+          renews_at: sub.renews_at,
+          can_export: sub.can_export === true,
+        },
+        200,
+      );
+    }
+    if ((!remarks.tier_id && !remarks.listing_id) || !remarks.buyer_id) {
       return json({ error: 'This payment was not created by FairTix checkout.' }, 400);
     }
     if (remarks.buyer_id !== user.id) {
       return json({ error: 'This payment belongs to a different account.' }, 403);
+    }
+
+    // RESALE payment: hand the listed ticket to the buyer. The payment ref is
+    // the session id, so this and paymongo-webhook are idempotent together.
+    if (remarks.listing_id) {
+      const adminResale = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const { data: resaleData, error: resaleError } = await adminResale.rpc('fulfill_resale_purchase', {
+        p_listing_id: remarks.listing_id,
+        p_buyer_id: remarks.buyer_id,
+        p_payment_ref: `FTX-RS-${sessionId}`,
+      });
+      if (resaleError) {
+        return json({ error: resaleError.message }, 400);
+      }
+      const resaleTicket = Array.isArray(resaleData) ? resaleData[0] : resaleData;
+      return json({ ticket_id: resaleTicket.ticket_id, qr_code_token: resaleTicket.qr_code_token }, 200);
     }
 
     // Same deterministic token as paymongo-webhook, so whichever of the two

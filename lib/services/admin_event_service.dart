@@ -1,5 +1,12 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+/// What [AdminEventService.unpublishEvent] reports back.
+class UnpublishResult {
+  const UnpublishResult({required this.ticketsRefunded, required this.amountRefunded});
+  final int ticketsRefunded;
+  final double amountRefunded;
+}
+
 /// Thrown when loading or changing events as an admin fails.
 class AdminEventServiceException implements Exception {
   final String message;
@@ -39,6 +46,10 @@ class AdminEventSummary {
     required this.organizerName,
     required this.tiers,
     this.endDate,
+    this.documentPaths = const [],
+    this.unpublishedAt,
+    this.unpublishReason,
+    this.complianceDeadline,
   });
 
   final String id;
@@ -53,13 +64,31 @@ class AdminEventSummary {
   final String organizerName;
   final List<AdminTierSummary> tiers;
 
+  /// Paths in the private `event_documents` bucket (supporting documents the
+  /// organizer uploaded, e.g. venue contract or LGU permit).
+  final List<String> documentPaths;
+
+  /// Set when an admin unpublished the event (status goes back to 'draft').
+  final DateTime? unpublishedAt;
+  final String? unpublishReason;
+  final DateTime? complianceDeadline;
+
+  /// Hidden by an admin and waiting for the organizer to comply.
+  bool get isUnpublished => status == 'draft' && unpublishedAt != null;
+
+  String? get complianceLabel {
+    final deadline = complianceDeadline;
+    if (!isUnpublished || deadline == null) return null;
+    return 'Documents due ${_fmt(deadline)}';
+  }
+
   int get ticketsSold => tiers.fold(0, (sum, t) => sum + t.sold);
   int get ticketsTotal => tiers.fold(0, (sum, t) => sum + t.total);
   double get grossRevenue => tiers.fold(0.0, (sum, t) => sum + t.revenue);
   String get soldLabel => '$ticketsSold / $ticketsTotal';
 
   String get statusLabel => switch (status) {
-    'draft' => 'Draft',
+    'draft' => isUnpublished ? 'Unpublished' : 'Draft',
     'published' => 'Published',
     'canceled' => 'Cancelled',
     'completed' => 'Completed',
@@ -69,8 +98,11 @@ class AdminEventSummary {
   /// Only events that are still on or about to be on can be canceled.
   bool get canCancel => status == 'published' || status == 'draft';
 
-  /// Unpublishing stops new sales without canceling or refunding anything.
+  /// Unpublishing hides the event (nothing is deleted) and refunds holders.
   bool get canUnpublish => status == 'published';
+
+  /// Admin can put an unpublished event back on sale once it complies.
+  bool get canRepublish => isUnpublished;
 
   String get dateLabel {
     final end = endDate;
@@ -105,11 +137,18 @@ class AdminEventService {
   /// is never sold from, so counting it would double the totals).
   Future<List<AdminEventSummary>> fetchEvents() async {
     try {
+      // Cancel unpublished events whose compliance deadline has passed.
+      try {
+        await Supabase.instance.client.rpc('cancel_lapsed_unpublished_events');
+      } catch (_) {}
+
       final rows = await Supabase.instance.client
           .from('events')
           .select('''
             event_id, parent_event_id, day_number, event_type, title, venue,
             status, event_start_date, event_end_date, created_at,
+            supporting_document_urls, unpublished_at, unpublish_reason,
+            compliance_deadline,
             users(full_name, organization_name),
             ticket_tiers(tier_name, base_price, total_quantity, remaining_quantity)
           ''')
@@ -173,8 +212,15 @@ class AdminEventService {
       endDate: endRaw == null ? null : DateTime.parse(endRaw),
       organizerName: org.isNotEmpty ? org : (name.isNotEmpty ? name : 'Unknown organizer'),
       tiers: tiers,
+      documentPaths: (parent['supporting_document_urls'] as List?)?.cast<String>() ?? const [],
+      unpublishedAt: _parseTs(parent['unpublished_at']),
+      unpublishReason: parent['unpublish_reason'] as String?,
+      complianceDeadline: _parseTs(parent['compliance_deadline']),
     );
   }
+
+  DateTime? _parseTs(dynamic raw) =>
+      raw == null ? null : DateTime.parse(raw as String).toLocal();
 
   List<AdminTierSummary> _tiersOf(Map<String, dynamic> event, {String prefix = ''}) {
     final raw = (event['ticket_tiers'] as List?) ?? const [];
@@ -193,8 +239,45 @@ class AdminEventService {
   /// and notifications are created by the database trigger.
   Future<void> cancelEvent(String eventId) => _setStatus(eventId, 'canceled');
 
-  /// Takes the event off sale (back to draft) without canceling it.
-  Future<void> unpublishEvent(String eventId) => _setStatus(eventId, 'draft');
+  /// Hides the event from event goers (nothing is deleted), refunds every
+  /// current ticket holder like a cancellation, and gives the organizer
+  /// [deadlineDays] to submit proper documents. See
+  /// supabase/admin_unpublish.sql.
+  Future<UnpublishResult> unpublishEvent(
+    String eventId, {
+    required String reason,
+    required int deadlineDays,
+  }) async {
+    try {
+      final rows = await Supabase.instance.client.rpc(
+        'admin_unpublish_event',
+        params: {
+          'p_event_id': eventId,
+          'p_reason': reason,
+          'p_deadline_days': deadlineDays,
+        },
+      ) as List;
+      final row = rows.isEmpty ? const <String, dynamic>{} : rows.first as Map;
+      return UnpublishResult(
+        ticketsRefunded: (row['tickets_refunded'] as num?)?.toInt() ?? 0,
+        amountRefunded: (row['amount_refunded'] as num?)?.toDouble() ?? 0,
+      );
+    } on PostgrestException catch (e) {
+      throw AdminEventServiceException(e.message);
+    }
+  }
+
+  /// Puts an unpublished event back on sale after the organizer complied.
+  Future<void> republishEvent(String eventId) async {
+    try {
+      await Supabase.instance.client.rpc(
+        'admin_republish_event',
+        params: {'p_event_id': eventId},
+      );
+    } on PostgrestException catch (e) {
+      throw AdminEventServiceException(e.message);
+    }
+  }
 
   Future<void> _setStatus(String eventId, String status) async {
     try {

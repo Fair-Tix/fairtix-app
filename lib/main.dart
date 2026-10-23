@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'supabase_config.dart';
@@ -20,6 +21,8 @@ import 'screens/organizer/organizer-landing.dart';
 import 'screens/organizer/app_colors.dart';
 import 'screens/user/login_screen.dart' show userHomeFor;
 import 'screens/user/splash_screen.dart';
+import 'theme/theme_controller.dart';
+import 'theme/page_transitions.dart';
 import 'services/admin_auth_service.dart';
 import 'services/organizer_auth_service.dart';
 import 'services/organizer_session.dart';
@@ -32,6 +35,8 @@ void main() async {
     url: SupabaseConfig.url,
     publishableKey: SupabaseConfig.publishableKey,
   );
+  // Restore the saved Light/Dark choice before the first frame.
+  await ThemeController.instance.load();
   final requestedRoute = kIsWeb ? Uri.base.fragment : null;
   final isAdminRoute = requestedRoute?.startsWith('/Admin') ?? false;
   var initialRoute = requestedRoute ?? '/';
@@ -84,7 +89,13 @@ void main() async {
   }
 
   runApp(
-    MyApp(initialRoute: initialRoute, startupAuthError: startupAuthError),
+    FairTixThemeScope(
+      controller: ThemeController.instance,
+      child: MyApp(
+        initialRoute: initialRoute,
+        startupAuthError: startupAuthError,
+      ),
+    ),
   );
 }
 
@@ -153,8 +164,56 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: AppColors.primaryPurple),
         useMaterial3: true,
+        pageTransitionsTheme: smoothPageTransitionsTheme,
         scaffoldBackgroundColor: const Color(0xFFF9F9FC),
       ),
+      scrollBehavior: const _AppScrollBehavior(),
+      builder: (context, child) {
+        final media = MediaQuery.of(context);
+        var data = media.copyWith(
+          // Respect the user's font size, but cap it so fixed-height pieces
+          // (buttons, nav bars, cards) don't break on very large text.
+          textScaler: media.textScaler.clamp(
+            minScaleFactor: 0.85,
+            maxScaleFactor: 1.2,
+          ),
+        );
+        Widget content = child ?? const SizedBox.shrink();
+
+        if (!kIsWeb && media.size.width > _phoneMaxWidth) {
+          // The phone app on a tablet / foldable / landscape: keep the phone
+          // layout centered instead of stretching it edge to edge. Children
+          // see the narrower width through MediaQuery as well.
+          data = data.copyWith(
+            size: Size(_phoneMaxWidth, media.size.height),
+          );
+          content = ColoredBox(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            child: Center(
+              child: SizedBox(width: _phoneMaxWidth, child: content),
+            ),
+          );
+        }
+
+        return MediaQuery(data: data, child: content);
+      },
     );
   }
+}
+
+/// Widest the phone (eventgoer) app is allowed to get, in logical pixels.
+const double _phoneMaxWidth = 560;
+
+/// Lets mouse and trackpad users drag-scroll as well as touch users, so every
+/// scrolling screen behaves the same on web, desktop and phones.
+class _AppScrollBehavior extends MaterialScrollBehavior {
+  const _AppScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+    PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.trackpad,
+    PointerDeviceKind.stylus,
+  };
 }

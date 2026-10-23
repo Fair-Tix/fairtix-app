@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../navigation/main_shell.dart';
+import '../../services/user_auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_background.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/timeline_step.dart';
-import 'login_screen.dart';
 
 class RegistrationPendingScreen extends StatelessWidget {
   const RegistrationPendingScreen({
@@ -144,15 +145,16 @@ class RegistrationPendingScreen extends StatelessWidget {
               const SizedBox(height: 24),
               PillButton(
                 label: 'Back to Home',
-                onPressed: () {
-                  // TODO(backend): once account review status is wired up,
-                  // AccountActivatedScreen should be reached via a push
-                  // notification / in-app alert when the account is
-                  // actually approved by an admin — not from this button.
-                  // This button genuinely just returns to the login screen,
-                  // matching its label.
+                onPressed: () async {
+                  // The eventgoer is already signed in (the email OTP created
+                  // their session), so go Home. Load their profile first so
+                  // the app knows their approval status. Browsing works right
+                  // away; buying and reselling stay locked until an admin
+                  // approves the account.
+                  await UserAuthService.instance.refreshAccount();
+                  if (!context.mounted) return;
                   Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                    MaterialPageRoute(builder: (_) => const MainShell()),
                     (route) => false,
                   );
                 },

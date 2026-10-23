@@ -642,12 +642,13 @@ class _CardGrid extends StatelessWidget {
   const _CardGrid({
     required this.columns,
     required this.children,
-    this.gap = 20,
   });
+
+  /// Space between cards, horizontally and vertically.
+  static const double gap = 20;
 
   final int columns;
   final List<Widget> children;
-  final double gap;
 
   @override
   Widget build(BuildContext context) {

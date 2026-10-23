@@ -11,7 +11,7 @@ import 'organizer-subscription-confirmed.dart';
 import 'organizer-subscription-review.dart';
 
 /// "Choose your plan" (Mahilum design): the plans side by side, one marked
-/// "Selected", and a "Continue with <plan>" button underneath.
+/// "Selected", and a "Continue with" button for the chosen plan underneath.
 ///
 /// Flow: pick a plan -> Continue -> "Confirm your subscription" review ->
 /// PayMongo checkout -> wait for the server to confirm payment ->

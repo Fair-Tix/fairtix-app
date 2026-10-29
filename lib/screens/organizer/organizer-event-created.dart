@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
+import '../../theme/fairtix_palette.dart';
 import 'organizer-scaffold.dart';
 import 'organizer-dashboard.dart';
 import 'organizer-my-events.dart';
@@ -20,6 +21,7 @@ class OrganizerEventCreatedScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
     return OrganizerScaffold(
       pageTitle: 'Event Published',
       activeItem: OrganizerNavItem.myEvents,
@@ -29,9 +31,9 @@ class OrganizerEventCreatedScreen extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(40),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: p.surface,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.borderLight),
+              border: Border.all(color: p.border),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -51,9 +53,9 @@ class OrganizerEventCreatedScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 22),
-                const Text(
+                Text(
                   'Event Published!',
-                  style: AppTextStyles.h1,
+                  style: AppTextStyles.h1.copyWith(color: p.textPrimary),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 10),
@@ -65,7 +67,10 @@ class OrganizerEventCreatedScreen extends StatelessWidget {
                       : 'Your event is now live and attendees can start '
                             'purchasing tickets.',
                   textAlign: TextAlign.center,
-                  style: AppTextStyles.bodyGray.copyWith(height: 1.5),
+                  style: AppTextStyles.bodyGray.copyWith(
+                    height: 1.5,
+                    color: p.textSecondary,
+                  ),
                 ),
                 const SizedBox(height: 26),
                 Container(
@@ -75,22 +80,22 @@ class OrganizerEventCreatedScreen extends StatelessWidget {
                     vertical: 16,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF9FAFB),
+                    color: p.background,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
                     children: [
-                      _infoRow('Event', eventName),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 10),
-                        child: Divider(height: 1, color: AppColors.borderLight),
+                      _infoRow(p, 'Event', eventName),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: Divider(height: 1, color: p.border),
                       ),
-                      _infoRow('Date', date),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 10),
-                        child: Divider(height: 1, color: AppColors.borderLight),
+                      _infoRow(p, 'Date', date),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: Divider(height: 1, color: p.border),
                       ),
-                      _infoRow('Venue', venue),
+                      _infoRow(p, 'Venue', venue),
                     ],
                   ),
                 ),
@@ -110,8 +115,8 @@ class OrganizerEventCreatedScreen extends StatelessWidget {
                 const SizedBox(height: 12),
                 OutlineButtonWidget(
                   label: 'Go to Dashboard',
-                  textColor: AppColors.textDark,
-                  borderColor: AppColors.borderLight,
+                  textColor: p.textPrimary,
+                  borderColor: p.border,
                   onPressed: () {
                     Navigator.pushReplacement(
                       context,
@@ -129,16 +134,19 @@ class OrganizerEventCreatedScreen extends StatelessWidget {
     );
   }
 
-  Widget _infoRow(String label, String value) {
+  Widget _infoRow(FairTixPalette p, String label, String value) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: AppTextStyles.bodyGray),
+        Text(
+          label,
+          style: AppTextStyles.bodyGray.copyWith(color: p.textSecondary),
+        ),
         Flexible(
           child: Text(
             value,
             textAlign: TextAlign.right,
-            style: AppTextStyles.label,
+            style: AppTextStyles.label.copyWith(color: p.textPrimary),
           ),
         ),
       ],

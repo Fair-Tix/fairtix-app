@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
-import 'app_colors.dart';
 import '../../services/organizer_escrow_service.dart';
+import '../../theme/fairtix_palette.dart';
+import '../../widgets/organizer_ui.dart';
 import 'organizer-scaffold.dart';
 
-/// Organizer > Escrow & Payouts.
+/// Organizer > Escrow & Payouts (Mahilum design).
 ///
 /// Shows the organizer exactly where their ticket money is:
 ///   buyer pays -> held in escrow -> released once the event's schedule date
@@ -65,49 +66,70 @@ class _OrganizerEscrowScreenState extends State<OrganizerEscrowScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
+
     return OrganizerScaffold(
       pageTitle: 'Escrow & Payouts',
       activeItem: OrganizerNavItem.escrow,
-      topBarTrailing: IconButton(
-        tooltip: 'Refresh',
-        onPressed: _loading ? null : _refresh,
-        icon: const Icon(Icons.refresh_rounded),
-      ),
+      topBarTrailing: _RefreshButton(onTap: _loading ? null : _refresh),
       body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const _HowItWorks(),
+          Text(
+            'Escrow & Payouts',
+            style: orgText(
+              p,
+              size: 32,
+              weight: FontWeight.w800,
+              letterSpacing: -0.8,
+              height: 1.15,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Track held funds, releases and refunds.',
+            style: orgText(p, size: 15, color: p.textSecondary),
+          ),
           const SizedBox(height: 24),
-          _content(),
+          const _HowItWorks(),
+          const SizedBox(height: 20),
+          _content(p),
         ],
       ),
     );
   }
 
-  Widget _content() {
+  Widget _content(FairTixPalette p) {
     if (_loading) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 60),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 60),
         child: Center(
-          child: CircularProgressIndicator(color: AppColors.primaryPurple),
+          child: CircularProgressIndicator(color: p.accentLabel),
         ),
       );
     }
+
     final overview = _overview;
     if (_error != null || overview == null) {
-      return Container(
-        width: double.infinity,
+      return OrganizerCard(
+        radius: 20,
         padding: const EdgeInsets.all(24),
-        decoration: _cardDecoration(),
         child: Column(
           children: [
             Text(
               _error ?? 'Could not load escrow.',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.dangerRed),
+              style: orgText(p, size: 14, color: p.danger),
             ),
-            const SizedBox(height: 12),
-            OutlinedButton(onPressed: _refresh, child: const Text('Try again')),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: 160,
+              child: OrganizerSecondaryButton(
+                label: 'Try again',
+                height: 44,
+                onPressed: _refresh,
+              ),
+            ),
           ],
         ),
       );
@@ -115,25 +137,25 @@ class _OrganizerEscrowScreenState extends State<OrganizerEscrowScreen> {
 
     final next = overview.nextRelease;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _StatRow(
           cards: [
             _StatCard(
-              icon: Icons.lock_outline,
+              icon: Icons.lock_outline_rounded,
               label: 'In escrow (held)',
               value: _peso(overview.totalHeld),
               note: next == null
                   ? 'Nothing is being held right now'
                   : 'Next release: ${_formatDate(next)}',
-              valueColor: AppColors.warningOrange,
+              valueColor: _heldColor(p),
             ),
             _StatCard(
               icon: Icons.account_balance_wallet_outlined,
               label: 'Released to you',
               value: _peso(overview.totalReleased),
               note: 'Event over, ready for payout',
-              valueColor: AppColors.successGreen,
+              valueColor: p.success,
             ),
             _StatCard(
               icon: Icons.undo_rounded,
@@ -143,141 +165,73 @@ class _OrganizerEscrowScreenState extends State<OrganizerEscrowScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 20),
-        _eventsCard(overview),
+        const SizedBox(height: 28),
+        Text(
+          'Escrow by Event',
+          style: orgText(p, size: 18, weight: FontWeight.w800),
+        ),
         const SizedBox(height: 14),
-        const Text(
-          'Amounts are your share: the ticket price minus FairTix\'s platform '
-          'fee. Scanning tickets at the door does not release escrow; money is '
-          'released the day after your event\'s last day (Philippine time). '
-          'Multi-day events release one day at a time as each day ends.',
-          style: TextStyle(color: AppColors.textGray, fontSize: 12, height: 1.5),
+        _EventsTable(events: overview.events),
+        const SizedBox(height: 14),
+        Text(
+          'Amounts are your share: the ticket price minus FairTix\u2019s '
+          'platform fee. Scanning tickets at the door does not release '
+          'escrow; money is released the day after your event\u2019s last '
+          'day (Philippine time). Multi-day events release one day at a time '
+          'as each day ends.',
+          style: orgText(p, size: 13, color: p.textSecondary, height: 1.5),
         ),
       ],
     );
   }
+}
 
-  Widget _eventsCard(EscrowOverview overview) {
-    return Container(
-      decoration: _cardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Padding(
-            padding: EdgeInsets.all(20),
-            child: Text('Escrow by Event', style: AppTextStyles.h3),
-          ),
-          if (overview.events.isEmpty)
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 0, 20, 32),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.lock_clock_outlined,
-                    size: 40,
-                    color: AppColors.textGray,
-                  ),
-                  SizedBox(height: 12),
-                  Text(
-                    'No published events yet. Once a fan buys a ticket, the '
-                    'payment appears here as held in escrow.',
-                    textAlign: TextAlign.center,
-                    style: AppTextStyles.bodyGray,
-                  ),
-                ],
+/// Yellow used for held money (design), amber in Light mode for contrast.
+Color _heldColor(FairTixPalette p) =>
+    p.isDark ? const Color(0xFFFACC15) : p.warning;
+
+// ── Top bar refresh button ─────────────────────────────────────────────────
+
+class _RefreshButton extends StatelessWidget {
+  const _RefreshButton({required this.onTap});
+
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
+
+    return Tooltip(
+      message: 'Refresh',
+      child: MouseRegion(
+        cursor: onTap == null
+            ? SystemMouseCursors.basic
+            : SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Opacity(
+            opacity: onTap == null ? 0.5 : 1,
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: p.surface,
+                shape: BoxShape.circle,
+                border: Border.all(color: p.border),
               ),
-            )
-          else
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
-                headingRowColor: WidgetStateProperty.all(
-                  const Color(0xFFF9FAFB),
-                ),
-                columns: const [
-                  DataColumn(label: Text('EVENT')),
-                  DataColumn(label: Text('EVENT DATE')),
-                  DataColumn(label: Text('STATUS')),
-                  DataColumn(label: Text('TICKETS')),
-                  DataColumn(label: Text('IN ESCROW')),
-                  DataColumn(label: Text('RELEASED')),
-                  DataColumn(label: Text('RELEASE DATE')),
-                ],
-                rows: [for (final e in overview.events) _eventRow(e)],
+              alignment: Alignment.center,
+              child: Icon(
+                Icons.refresh_rounded,
+                size: 20,
+                color: p.textPrimary,
               ),
             ),
-        ],
+          ),
+        ),
       ),
     );
   }
-
-  DataRow _eventRow(EscrowEventRow e) {
-    return DataRow(
-      cells: [
-        DataCell(
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 220),
-            child: Text(
-              e.title,
-              style: AppTextStyles.label,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ),
-        DataCell(Text(_dateRange(e), style: AppTextStyles.body)),
-        DataCell(_StageChip(stage: e.stage)),
-        DataCell(Text('${e.ticketsSold}', style: AppTextStyles.body)),
-        DataCell(
-          Text(
-            e.held > 0 ? _peso(e.held) : '\u2014',
-            style: TextStyle(
-              color: e.held > 0 ? AppColors.warningOrange : AppColors.textGray,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        DataCell(
-          Text(
-            e.released > 0 ? _peso(e.released) : '\u2014',
-            style: TextStyle(
-              color: e.released > 0
-                  ? AppColors.successGreen
-                  : AppColors.textGray,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        DataCell(_releaseCell(e)),
-      ],
-    );
-  }
-
-  Widget _releaseCell(EscrowEventRow e) {
-    final date = e.releaseDate;
-    if (e.held > 0 && date != null) {
-      return Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(_formatDate(date), style: AppTextStyles.label),
-          Text(
-            _countdown(date),
-            style: const TextStyle(color: AppColors.textGray, fontSize: 11),
-          ),
-        ],
-      );
-    }
-    if (e.released > 0) {
-      return const Text('Released', style: AppTextStyles.bodyGray);
-    }
-    return const Text('\u2014', style: AppTextStyles.bodyGray);
-  }
-
-  static BoxDecoration _cardDecoration() => BoxDecoration(
-    color: Colors.white,
-    borderRadius: BorderRadius.circular(12),
-    border: Border.all(color: AppColors.borderLight),
-  );
 }
 
 // ── Explainer ──────────────────────────────────────────────────────────────
@@ -287,118 +241,130 @@ class _HowItWorks extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
+
     const steps = [
       _FlowStep(
-        number: 1,
-        icon: Icons.shopping_cart_checkout_rounded,
-        title: 'Fan buys a ticket',
+        icon: Icons.shopping_cart_outlined,
+        title: '1. Fan buys a ticket',
         text: 'The buyer pays through PayMongo and receives their QR ticket.',
       ),
       _FlowStep(
-        number: 2,
-        icon: Icons.lock_outline,
-        title: 'Held in escrow',
+        icon: Icons.lock_outline_rounded,
+        title: '2. Held in escrow',
         text:
-            'Your share (price minus FairTix\'s fee) is held while the event '
-            'is still ahead or ongoing.',
+            'Your share (price minus FairTix\u2019s fee) is held while the '
+            'event is ahead or ongoing.',
       ),
       _FlowStep(
-        number: 3,
         icon: Icons.event_available_outlined,
-        title: 'Released to you',
+        title: '3. Released to you',
         text:
-            'Once your event\'s schedule date is over, the held amount is '
-            'released for payout. If the event is canceled, buyers are '
-            'refunded instead.',
+            'Once your event\u2019s schedule date is over, the held amount is '
+            'released for payout. If canceled, buyers are refunded instead.',
       ),
     ];
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: _OrganizerEscrowScreenState._cardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('How escrow works', style: AppTextStyles.h3),
-          const SizedBox(height: 16),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              if (constraints.maxWidth <= 760) {
-                return Column(
-                  children: [
-                    for (var i = 0; i < steps.length; i++) ...[
-                      if (i > 0) const SizedBox(height: 14),
-                      steps[i],
-                    ],
-                  ],
-                );
-              }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (var i = 0; i < steps.length; i++) ...[
-                    if (i > 0)
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(10, 14, 10, 0),
-                        child: Icon(
-                          Icons.arrow_forward_rounded,
-                          color: AppColors.textGray,
-                        ),
-                      ),
-                    Expanded(child: steps[i]),
-                  ],
+    final heading = Text(
+      'How escrow works',
+      style: orgText(p, size: 17, weight: FontWeight.w800, height: 1.3),
+    );
+
+    return OrganizerCard(
+      radius: 20,
+      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 26),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth <= 900) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                heading,
+                const SizedBox(height: 18),
+                for (var i = 0; i < steps.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 16),
+                  steps[i],
                 ],
-              );
-            },
-          ),
-        ],
+              ],
+            );
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 110,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 14),
+                  child: heading,
+                ),
+              ),
+              const SizedBox(width: 24),
+              for (var i = 0; i < steps.length; i++) ...[
+                if (i > 0)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+                    child: Icon(
+                      Icons.arrow_forward_rounded,
+                      size: 18,
+                      color: p.textSecondary,
+                    ),
+                  ),
+                Expanded(child: steps[i]),
+              ],
+            ],
+          );
+        },
       ),
     );
   }
 }
 
 class _FlowStep extends StatelessWidget {
-  final int number;
-  final IconData icon;
-  final String title;
-  final String text;
-
   const _FlowStep({
-    required this.number,
     required this.icon,
     required this.title,
     required this.text,
   });
 
+  final IconData icon;
+  final String title;
+  final String text;
+
   @override
   Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          width: 40,
-          height: 40,
+          width: 44,
+          height: 44,
           decoration: BoxDecoration(
-            color: AppColors.primaryPurple.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
+            color: p.primary.withValues(alpha: p.isDark ? 0.22 : 0.12),
+            borderRadius: BorderRadius.circular(12),
           ),
           alignment: Alignment.center,
-          child: Icon(icon, color: AppColors.primaryPurple, size: 20),
+          child: Icon(icon, color: p.accentLabel, size: 20),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 14),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('$number. $title', style: AppTextStyles.label),
+              Text(
+                title,
+                style: orgText(p, size: 14, weight: FontWeight.w700),
+              ),
               const SizedBox(height: 4),
               Text(
                 text,
-                style: const TextStyle(
-                  color: AppColors.textGray,
-                  fontSize: 12,
-                  height: 1.45,
+                style: orgText(
+                  p,
+                  size: 13,
+                  color: p.textSecondary,
+                  height: 1.5,
                 ),
               ),
             ],
@@ -412,9 +378,9 @@ class _FlowStep extends StatelessWidget {
 // ── Stat cards ─────────────────────────────────────────────────────────────
 
 class _StatRow extends StatelessWidget {
-  final List<_StatCard> cards;
-
   const _StatRow({required this.cards});
+
+  final List<_StatCard> cards;
 
   @override
   Widget build(BuildContext context) {
@@ -423,19 +389,23 @@ class _StatRow extends StatelessWidget {
         if (constraints.maxWidth <= 760) {
           return Column(
             children: [
-              for (final card in cards)
-                Padding(padding: const EdgeInsets.only(bottom: 16), child: card),
+              for (var i = 0; i < cards.length; i++) ...[
+                if (i > 0) const SizedBox(height: 16),
+                cards[i],
+              ],
             ],
           );
         }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (var i = 0; i < cards.length; i++) ...[
-              if (i > 0) const SizedBox(width: 16),
-              Expanded(child: cards[i]),
+        return IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < cards.length; i++) ...[
+                if (i > 0) const SizedBox(width: 20),
+                Expanded(child: cards[i]),
+              ],
             ],
-          ],
+          ),
         );
       },
     );
@@ -443,12 +413,6 @@ class _StatRow extends StatelessWidget {
 }
 
 class _StatCard extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final String note;
-  final Color? valueColor;
-
   const _StatCard({
     required this.icon,
     required this.label,
@@ -457,41 +421,62 @@ class _StatCard extends StatelessWidget {
     this.valueColor,
   });
 
+  final IconData icon;
+  final String label;
+  final String value;
+  final String note;
+  final Color? valueColor;
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: _OrganizerEscrowScreenState._cardDecoration(),
+    final p = FairTixPalette.of(context);
+
+    return OrganizerCard(
+      radius: 20,
+      padding: const EdgeInsets.all(24),
       child: Row(
         children: [
           Container(
-            width: 44,
-            height: 44,
+            width: 48,
+            height: 48,
             decoration: BoxDecoration(
-              color: AppColors.primaryPurple.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
+              color: p.primary.withValues(alpha: p.isDark ? 0.22 : 0.12),
+              borderRadius: BorderRadius.circular(14),
             ),
             alignment: Alignment.center,
-            child: Icon(icon, color: AppColors.primaryPurple, size: 22),
+            child: Icon(icon, color: p.accentLabel, size: 22),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 18),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: AppTextStyles.bodyGray, maxLines: 2),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: orgText(p, size: 13, color: p.textSecondary),
+                ),
                 const SizedBox(height: 2),
                 Text(
                   value,
-                  style: AppTextStyles.h2.copyWith(color: valueColor),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: orgText(
+                    p,
+                    size: 32,
+                    weight: FontWeight.w800,
+                    color: valueColor,
+                    letterSpacing: -0.6,
+                    height: 1.2,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   note,
-                  style: const TextStyle(
-                    color: AppColors.textGray,
-                    fontSize: 11,
-                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: orgText(p, size: 13, color: p.textSecondary),
                 ),
               ],
             ),
@@ -502,37 +487,230 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-// ── Status chip ────────────────────────────────────────────────────────────
+// ── Escrow by event table ──────────────────────────────────────────────────
 
-class _StageChip extends StatelessWidget {
-  final EscrowStage stage;
+class _EventsTable extends StatelessWidget {
+  const _EventsTable({required this.events});
 
-  const _StageChip({required this.stage});
+  final List<EscrowEventRow> events;
+
+  static const _headers = [
+    'EVENT',
+    'EVENT DATE',
+    'STATUS',
+    'TICKETS',
+    'IN ESCROW',
+    'RELEASED',
+    'RELEASE DATE',
+  ];
+
+  /// Column widths, matching the design.
+  static const _flex = [25, 19, 18, 14, 17, 16, 17];
+
+  /// Below this width the table scrolls sideways instead of squeezing.
+  static const double _minWidth = 980;
 
   @override
   Widget build(BuildContext context) {
-    final (label, color) = switch (stage) {
-      EscrowStage.held => ('In escrow', AppColors.warningOrange),
-      EscrowStage.partiallyReleased => (
-        'Partly released',
-        AppColors.primaryPurple,
+    final p = FairTixPalette.of(context);
+
+    if (events.isEmpty) {
+      return OrganizerCard(
+        radius: 20,
+        padding: const EdgeInsets.fromLTRB(24, 36, 24, 36),
+        child: Column(
+          children: [
+            Icon(Icons.lock_clock_outlined, size: 40, color: p.textSecondary),
+            const SizedBox(height: 12),
+            Text(
+              'No published events yet. Once a fan buys a ticket, the '
+              'payment appears here as held in escrow.',
+              textAlign: TextAlign.center,
+              style: orgText(p, size: 14, color: p.textSecondary),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return OrganizerCard(
+      radius: 20,
+      padding: EdgeInsets.zero,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final scrolls = constraints.maxWidth < _minWidth;
+            final table = SizedBox(
+              width: scrolls ? _minWidth : constraints.maxWidth,
+              child: Column(
+                children: [
+                  _row(
+                    [
+                      for (final h in _headers)
+                        Text(
+                          h,
+                          style: orgText(
+                            p,
+                            size: 11,
+                            weight: FontWeight.w700,
+                            color: p.textSecondary,
+                            letterSpacing: 1.2,
+                            height: 1.2,
+                          ),
+                        ),
+                    ],
+                    vertical: 18,
+                  ),
+                  for (final e in events) _eventRow(p, e),
+                ],
+              ),
+            );
+            return scrolls
+                ? SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: table,
+                  )
+                : table;
+          },
+        ),
       ),
-      EscrowStage.released => ('Released', AppColors.successGreen),
-      EscrowStage.refunded => ('Refunded', AppColors.dangerRed),
-      EscrowStage.noSales => ('No sales', AppColors.textGray),
-    };
+    );
+  }
+
+  Widget _row(
+    List<Widget> cells, {
+    double vertical = 20,
+    Border? border,
+  }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: EdgeInsets.symmetric(horizontal: 24, vertical: vertical),
+      decoration: BoxDecoration(border: border),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          for (var i = 0; i < cells.length; i++)
+            Expanded(
+              flex: _flex[i],
+              child: Align(alignment: Alignment.centerLeft, child: cells[i]),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _eventRow(FairTixPalette p, EscrowEventRow e) {
+    final body = orgText(p, size: 14, height: 1.3);
+    final dash = orgText(p, size: 14, color: p.textSecondary, height: 1.3);
+
+    return _row(
+      [
+        Padding(
+          padding: const EdgeInsets.only(right: 12),
+          child: Text(
+            e.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: orgText(p, size: 14, weight: FontWeight.w700, height: 1.3),
+          ),
+        ),
+        Text(_dateRange(e), style: body),
+        _StageChip(stage: e.stage),
+        Text('${e.ticketsSold}', style: body),
+        Text(
+          e.held > 0 ? _peso(e.held) : '\u2014',
+          style: e.held > 0
+              ? orgText(
+                  p,
+                  size: 14,
+                  weight: FontWeight.w700,
+                  color: _heldColor(p),
+                  height: 1.3,
+                )
+              : dash,
+        ),
+        Text(
+          e.released > 0 ? _peso(e.released) : '\u2014',
+          style: e.released > 0
+              ? orgText(
+                  p,
+                  size: 14,
+                  weight: FontWeight.w700,
+                  color: p.success,
+                  height: 1.3,
+                )
+              : dash,
+        ),
+        _releaseCell(p, e),
+      ],
+      border: Border(top: BorderSide(color: p.border)),
+    );
+  }
+
+  Widget _releaseCell(FairTixPalette p, EscrowEventRow e) {
+    final date = e.releaseDate;
+    if (e.held > 0 && date != null) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _formatDate(date),
+            style: orgText(p, size: 14, weight: FontWeight.w600, height: 1.3),
+          ),
+          Text(
+            _countdown(date),
+            style: orgText(p, size: 12, color: p.textSecondary, height: 1.3),
+          ),
+        ],
+      );
+    }
+    if (e.released > 0) {
+      return Text(
+        'Released',
+        style: orgText(p, size: 14, color: p.textSecondary, height: 1.3),
+      );
+    }
+    return Text(
+      '\u2014',
+      style: orgText(p, size: 14, color: p.textSecondary, height: 1.3),
+    );
+  }
+}
+
+// ── Status chip ────────────────────────────────────────────────────────────
+
+class _StageChip extends StatelessWidget {
+  const _StageChip({required this.stage});
+
+  final EscrowStage stage;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
+
+    final (label, color) = switch (stage) {
+      EscrowStage.held => ('In escrow', _heldColor(p)),
+      EscrowStage.partiallyReleased => ('Partly released', p.accentLabel),
+      EscrowStage.released => ('Released', p.success),
+      EscrowStage.refunded => ('Refunded', p.danger),
+      EscrowStage.noSales => ('No sales', p.textSecondary),
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: color.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         label,
-        style: TextStyle(
+        style: orgText(
+          p,
+          size: 12,
+          weight: FontWeight.w700,
           color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
+          height: 1.2,
         ),
       ),
     );

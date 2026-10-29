@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'app_colors.dart';
+import '../../theme/fairtix_palette.dart';
 import '../../models/organizer_event.dart';
 import '../../services/access_control.dart';
 import '../../services/event_repository.dart';
@@ -404,9 +405,9 @@ class _OrganizerCreateEventScreenState
             children: [
               TextButton(
                 onPressed: _isSubmitting ? null : () => Navigator.pop(context),
-                child: const Text(
+                child: Text(
                   'Cancel',
-                  style: TextStyle(color: AppColors.textDark),
+                  style: TextStyle(color: FairTixPalette.of(context).textPrimary),
                 ),
               ),
               const SizedBox(width: 8),
@@ -470,15 +471,17 @@ class _OrganizerCreateEventScreenState
         ? today
         : requestedFirstDate;
     final initialDate = pickerFirstDate;
+    final p = FairTixPalette.of(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: AppTextStyles.label),
+        Text(label, style: AppTextStyles.label.copyWith(color: p.textPrimary)),
         const SizedBox(height: 8),
         TextField(
           controller: controller,
           readOnly: true,
+          style: AppTextStyles.body.copyWith(color: p.textPrimary),
           enabled: !_isSubmitting,
           onTap: () async {
             final date = await showDatePicker(
@@ -494,26 +497,26 @@ class _OrganizerCreateEventScreenState
           },
           decoration: InputDecoration(
             hintText: 'Select Date',
-            hintStyle: AppTextStyles.bodyGray,
+            hintStyle: AppTextStyles.bodyGray.copyWith(color: p.textSecondary),
             errorText: errorKey == null ? null : _errors[errorKey],
-            prefixIcon: const Icon(
+            prefixIcon: Icon(
               Icons.calendar_today_outlined,
               size: 18,
-              color: AppColors.textGray,
+              color: p.textSecondary,
             ),
             filled: true,
-            fillColor: Colors.white,
+            fillColor: p.surface,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
               vertical: 14,
             ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.borderLight),
+              borderSide: BorderSide(color: p.border),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.borderLight),
+              borderSide: BorderSide(color: p.border),
             ),
           ),
         ),
@@ -522,6 +525,7 @@ class _OrganizerCreateEventScreenState
   }
 
   Widget _leftColumn() {
+    final p = FairTixPalette.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -538,7 +542,10 @@ class _OrganizerCreateEventScreenState
                 onChanged: (_) => _clearError('name'),
               ),
               const SizedBox(height: 18),
-              const Text('Event Duration *', style: AppTextStyles.label),
+              Text(
+                'Event Duration *',
+                style: AppTextStyles.label.copyWith(color: p.textPrimary),
+              ),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -558,10 +565,10 @@ class _OrganizerCreateEventScreenState
                         fontWeight: FontWeight.w600,
                         color: _span == EventSpan.singleDay
                             ? Colors.white
-                            : AppColors.textGray,
+                            : p.textSecondary,
                       ),
                       selectedColor: AppColors.primaryPurple,
-                      backgroundColor: const Color(0xFFF0EEFA),
+                      backgroundColor: p.progressTrack,
                       side: BorderSide.none,
                       showCheckmark: false,
                     ),
@@ -579,10 +586,10 @@ class _OrganizerCreateEventScreenState
                         fontWeight: FontWeight.w600,
                         color: _span == EventSpan.multiDay
                             ? Colors.white
-                            : AppColors.textGray,
+                            : p.textSecondary,
                       ),
                       selectedColor: AppColors.primaryPurple,
-                      backgroundColor: const Color(0xFFF0EEFA),
+                      backgroundColor: p.progressTrack,
                       side: BorderSide.none,
                       showCheckmark: false,
                     ),
@@ -594,7 +601,10 @@ class _OrganizerCreateEventScreenState
                 Text(
                   'One event page is generated per day, each with its own '
                   'ticket inventory.',
-                  style: AppTextStyles.bodyGray.copyWith(fontSize: 11),
+                  style: AppTextStyles.bodyGray.copyWith(
+                    fontSize: 11,
+                    color: p.textSecondary,
+                  ),
                 ),
               ],
               const SizedBox(height: 18),
@@ -653,29 +663,30 @@ class _OrganizerCreateEventScreenState
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Description', style: AppTextStyles.label),
+                  Text(
+                    'Description',
+                    style: AppTextStyles.label.copyWith(color: p.textPrimary),
+                  ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: _descriptionController,
                     maxLines: 4,
-                    style: AppTextStyles.body,
+                    style: AppTextStyles.body.copyWith(color: p.textPrimary),
                     decoration: InputDecoration(
                       hintText: 'Tell attendees about your event...',
-                      hintStyle: AppTextStyles.bodyGray,
+                      hintStyle: AppTextStyles.bodyGray.copyWith(
+                        color: p.textSecondary,
+                      ),
                       filled: true,
-                      fillColor: Colors.white,
+                      fillColor: p.surface,
                       contentPadding: const EdgeInsets.all(16),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(
-                          color: AppColors.borderLight,
-                        ),
+                        borderSide: BorderSide(color: p.border),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(
-                          color: AppColors.borderLight,
-                        ),
+                        borderSide: BorderSide(color: p.border),
                       ),
                     ),
                   ),
@@ -766,6 +777,7 @@ class _OrganizerCreateEventScreenState
   }
 
   Widget _rightColumn() {
+    final p = FairTixPalette.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -804,7 +816,7 @@ class _OrganizerCreateEventScreenState
                 : Container(
                     height: 150,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF5F3FF),
+                      color: p.progressTrack,
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
                         color: AppColors.primaryPurple.withValues(alpha: 0.4),
@@ -831,7 +843,10 @@ class _OrganizerCreateEventScreenState
                         const SizedBox(height: 4),
                         Text(
                           '16:9 aspect ratio recommended',
-                          style: AppTextStyles.bodyGray.copyWith(fontSize: 12),
+                          style: AppTextStyles.bodyGray.copyWith(
+                            fontSize: 12,
+                            color: p.textSecondary,
+                          ),
                         ),
                       ],
                     ),
@@ -847,7 +862,10 @@ class _OrganizerCreateEventScreenState
               if (_documents.isEmpty)
                 Text(
                   'Required to publish: venue contract, permit, or other proof.',
-                  style: AppTextStyles.bodyGray.copyWith(fontSize: 12),
+                  style: AppTextStyles.bodyGray.copyWith(
+                    fontSize: 12,
+                    color: p.textSecondary,
+                  ),
                 )
               else
                 for (var i = 0; i < _documents.length; i++) ...[
@@ -857,22 +875,24 @@ class _OrganizerCreateEventScreenState
                       vertical: 12,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF9FAFB),
+                      color: p.background,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.description_outlined,
                           size: 18,
-                          color: AppColors.textGray,
+                          color: p.textSecondary,
                         ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             _documents[i].fileName,
                             overflow: TextOverflow.ellipsis,
-                            style: AppTextStyles.label,
+                            style: AppTextStyles.label.copyWith(
+                              color: p.textPrimary,
+                            ),
                           ),
                         ),
                         InkWell(
@@ -909,12 +929,13 @@ class _OrganizerCreateEventScreenState
     required Widget child,
     Widget? headerTrailing,
   }) {
+    final p = FairTixPalette.of(context);
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: p.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.borderLight),
+        border: Border.all(color: p.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -923,9 +944,7 @@ class _OrganizerCreateEventScreenState
             builder: (context, constraints) {
               final titleWidget = Text(
                 title,
-                style: AppTextStyles.h3.copyWith(
-                  color: AppColors.primaryPurple,
-                ),
+                style: AppTextStyles.h3.copyWith(color: p.accentLabel),
               );
               if (headerTrailing == null) return titleWidget;
               if (constraints.maxWidth < 440) {

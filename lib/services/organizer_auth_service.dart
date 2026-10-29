@@ -409,12 +409,71 @@ class OrganizerAuthService {
     }
   }
 
+  /// Emails a 6-digit password-reset code to [email] (Forgot password).
+  ///
+  /// The Supabase "Reset password" email template must use `{{ .Token }}`
+  /// (not `{{ .ConfirmationURL }}`) so the email carries a code the organizer
+  /// can type in, the same setup as the signup confirmation code.
+  Future<void> sendPasswordResetCode({required String email}) async {
+    try {
+      await Supabase.instance.client.auth.resetPasswordForEmail(
+        email.trim().toLowerCase(),
+      );
+    } on AuthException catch (e) {
+      throw OrganizerAuthException(e.message);
+    }
+  }
+
+  /// Checks the emailed reset code, sets [newPassword], then signs out so the
+  /// organizer logs in normally with the new password.
+  Future<void> resetPasswordWithCode({
+    required String email,
+    required String token,
+    required String newPassword,
+  }) async {
+    final client = Supabase.instance.client;
+    try {
+      await client.auth.verifyOTP(
+        type: OtpType.recovery,
+        email: email.trim().toLowerCase(),
+        token: token.trim(),
+      );
+      await client.auth.updateUser(UserAttributes(password: newPassword));
+    } on AuthException catch (e) {
+      throw OrganizerAuthException(e.message);
+    } finally {
+      // The code signs the user in; never leave that session behind.
+      try {
+        await client.auth.signOut();
+      } catch (_) {}
+    }
+  }
+
   void logout() {
     // Stop listening for this account's notifications. Fire-and-forget so
     // logging out stays instant, exactly as before.
     unawaited(PushService.instance.unregister());
     OrganizerSession.instance.signOut();
     Supabase.instance.client.auth.signOut();
+  }
+
+  /// Moves a REJECTED application back to 'pending' for another admin review
+  /// (`resubmit_organizer_application`, supabase/organizer_resubmit.sql). Call
+  /// after both documents were re-uploaded. Returns the refreshed account.
+  Future<OrganizerAccount?> resubmitApplication() async {
+    try {
+      await Supabase.instance.client.rpc('resubmit_organizer_application');
+    } on PostgrestException catch (e) {
+      // PGRST202 = function missing: the SQL file has not been run yet.
+      if (e.code == 'PGRST202') {
+        throw const OrganizerAuthException(
+          'Resubmission is not set up yet: run supabase/organizer_resubmit.sql '
+          'in the Supabase SQL Editor first.',
+        );
+      }
+      throw OrganizerAuthException(e.message);
+    }
+    return refreshAccount();
   }
 
   /// Whether the Supabase client currently holds an authenticated

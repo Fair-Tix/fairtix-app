@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
+import '../../theme/fairtix_palette.dart';
 import 'organizer-scaffold.dart';
 import 'organizer-my-events.dart';
 
@@ -15,6 +16,7 @@ class OrganizerEventCancelledScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
     return OrganizerScaffold(
       pageTitle: 'Event Cancelled',
       activeItem: OrganizerNavItem.myEvents,
@@ -24,9 +26,9 @@ class OrganizerEventCancelledScreen extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(40),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: p.surface,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.borderLight),
+              border: Border.all(color: p.border),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -43,9 +45,9 @@ class OrganizerEventCancelledScreen extends StatelessWidget {
                       color: AppColors.dangerRed, size: 32),
                 ),
                 const SizedBox(height: 22),
-                const Text(
+                Text(
                   'Event Cancelled',
-                  style: AppTextStyles.h1,
+                  style: AppTextStyles.h1.copyWith(color: p.textPrimary),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 10),
@@ -53,7 +55,10 @@ class OrganizerEventCancelledScreen extends StatelessWidget {
                   'The event has been successfully cancelled. Refund '
                   'requests have been queued for processing.',
                   textAlign: TextAlign.center,
-                  style: AppTextStyles.bodyGray.copyWith(height: 1.5),
+                  style: AppTextStyles.bodyGray.copyWith(
+                    height: 1.5,
+                    color: p.textSecondary,
+                  ),
                 ),
                 const SizedBox(height: 26),
                 Container(
@@ -61,17 +66,17 @@ class OrganizerEventCancelledScreen extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF9FAFB),
+                    color: p.background,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
                     children: [
-                      _infoRow('Event ID', eventId),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 10),
-                        child: Divider(height: 1, color: AppColors.borderLight),
+                      _infoRow(p, 'Event ID', eventId),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: Divider(height: 1, color: p.border),
                       ),
-                      _infoRow('Total Refunds', totalRefunds),
+                      _infoRow(p, 'Total Refunds', totalRefunds),
                     ],
                   ),
                 ),
@@ -97,12 +102,15 @@ class OrganizerEventCancelledScreen extends StatelessWidget {
     );
   }
 
-  Widget _infoRow(String label, String value) {
+  Widget _infoRow(FairTixPalette p, String label, String value) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: AppTextStyles.bodyGray),
-        Text(value, style: AppTextStyles.label),
+        Text(
+          label,
+          style: AppTextStyles.bodyGray.copyWith(color: p.textSecondary),
+        ),
+        Text(value, style: AppTextStyles.label.copyWith(color: p.textPrimary)),
       ],
     );
   }

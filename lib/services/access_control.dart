@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../models/app_user.dart';
 import '../models/organizer.dart';
+import '../screens/organizer/organizer-document-upload.dart';
 import '../screens/organizer/organizer-subscription-plan.dart';
 import '../screens/user/identity_verification_screen.dart';
 import 'organizer_auth_service.dart';
 import 'organizer_session.dart';
+import 'support_contact.dart';
 import 'user_auth_service.dart';
 import 'user_session.dart';
 
@@ -51,7 +53,9 @@ String? organizerLockMessage(
   if (account == null || !account.isApproved) {
     if (account != null && account.idVerificationStatus == 'rejected') {
       return 'Your organizer application was rejected, so this feature is locked. '
-          'Please contact FairTix support. You can still browse events.';
+          'Re-upload your documents to resubmit it for review'
+          '${FairTixSupport.isAvailable ? ', or contact FairTix support' : ''}. '
+          'You can still browse events.';
     }
     return 'Your organizer application is waiting for admin approval (usually 24\u201348 hours). '
         'This feature unlocks once you are approved. You can keep browsing events in the meantime.';
@@ -144,6 +148,7 @@ Future<bool> ensureOrganizerAccess(
   final canFixWithPlan = account != null &&
       account.isApproved &&
       requirement == OrganizerRequirement.subscription;
+  final rejected = account != null && account.idVerificationStatus == 'rejected';
   await showDialog<void>(
     context: context,
     builder: (dialogContext) => AlertDialog(
@@ -160,6 +165,33 @@ Future<bool> ensureOrganizerAccess(
           onPressed: () => Navigator.pop(dialogContext),
           child: const Text('Close'),
         ),
+        if (rejected && FairTixSupport.isAvailable)
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              FairTixSupport.compose(
+                subject: 'Rejected organizer application',
+                body: 'Organization: ${account!.organizationName}\n'
+                    'Account email: ${account.email}\n\n',
+              );
+            },
+            child: const Text('Contact support'),
+          ),
+        if (rejected)
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => OrganizerDocumentUploadScreen(
+                    account: account!,
+                    resubmit: true,
+                  ),
+                ),
+              );
+            },
+            child: const Text('Resubmit documents'),
+          ),
         if (canFixWithPlan)
           FilledButton(
             onPressed: () {

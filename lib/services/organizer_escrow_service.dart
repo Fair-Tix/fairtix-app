@@ -78,11 +78,65 @@ class EscrowEventRow {
   }
 }
 
+/// One ticket tier's real sales for an event (`organizer_tier_sales`): net of
+/// refunds, with the gross and platform fee actually charged on each purchase.
+class TierSalesRow {
+  final String eventId;
+  final String tierName;
+  final int sold;
+  final double gross;
+  final double fees;
+  final int refundedTickets;
+  final double refunded;
+
+  const TierSalesRow({
+    required this.eventId,
+    required this.tierName,
+    required this.sold,
+    required this.gross,
+    required this.fees,
+    required this.refundedTickets,
+    required this.refunded,
+  });
+
+  /// The organizer's share: what buyers paid minus FairTix's fee.
+  double get net => gross - fees;
+
+  /// Key used to look a tier up: `eventId|tierName`.
+  static String keyFor(String eventId, String tierName) =>
+      '$eventId|$tierName';
+
+  factory TierSalesRow.fromRow(Map<String, dynamic> row) {
+    double money(String key) => (row[key] as num?)?.toDouble() ?? 0;
+    return TierSalesRow(
+      eventId: '${row['event_id']}',
+      tierName: (row['tier_name'] as String?) ?? '',
+      sold: (row['tickets_sold'] as num?)?.toInt() ?? 0,
+      gross: money('gross_amount'),
+      fees: money('platform_fees'),
+      refundedTickets: (row['refunded_tickets'] as num?)?.toInt() ?? 0,
+      refunded: money('refunded_amount'),
+    );
+  }
+}
+
 /// All of the organizer's events plus the totals shown at the top.
 class EscrowOverview {
   final List<EscrowEventRow> events;
 
   const EscrowOverview(this.events);
+
+  /// Tickets sold across all events, net of refunds.
+  int get totalTicketsSold => events.fold(0, (sum, e) => sum + e.ticketsSold);
+  int get totalRefundedTickets =>
+      events.fold(0, (sum, e) => sum + e.refundedTickets);
+
+  /// What buyers paid for tickets that were not refunded.
+  double get totalGross => events.fold(0.0, (sum, e) => sum + e.gross);
+
+  /// The organizer's share of those sales (gross minus fees actually charged):
+  /// always held + released.
+  double get totalNet => events.fold(0.0, (sum, e) => sum + e.net);
 
   double get totalHeld => events.fold(0.0, (sum, e) => sum + e.held);
   double get totalReleased => events.fold(0.0, (sum, e) => sum + e.released);
@@ -137,6 +191,25 @@ class OrganizerEscrowService {
         );
       }
       throw OrganizerEscrowException('Could not load escrow: ${e.message}');
+    }
+  }
+
+  /// Per-tier sales for the Analytics screen, keyed by
+  /// [TierSalesRow.keyFor]. Returns null when `organizer_tier_sales` has not
+  /// been installed yet (re-run supabase/organizer_escrow.sql) or cannot be
+  /// read, so the caller can fall back instead of showing invented numbers.
+  Future<Map<String, TierSalesRow>?> fetchTierSales() async {
+    try {
+      final rows =
+          await Supabase.instance.client.rpc('organizer_tier_sales') as List;
+      final result = <String, TierSalesRow>{};
+      for (final row in rows.cast<Map<String, dynamic>>()) {
+        final tier = TierSalesRow.fromRow(row);
+        result[TierSalesRow.keyFor(tier.eventId, tier.tierName)] = tier;
+      }
+      return result;
+    } catch (_) {
+      return null;
     }
   }
 }

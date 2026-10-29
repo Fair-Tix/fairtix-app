@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../models/organizer_event.dart';
 import '../../services/access_control.dart';
@@ -11,13 +13,15 @@ import '../../theme/fairtix_palette.dart';
 import '../../widgets/organizer_ui.dart';
 import 'organizer-scaffold.dart';
 
-/// Scanner Session (Mahilum design): pick an event, generate a session link
-/// and 4-digit PIN for entry staff, and manage the active sessions.
+/// Scanner Session (Mahilum design): pick an event, generate a session PIN,
+/// a shareable scanner link and a QR code for entry staff, and manage the
+/// active sessions.
 ///
 /// Generating a session calls `generate_scanner_session`, which revokes any
 /// earlier live session for the same event, so a session is only created when
-/// the organizer presses "Generate Session Link". Entry staff open the Staff
-/// PIN screen and type the PIN (see lib/screens/staff/).
+/// the organizer presses "Generate Session PIN". Entry staff either type the
+/// PIN on the Staff PIN screen or open the link / scan the QR code, which
+/// opens that same screen with the PIN filled in (see lib/screens/staff/).
 class OrganizerScannerSessionScreen extends StatefulWidget {
   final String eventId;
 
@@ -92,7 +96,33 @@ class _OrganizerScannerSessionScreenState
       }
     }
     if (!mounted) return;
+    await _loadLiveSessions();
+    if (!mounted) return;
     _loadEvents();
+  }
+
+  /// Brings back the organizer's still-live sessions from the server, so they
+  /// can be seen and revoked even after leaving and reopening this page.
+  Future<void> _loadLiveSessions() async {
+    try {
+      final live = await ScannerRepository.instance.fetchMySessions();
+      if (!mounted) return;
+      setState(() {
+        _sessions
+          ..clear()
+          ..addAll([
+            for (final s in live)
+              _SessionEntry(
+                session: s.session,
+                eventName: s.eventTitle,
+                createdAt: s.createdAt,
+              ),
+          ]);
+      });
+      if (_sessions.isNotEmpty) _startActivityPolling();
+    } on ScannerRepositoryException {
+      // Not fatal: sessions made on this visit are still listed.
+    }
   }
 
   void _loadEvents() {
@@ -324,7 +354,7 @@ class _OrganizerScannerSessionScreenState
           ],
           const SizedBox(height: 22),
           OrganizerPrimaryButton(
-            label: 'Generate Session Link',
+            label: 'Generate Session PIN',
             loading: _generating,
             onPressed: _selectedEventId == null ? null : _generate,
             height: 52,
@@ -393,49 +423,15 @@ class _OrganizerScannerSessionScreenState
       content = Padding(
         padding: const EdgeInsets.symmetric(vertical: 28),
         child: Text(
-          'Generate a session link to get a PIN you can share with your '
+          'Generate a session to get a PIN you can share with your '
           'entry staff.',
           style: orgText(p, size: 14, color: p.textSecondary, height: 1.5),
         ),
       );
     } else {
-      final link = '.../scan/${current.session.token}';
       final details = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const OrganizerFieldLabel('Session link'),
-          const SizedBox(height: 8),
-          Container(
-            height: 54,
-            padding: const EdgeInsets.only(left: 18, right: 8),
-            decoration: BoxDecoration(
-              color: p.surface,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: p.border),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    link,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: orgText(p, size: 14),
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Copy link',
-                  onPressed: () => _copy(link, 'Link copied.'),
-                  icon: Icon(
-                    Icons.copy_rounded,
-                    size: 18,
-                    color: p.accentLabel,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 22),
           Row(
             children: [
               const OrganizerFieldLabel('4-digit PIN'),
@@ -488,27 +484,16 @@ class _OrganizerScannerSessionScreenState
           ),
           const SizedBox(height: 14),
           Text(
-            'Send the PIN separately from the link.',
-            style: orgText(p, size: 14, color: p.textSecondary),
+            'Entry staff open FairTix, choose "Entry Staff?" on the sign-in '
+            'screen, and type this PIN \u2014 or use the link or QR code below. '
+            'It stops working when the event ends or when you revoke it.',
+            style: orgText(p, size: 14, color: p.textSecondary, height: 1.5),
           ),
+          ..._linkSection(p, current.session.pin),
         ],
       );
 
-      final qr = _QrPlaceholder(p: p);
-
-      content = wide
-          ? Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(child: details),
-                const SizedBox(width: 24),
-                qr,
-              ],
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [details, const SizedBox(height: 24), qr],
-            );
+      content = details;
     }
 
     return OrganizerCard(
@@ -759,6 +744,84 @@ class _OrganizerScannerSessionScreenState
 
   // --- helpers -------------------------------------------------------------
 
+  /// The link entry staff open to reach the PIN screen with [pin] filled in,
+  /// built from the address this web app is served from. Null when that
+  /// address isn't a real http(s) one (e.g. not running on the web), so no
+  /// fake link is ever shown.
+  String? _scannerLink(String pin) {
+    if (!kIsWeb) return null;
+    final base = Uri.base;
+    if (base.scheme != 'http' && base.scheme != 'https') return null;
+    return '${base.origin}${base.path}#/StaffPinEntryScreen?pin=$pin';
+  }
+
+  List<Widget> _linkSection(FairTixPalette p, String pin) {
+    final link = _scannerLink(pin);
+    if (link == null) return const [];
+
+    return [
+      const SizedBox(height: 22),
+      const OrganizerFieldLabel('Scanner link'),
+      const SizedBox(height: 8),
+      Container(
+        padding: const EdgeInsets.fromLTRB(16, 4, 6, 4),
+        decoration: BoxDecoration(
+          color: p.background,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: p.border),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                link,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: orgText(p, size: 13, color: p.textSecondary),
+              ),
+            ),
+            TextButton.icon(
+              onPressed: () => _copy(link, 'Scanner link copied.'),
+              icon: Icon(Icons.copy_rounded, size: 16, color: p.accentLabel),
+              label: Text(
+                'Copy Link',
+                style: orgText(
+                  p,
+                  size: 13,
+                  weight: FontWeight.w700,
+                  color: p.accentLabel,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 18),
+      const OrganizerFieldLabel('QR code'),
+      const SizedBox(height: 8),
+      Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: p.border),
+        ),
+        child: QrImageView(
+          data: link,
+          size: 168,
+          backgroundColor: Colors.white,
+          errorCorrectionLevel: QrErrorCorrectLevel.M,
+        ),
+      ),
+      const SizedBox(height: 10),
+      Text(
+        'Anyone with this link or QR code can scan for this event until the '
+        'session ends or is revoked. Share it only with entry staff.',
+        style: orgText(p, size: 13, color: p.textSecondary, height: 1.5),
+      ),
+    ];
+  }
+
   Future<void> _copy(String text, String message) async {
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
@@ -793,62 +856,4 @@ class _OrganizerScannerSessionScreenState
     final period = l.hour >= 12 ? 'PM' : 'AM';
     return '$hour12:$minute:$second $period';
   }
-}
-
-/// Dashed box standing in for the link's QR code (as in the design).
-class _QrPlaceholder extends StatelessWidget {
-  const _QrPlaceholder({required this.p});
-
-  final FairTixPalette p;
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: _DashedRRectPainter(color: p.border, radius: 20),
-      child: Container(
-        width: 150,
-        height: 150,
-        alignment: Alignment.center,
-        padding: const EdgeInsets.all(12),
-        child: Text(
-          'QR code for the link',
-          textAlign: TextAlign.center,
-          style: orgText(p, size: 13, color: p.textSecondary),
-        ),
-      ),
-    );
-  }
-}
-
-class _DashedRRectPainter extends CustomPainter {
-  const _DashedRRectPainter({required this.color, required this.radius});
-
-  final Color color;
-  final double radius;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2;
-    final path = Path()
-      ..addRRect(
-        RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)),
-      );
-    const dash = 5.0;
-    const gap = 4.0;
-    for (final metric in path.computeMetrics()) {
-      var d = 0.0;
-      while (d < metric.length) {
-        final end = (d + dash).clamp(0.0, metric.length).toDouble();
-        canvas.drawPath(metric.extractPath(d, end), paint);
-        d += dash + gap;
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_DashedRRectPainter old) =>
-      old.color != color || old.radius != radius;
 }

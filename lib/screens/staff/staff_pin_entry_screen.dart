@@ -20,7 +20,11 @@ import 'staff_qr_scan_screen.dart';
 /// The design shows the event name as the title. The event is only known once
 /// the PIN has been validated, so this screen uses a generic title instead.
 class StaffPinEntryScreen extends StatefulWidget {
-  const StaffPinEntryScreen({super.key});
+  /// A PIN carried by a scanner link / QR code the organizer shared. When it
+  /// is a valid 4-digit PIN it is entered and submitted automatically.
+  final String? initialPin;
+
+  const StaffPinEntryScreen({super.key, this.initialPin});
 
   @override
   State<StaffPinEntryScreen> createState() => _StaffPinEntryScreenState();
@@ -32,6 +36,18 @@ class _StaffPinEntryScreenState extends State<StaffPinEntryScreen> {
   String _pin = '';
   bool _isSubmitting = false;
   String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    final linked = widget.initialPin;
+    if (linked != null && RegExp(r'^\d{4}$').hasMatch(linked)) {
+      _pin = linked;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _handleSubmit();
+      });
+    }
+  }
 
   void _addDigit(String digit) {
     if (_isSubmitting || _pin.length >= _pinLength) return;

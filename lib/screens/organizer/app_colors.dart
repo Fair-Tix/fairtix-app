@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/fairtix_palette.dart';
+
 /// Formats a [DateTime] as e.g. "Jul 25, 2026" for display across the
 /// organizer screens (profile, subscription, etc.) without pulling in the
 /// `intl` package for a single use case.
@@ -232,10 +234,15 @@ class AppTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Theme-aware so the field is readable in dark mode too.
+    final p = FairTixPalette.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: AppTextStyles.label),
+        Text(
+          label,
+          style: AppTextStyles.label.copyWith(color: p.textPrimary),
+        ),
         const SizedBox(height: 8),
         TextField(
           controller: controller,
@@ -243,10 +250,10 @@ class AppTextField extends StatelessWidget {
           keyboardType: keyboardType,
           enabled: enabled,
           onChanged: onChanged,
-          style: AppTextStyles.body,
+          style: AppTextStyles.body.copyWith(color: p.textPrimary),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: AppTextStyles.bodyGray,
+            hintStyle: AppTextStyles.bodyGray.copyWith(color: p.textSecondary),
             errorText: errorText,
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
@@ -258,20 +265,20 @@ class AppTextField extends StatelessWidget {
             ),
             prefixIcon: prefixIcon,
             filled: true,
-            fillColor: enabled ? Colors.white : const Color(0xFFF3F4F6),
+            fillColor: enabled ? p.surface : p.background,
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.borderLight),
+              borderSide: BorderSide(color: p.border),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.borderLight),
+              borderSide: BorderSide(color: p.border),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.primaryPurple),
+              borderSide: BorderSide(color: p.accentLabel),
             ),
           ),
         ),

@@ -65,17 +65,74 @@ begin
     -- (trg_notify_event_canceled) already tells the organizer and every holder,
     -- and trg_notify_transaction sends "Refund issued" when the admin
     -- processes the refund, so adding one here would send it twice.
-    insert into public.refunds (transaction_id, ticket_id, buyer_id, event_id, amount)
-    select tr.transaction_id, tr.ticket_id, tr.buyer_id, e.event_id, tr.amount
-    from public.transactions tr
-    join public.tickets t       on t.ticket_id = tr.ticket_id
-    join public.ticket_tiers tt on tt.tier_id = t.tier_id
-    join public.events e        on e.event_id = tt.event_id
-    where (e.event_id = new.event_id or e.parent_event_id = new.event_id)
-      and tr.transaction_type = 'purchase'
-      and tr.status = 'completed'
-      and t.ticket_status <> 'used'
+    -- Refunds are AUTOMATIC (no admin step). One refund row per ticket:
+    -- the buyer's latest completed transaction for it, so a resold ticket is
+    -- refunded to its CURRENT holder (the resale payment), not to the original
+    -- purchaser. Tickets already scanned ('used') are not refunded. Money
+    -- already released to an earlier seller is not clawed back.
+    insert into public.refunds
+      (transaction_id, ticket_id, buyer_id, event_id, amount, status, processed_at)
+    select x.transaction_id, x.ticket_id, x.buyer_id, x.event_id, x.amount,
+           'processed', now()
+    from (
+      select distinct on (t.ticket_id)
+             tr.transaction_id, tr.ticket_id, tr.buyer_id, e.event_id, tr.amount
+      from public.transactions tr
+      join public.tickets t       on t.ticket_id = tr.ticket_id
+      join public.ticket_tiers tt on tt.tier_id = t.tier_id
+      join public.events e        on e.event_id = tt.event_id
+      where (e.event_id = new.event_id or e.parent_event_id = new.event_id)
+        and tr.transaction_type in ('purchase', 'resale')
+        and tr.status = 'completed'
+        and t.ticket_status <> 'used'
+      order by t.ticket_id,
+               (tr.transaction_type = 'resale') desc,
+               tr.created_at desc
+    ) x
     on conflict (transaction_id) do nothing;
+
+    -- The organizer is never paid for a canceled event's tickets: close the
+    -- original purchase escrow and withhold its fee. If the ticket was
+    -- resold, the purchase keeps status 'completed' (its buyer got paid by
+    -- the resale) so that buyer is not told a refund was issued to them.
+    with closed as (
+      update public.transactions tr
+         set escrow_status = 'refunded',
+             status = case
+               when exists (
+                 select 1 from public.transactions rs
+                  where rs.ticket_id = tr.ticket_id
+                    and rs.transaction_type = 'resale'
+                    and rs.status in ('completed', 'refunded')
+               ) then tr.status
+               else 'refunded'
+             end
+        from public.tickets t, public.ticket_tiers tt, public.events e
+       where tr.ticket_id = t.ticket_id
+         and tt.tier_id = t.tier_id
+         and e.event_id = tt.event_id
+         and (e.event_id = new.event_id or e.parent_event_id = new.event_id)
+         and tr.transaction_type = 'purchase'
+         and tr.escrow_status = 'held'
+         and t.ticket_status <> 'used'
+      returning tr.transaction_id
+    )
+    update public.organizer_fees f
+       set status = 'withheld'
+     where f.transaction_id in (select transaction_id from closed);
+
+    -- Every refunded transaction becomes 'refunded' (a resale payment for a
+    -- resold ticket; plain purchases were already closed above). This fires
+    -- the existing "Refund issued" notification to the refunded buyer.
+    update public.transactions tr
+       set status = 'refunded', escrow_status = 'refunded'
+      from public.refunds r
+     where r.transaction_id = tr.transaction_id
+       and tr.status = 'completed'
+       and r.event_id in (
+         select e.event_id from public.events e
+          where e.event_id = new.event_id or e.parent_event_id = new.event_id
+       );
 
     -- Cancel any active resale listings for the event's tickets...
     update public.resale_listings rl
@@ -142,3 +199,23 @@ $$;
 
 revoke all on function public.admin_process_refund(uuid) from public, anon;
 grant execute on function public.admin_process_refund(uuid) to authenticated;
+
+-- ── One-time backfill: refunds are now automatic ────────────────────────
+-- Refunds created before this change are still 'pending'. Process them the
+-- same way the trigger now does. Safe to re-run (only touches pending rows).
+update public.transactions tr
+   set status = 'refunded', escrow_status = 'refunded'
+  from public.refunds r
+ where r.status = 'pending'
+   and r.transaction_id = tr.transaction_id
+   and tr.status = 'completed';
+
+update public.organizer_fees f
+   set status = 'withheld'
+  from public.refunds r
+ where r.status = 'pending'
+   and r.transaction_id = f.transaction_id;
+
+update public.refunds
+   set status = 'processed', processed_at = now()
+ where status = 'pending';

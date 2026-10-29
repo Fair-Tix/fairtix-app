@@ -8,6 +8,7 @@ import '../../widgets/fairtix_mark.dart';
 import '../../widgets/theme_mode_switch.dart';
 import '../../widgets/top_glow_background.dart';
 import 'organizer-document-upload.dart';
+import 'organizer-forgot-password.dart';
 import 'organizer-register.dart';
 import 'organizer-dashboard.dart';
 import 'organizer-subscription-plan.dart';
@@ -73,6 +74,20 @@ class _OrganizerLoginScreenState extends State<OrganizerLoginScreen> {
     //  - approved, plan expired -> Dashboard; login is never blocked, only the
     //    subscription features lock until they renew
     //  - approved, has plan -> straight into the Dashboard
+    if (account.idVerificationStatus == 'rejected') {
+      // Rejected: offer to re-upload both documents and resubmit (the screen
+      // also has a browse-only skip and the support contact).
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              OrganizerDocumentUploadScreen(account: account, resubmit: true),
+        ),
+        (route) => false,
+      );
+      return;
+    }
+
     if (!account.hasSubmittedDocuments) {
       Navigator.pushAndRemoveUntil(
         context,
@@ -127,10 +142,9 @@ class _OrganizerLoginScreenState extends State<OrganizerLoginScreen> {
   }
 
   void _showForgotPassword() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Password reset is coming soon. Please contact support.'),
-      ),
+    showOrganizerForgotPasswordDialog(
+      context,
+      initialEmail: _emailController.text,
     );
   }
 

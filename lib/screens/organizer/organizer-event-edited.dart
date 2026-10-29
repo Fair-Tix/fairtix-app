@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
+import '../../theme/fairtix_palette.dart';
 import 'organizer-scaffold.dart';
 import 'organizer-my-events.dart';
 
@@ -10,6 +11,7 @@ class OrganizerEventEditedScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
     final now = DateTime.now();
     final timeLabel = 'Today, ${_formatTime(now)}';
 
@@ -22,9 +24,9 @@ class OrganizerEventEditedScreen extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(40),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: p.surface,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.borderLight),
+              border: Border.all(color: p.border),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -41,9 +43,9 @@ class OrganizerEventEditedScreen extends StatelessWidget {
                       color: AppColors.successGreen, size: 32),
                 ),
                 const SizedBox(height: 22),
-                const Text(
+                Text(
                   'Event Updated!',
-                  style: AppTextStyles.h1,
+                  style: AppTextStyles.h1.copyWith(color: p.textPrimary),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 10),
@@ -51,7 +53,10 @@ class OrganizerEventEditedScreen extends StatelessWidget {
                   'Changes have been saved and the public event page has '
                   'been updated.',
                   textAlign: TextAlign.center,
-                  style: AppTextStyles.bodyGray.copyWith(height: 1.5),
+                  style: AppTextStyles.bodyGray.copyWith(
+                    height: 1.5,
+                    color: p.textSecondary,
+                  ),
                 ),
                 const SizedBox(height: 26),
                 Container(
@@ -59,17 +64,17 @@ class OrganizerEventEditedScreen extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF9FAFB),
+                    color: p.background,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
                     children: [
-                      _infoRow('Event', eventName),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 10),
-                        child: Divider(height: 1, color: AppColors.borderLight),
+                      _infoRow(p, 'Event', eventName),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: Divider(height: 1, color: p.border),
                       ),
-                      _infoRow('Last Updated', timeLabel),
+                      _infoRow(p, 'Last Updated', timeLabel),
                     ],
                   ),
                 ),
@@ -106,16 +111,19 @@ class OrganizerEventEditedScreen extends StatelessWidget {
     );
   }
 
-  Widget _infoRow(String label, String value) {
+  Widget _infoRow(FairTixPalette p, String label, String value) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: AppTextStyles.bodyGray),
+        Text(
+          label,
+          style: AppTextStyles.bodyGray.copyWith(color: p.textSecondary),
+        ),
         Flexible(
           child: Text(
             value,
             textAlign: TextAlign.right,
-            style: AppTextStyles.label,
+            style: AppTextStyles.label.copyWith(color: p.textPrimary),
           ),
         ),
       ],

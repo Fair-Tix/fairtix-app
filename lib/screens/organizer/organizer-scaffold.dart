@@ -1,25 +1,42 @@
 import 'package:flutter/material.dart';
 
 import '../../services/access_control.dart';
+import '../../services/organizer_auth_service.dart';
 import '../../services/organizer_session.dart';
+import '../../services/support_contact.dart';
 import '../../theme/fairtix_palette.dart';
 import '../../theme/page_transitions.dart';
 import '../../widgets/fairtix_mark.dart';
-import '../../widgets/notification_bell.dart';
+import '../../widgets/organizer_top_menus.dart';
 import '../../widgets/organizer_ui.dart';
+import '../../widgets/theme_mode_switch.dart';
 import '../../widgets/top_glow_background.dart';
 import 'organizer-analytics-sales.dart';
 import 'organizer-dashboard.dart';
 import 'organizer-escrow.dart';
+import 'organizer-help.dart';
 import 'organizer-my-events.dart';
 import 'organizer-profile.dart';
+import 'organizer-settings.dart';
+import 'organizer-splash.dart';
 import 'organizer-subscription-plan.dart';
+import 'organizer-subscription.dart';
 
-enum OrganizerNavItem { dashboard, myEvents, analytics, escrow, profile }
+enum OrganizerNavItem {
+  dashboard,
+  myEvents,
+  analytics,
+  escrow,
+  profile,
+  subscription,
+  settings,
+  help,
+}
 
 /// Shared shell for every internal organizer screen (Mahilum design): logo on
 /// the left, a pill navigation in the middle, the notification bell and the
-/// account avatar on the right, and the amber "locked" banner above the page.
+/// account avatar on the right (each opens a dropdown), and the amber "locked"
+/// banner above the page.
 ///
 /// Organizer identity (avatar initial) is read from [OrganizerSession] by
 /// default. [pageTitle], [organizerName] and [organizerRole] are kept so the
@@ -52,7 +69,7 @@ class OrganizerScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = FairTixPalette.of(context);
     final width = MediaQuery.of(context).size.width;
-    final wide = width >= 900;
+    final wide = width >= 1100;
     final pad = width >= 1000 ? 32.0 : 20.0;
 
     final account = OrganizerSession.instance.account;
@@ -172,8 +189,73 @@ void _goTo(BuildContext context, OrganizerNavItem item) {
     case OrganizerNavItem.profile:
       target = const OrganizerProfileScreen();
       break;
+    case OrganizerNavItem.subscription:
+      target = const OrganizerSubscriptionScreen();
+      break;
+    case OrganizerNavItem.settings:
+      target = const OrganizerSettingsScreen();
+      break;
+    case OrganizerNavItem.help:
+      target = const OrganizerHelpScreen();
+      break;
   }
   Navigator.pushReplacement(context, organizerFadeRoute<void>(target));
+}
+
+/// Confirms, then signs the organizer out and returns to the splash screen.
+/// Shared by the profile dropdown and the Profile page's Log Out button.
+void confirmOrganizerLogOut(BuildContext context) {
+  final p = FairTixPalette.of(context);
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: p.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: p.border),
+      ),
+      title: Text(
+        'Log Out?',
+        style: orgText(p, size: 18, weight: FontWeight.w800),
+      ),
+      content: Text(
+        'You will need to log in again to access your organizer dashboard.',
+        style: orgText(p, size: 14, color: p.textSecondary),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: Text(
+            'Cancel',
+            style: orgText(p, size: 14, weight: FontWeight.w700),
+          ),
+        ),
+        TextButton(
+          onPressed: () {
+            Navigator.pop(ctx);
+            OrganizerAuthService.instance.logout();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('You have been logged out.')),
+            );
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (_) => const OrganizerSplashScreen()),
+              (route) => false,
+            );
+          },
+          child: Text(
+            'Log Out',
+            style: orgText(
+              p,
+              size: 14,
+              weight: FontWeight.w700,
+              color: p.danger,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -199,10 +281,23 @@ class _TopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = FairTixPalette.of(context);
     final profileActive = activeItem == OrganizerNavItem.profile;
+    // The profile menu's pages all highlight the avatar.
+    final accountActive = const {
+      OrganizerNavItem.profile,
+      OrganizerNavItem.subscription,
+      OrganizerNavItem.settings,
+      OrganizerNavItem.help,
+    }.contains(activeItem);
 
     return SizedBox(
-      height: 48,
-      child: Row(
+      height: 56,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // The pill is centered on the bar itself, so it stays put no matter
+          // how many buttons each page puts on the right.
+          if (wide) Center(child: _NavPill(activeItem: activeItem)),
+          Row(
         children: [
           const FairTixMark(width: 40),
           const SizedBox(width: 8),
@@ -217,68 +312,52 @@ class _TopBar extends StatelessWidget {
               height: 1.1,
             ),
           ),
-          Expanded(
-            child: wide
-                ? Center(child: _NavPill(activeItem: activeItem))
-                : const SizedBox.shrink(),
-          ),
-          if (trailing != null) ...[trailing!, const SizedBox(width: 16)],
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: p.surface,
-              shape: BoxShape.circle,
-              border: Border.all(color: p.border),
-            ),
-            alignment: Alignment.center,
-            child: NotificationBell(
-              color: p.accentLabel,
-              size: 20,
-              badgeBorderColor: p.surface,
-            ),
-          ),
+          const Spacer(),
+          if (trailing != null) ...[trailing!, const SizedBox(width: 12)],
+          const ThemeModeSwitch(),
           const SizedBox(width: 12),
-          MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              onTap: profileActive
-                  ? null
-                  : () => _goTo(context, OrganizerNavItem.profile),
-              child: Container(
-                width: 44,
-                height: 44,
-                padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: profileActive ? p.accentLabel : Colors.transparent,
-                    width: 2,
+          const OrganizerBellButton(),
+          const SizedBox(width: 12),
+          OrganizerAvatarButton(
+            initial: avatarInitial,
+            color: avatarColor,
+            highlighted: accountActive,
+            actions: OrganizerProfileMenuActions(
+              onProfile: () {
+                if (!profileActive) _goTo(context, OrganizerNavItem.profile);
+              },
+              onMyEvents: () {
+                if (activeItem != OrganizerNavItem.myEvents) {
+                  _goTo(context, OrganizerNavItem.myEvents);
+                }
+              },
+              // Opens the "Choose your plan" screen (Mahilum design) on top of
+              // the current page, so its Back button returns here.
+              onSubscription: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const OrganizerSubscriptionPlanScreen(),
                   ),
-                ),
-                child: Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: avatarColor,
-                    gradient: avatarColor == null
-                        ? FairTixPalette.buttonGradient
-                        : null,
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    avatarInitial,
-                    style: orgText(
-                      p,
-                      size: 16,
-                      weight: FontWeight.w800,
-                      color: Colors.white,
-                      height: 1,
-                    ),
-                  ),
-                ),
-              ),
+                );
+              },
+              onSettings: () {
+                if (activeItem != OrganizerNavItem.settings) {
+                  _goTo(context, OrganizerNavItem.settings);
+                }
+              },
+              // Hidden from the menu until FairTix has a contact address.
+              onHelp: FairTixSupport.isAvailable
+                  ? () {
+                      if (activeItem != OrganizerNavItem.help) {
+                        _goTo(context, OrganizerNavItem.help);
+                      }
+                    }
+                  : null,
+              onSignOut: () => confirmOrganizerLogOut(context),
             ),
           ),
+        ],
+      ),
         ],
       ),
     );
@@ -368,7 +447,7 @@ class _NavPillItem extends StatelessWidget {
               size: 15,
               weight: active ? FontWeight.w700 : FontWeight.w500,
               color: active ? Colors.white : p.textSecondary,
-              height: 1.2,
+              height: 1.3,
             ),
           ),
         ),

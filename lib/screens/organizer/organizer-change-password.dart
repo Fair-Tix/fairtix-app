@@ -3,15 +3,15 @@ import 'package:flutter/material.dart';
 import '../../services/password_service.dart';
 import '../../theme/fairtix_palette.dart';
 import '../../widgets/organizer_ui.dart';
-import '../../widgets/theme_mode_switch.dart';
 import 'organizer-scaffold.dart';
 
 /// Change Password (Mahilum design): "Profile" crumb, big title, and one card
 /// with the three password fields plus Cancel / Update Password.
 ///
-/// This is the only self-service edit reachable from [OrganizerProfileScreen]:
-/// full name and email stay locked to the organizer's verified ID and
+/// This is the only self-service edit on the organizer account: full name
+/// and email stay locked to the organizer's verified ID and
 /// proof-of-organization documents (capstone Account Verification rules).
+/// Reached from Settings > Sign-in & security.
 class OrganizerChangePasswordScreen extends StatefulWidget {
   const OrganizerChangePasswordScreen({super.key});
 
@@ -84,41 +84,34 @@ class _OrganizerChangePasswordScreenState
 
     return OrganizerScaffold(
       pageTitle: 'Change Password',
-      activeItem: OrganizerNavItem.profile,
+      activeItem: OrganizerNavItem.settings,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          Column(
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Profile',
-                      style: orgText(p, size: 15, color: p.textSecondary),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Change Password',
-                      style: orgText(
-                        p,
-                        size: 36,
-                        weight: FontWeight.w800,
-                        letterSpacing: -1,
-                        height: 1.15,
-                      ),
-                    ),
-                  ],
+              Text(
+                'Settings',
+                textAlign: TextAlign.center,
+                style: orgText(p, size: 15, color: p.textSecondary),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Change Password',
+                textAlign: TextAlign.center,
+                style: orgText(
+                  p,
+                  size: 36,
+                  weight: FontWeight.w800,
+                  letterSpacing: -1,
+                  height: 1.15,
                 ),
               ),
-              const ThemeModeSwitch(),
             ],
           ),
           const SizedBox(height: 24),
           Align(
-            alignment: Alignment.centerLeft,
+            alignment: Alignment.topCenter,
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 620),
               child: OrganizerCard(

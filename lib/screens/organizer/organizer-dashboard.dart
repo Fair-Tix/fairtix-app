@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/organizer_event.dart';
 import '../../services/access_control.dart';
 import '../../services/event_repository.dart';
+import '../../services/organizer_escrow_service.dart';
 import '../../services/organizer_session.dart';
 import '../../theme/fairtix_palette.dart';
 import '../../widgets/organizer_ui.dart';
@@ -27,6 +28,19 @@ class OrganizerDashboardScreen extends StatefulWidget {
 class _OrganizerDashboardScreenState extends State<OrganizerDashboardScreen> {
   bool _isLoading = true;
 
+  /// The organizer's actual share of sales (held + released in escrow), the
+  /// same figure the Analytics and Escrow pages use. Null until it loads, or
+  /// when it can't be read, in which case a plan-rate estimate is shown.
+  double? _netRevenue;
+
+  /// Tickets sold net of refunds, from the same escrow overview as Analytics.
+  /// Null when it can't be read; the inventory count is shown instead.
+  int? _ticketsSold;
+
+  /// Tickets sold per event id, net of refunds (same source as Analytics),
+  /// so a canceled event's card does not keep showing its refunded sales.
+  Map<String, int> _soldByEvent = const {};
+
   @override
   void initState() {
     super.initState();
@@ -41,25 +55,24 @@ class _OrganizerDashboardScreenState extends State<OrganizerDashboardScreen> {
       // Non-fatal here: the dashboard just shows zeroed tiles / no events.
       // My Events is where a failed load gets a visible error + Retry.
     }
+    try {
+      final overview = await OrganizerEscrowService.instance.fetch();
+      // totalNet is the same figure Analytics shows as "Your net share".
+      _netRevenue = overview.totalNet;
+      _ticketsSold = overview.totalTicketsSold;
+      _soldByEvent = {for (final r in overview.events) r.eventId: r.ticketsSold};
+    } catch (_) {
+      _netRevenue = null;
+      _ticketsSold = null;
+      _soldByEvent = const {};
+    }
     if (!mounted) return;
     setState(() => _isLoading = false);
   }
 
   // --- navigation ----------------------------------------------------------
 
-  Future<void> _sendAnnouncement() async {
-    final allowed = await ensureOrganizerAccess(
-      context,
-      OrganizerRequirement.subscription,
-    );
-    if (!allowed || !mounted) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const OrganizerSendAnnouncementScreen(),
-      ),
-    );
-  }
+  Future<void> _sendAnnouncement() => showOrganizerAnnouncementDialog(context);
 
   Future<void> _createEvent() async {
     final allowed = await ensureOrganizerAccess(
@@ -74,10 +87,20 @@ class _OrganizerDashboardScreenState extends State<OrganizerDashboardScreen> {
     _load();
   }
 
-  void _manage(OrganizerEvent e) => Navigator.push(
-    context,
-    MaterialPageRoute(builder: (_) => OrganizerEditEventScreen(eventId: e.id)),
-  );
+  Future<void> _manage(OrganizerEvent e) async {
+    final allowed = await ensureOrganizerAccess(
+      context,
+      OrganizerRequirement.subscription,
+    );
+    if (!allowed || !mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => OrganizerEditEventScreen(eventId: e.id),
+      ),
+    );
+    if (mounted) _load();
+  }
 
   void _scan(OrganizerEvent e) => Navigator.push(
     context,
@@ -86,12 +109,20 @@ class _OrganizerDashboardScreenState extends State<OrganizerDashboardScreen> {
     ),
   );
 
-  void _cancel(OrganizerEvent e) => Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => OrganizerCancelEventScreen(eventId: e.id),
-    ),
-  );
+  Future<void> _cancel(OrganizerEvent e) async {
+    final allowed = await ensureOrganizerAccess(
+      context,
+      OrganizerRequirement.approval,
+    );
+    if (!allowed || !mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => OrganizerCancelEventScreen(eventId: e.id),
+      ),
+    );
+    if (mounted) _load();
+  }
 
   void _viewAll() => Navigator.push(
     context,
@@ -116,11 +147,15 @@ class _OrganizerDashboardScreenState extends State<OrganizerDashboardScreen> {
     final events = repo.events;
     final featured = _pickFeatured(events);
 
-    // Net of platform fees when the current plan's rate is known.
+    // Prefer the real net (same as Analytics/Escrow); otherwise estimate from
+    // the current plan's fee rate.
     final feeRate = account?.subscriptionFeeRate;
     final gross = repo.totalGrossRevenue;
-    final hasNet = feeRate != null;
-    final revenue = hasNet ? gross * (1 - feeRate) : gross;
+    final revenue =
+        _netRevenue ?? (feeRate != null ? gross * (1 - feeRate) : gross);
+    final revenueLabel = _netRevenue != null
+        ? 'Net of platform fees'
+        : (feeRate != null ? 'Estimate (unrefunded)' : 'Before fees');
 
     return OrganizerScaffold(
       pageTitle: 'Organizer Dashboard',
@@ -149,15 +184,16 @@ class _OrganizerDashboardScreenState extends State<OrganizerDashboardScreen> {
                   wide: wide,
                   featured: featured,
                   revenue: revenue,
-                  revenueLabel: hasNet ? 'Net of platform fees' : 'Before fees',
+                  revenueLabel: revenueLabel,
                   totalEvents: events.length,
-                  ticketsSold: repo.totalTicketsSold,
+                  ticketsSold: _ticketsSold ?? repo.totalTicketsSold,
                   onManage: _manage,
                   onScan: _scan,
                 ),
                 const SizedBox(height: 36),
                 _MyEventsSection(
                   events: events,
+                  soldByEvent: _soldByEvent,
                   onViewAll: _viewAll,
                   onManage: _manage,
                   onScan: _scan,
@@ -926,6 +962,7 @@ class _ProgressBar extends StatelessWidget {
 class _MyEventsSection extends StatelessWidget {
   const _MyEventsSection({
     required this.events,
+    required this.soldByEvent,
     required this.onViewAll,
     required this.onManage,
     required this.onScan,
@@ -933,6 +970,7 @@ class _MyEventsSection extends StatelessWidget {
   });
 
   final List<OrganizerEvent> events;
+  final Map<String, int> soldByEvent;
   final VoidCallback onViewAll;
   final void Function(OrganizerEvent) onManage;
   final void Function(OrganizerEvent) onScan;
@@ -1016,6 +1054,7 @@ class _MyEventsSection extends StatelessWidget {
                       width: cardWidth,
                       child: _EventCard(
                         event: e,
+                        sold: soldByEvent[e.id],
                         onManage: () => onManage(e),
                         onScan: () => onScan(e),
                         onCancel: () => onCancel(e),
@@ -1033,12 +1072,16 @@ class _MyEventsSection extends StatelessWidget {
 class _EventCard extends StatelessWidget {
   const _EventCard({
     required this.event,
+    this.sold,
     required this.onManage,
     required this.onScan,
     required this.onCancel,
   });
 
   final OrganizerEvent event;
+
+  /// Tickets sold net of refunds; null falls back to the inventory count.
+  final int? sold;
   final VoidCallback onManage;
   final VoidCallback onScan;
   final VoidCallback onCancel;
@@ -1050,7 +1093,8 @@ class _EventCard extends StatelessWidget {
     final published = e.status == EventStatus.published;
     final cancelled = e.status == EventStatus.cancelled;
     final total = e.ticketsTotal;
-    final fraction = total == 0 ? 0.0 : (e.ticketsSold / total).clamp(0.0, 1.0);
+    final soldCount = sold ?? e.ticketsSold;
+    final fraction = total == 0 ? 0.0 : (soldCount / total).clamp(0.0, 1.0);
     final bannerUrl = EventRepository.instance.publicBannerUrl(e.bannerUrl);
 
     return Container(
@@ -1167,7 +1211,7 @@ class _EventCard extends StatelessWidget {
                       style: orgText(p, size: 13, color: p.textSecondary),
                     ),
                     Text(
-                      e.soldLabel,
+                      '$soldCount / $total',
                       style: orgText(p, size: 13, weight: FontWeight.w700),
                     ),
                   ],

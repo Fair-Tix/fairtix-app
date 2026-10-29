@@ -1,8 +1,31 @@
 import 'package:flutter/material.dart';
-import 'app_colors.dart';
-import '../../services/access_control.dart';
-import 'organizer-scaffold.dart';
 
+import '../../services/access_control.dart';
+import '../../services/organizer_announcement_service.dart';
+import '../../theme/fairtix_palette.dart';
+import '../../widgets/organizer_account_ui.dart';
+import '../../widgets/organizer_ui.dart';
+
+/// Opens the "New Announcement" pop-up. Announcements are a subscription
+/// feature, so this explains and returns without opening anything when the
+/// organizer is locked out.
+Future<void> showOrganizerAnnouncementDialog(BuildContext context) async {
+  final allowed = await ensureOrganizerAccess(
+    context,
+    OrganizerRequirement.subscription,
+  );
+  if (!allowed || !context.mounted) return;
+
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    barrierColor: Colors.black.withValues(alpha: 0.55),
+    builder: (_) => const _AnnouncementDialog(),
+  );
+}
+
+/// Kept so any older route to the announcement screen still works: it opens
+/// the pop-up over an empty page and closes itself when the pop-up closes.
 class OrganizerSendAnnouncementScreen extends StatefulWidget {
   const OrganizerSendAnnouncementScreen({super.key});
 
@@ -13,265 +36,261 @@ class OrganizerSendAnnouncementScreen extends StatefulWidget {
 
 class _OrganizerSendAnnouncementScreenState
     extends State<OrganizerSendAnnouncementScreen> {
-  final TextEditingController _subjectController = TextEditingController();
-  final TextEditingController _messageController = TextEditingController();
-
-  static const int _maxLength = 500;
-
   @override
   void initState() {
     super.initState();
-    _messageController.addListener(() => setState(() {}));
-    // Announcements are a subscription feature: explain and go back if locked.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final allowed = await ensureOrganizerAccess(
-        context,
-        OrganizerRequirement.subscription,
-      );
-      if (!allowed && mounted) Navigator.of(context).maybePop();
+      await showOrganizerAnnouncementDialog(context);
+      if (mounted) Navigator.of(context).maybePop();
     });
   }
 
   @override
+  Widget build(BuildContext context) {
+    return Scaffold(backgroundColor: FairTixPalette.of(context).background);
+  }
+}
+
+class _AnnouncementDialog extends StatefulWidget {
+  const _AnnouncementDialog();
+
+  @override
+  State<_AnnouncementDialog> createState() => _AnnouncementDialogState();
+}
+
+class _AnnouncementDialogState extends State<_AnnouncementDialog> {
+  static const int _maxLength = 500;
+
+  final _subject = TextEditingController();
+  final _message = TextEditingController();
+
+  bool _sending = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _subject.addListener(_refresh);
+    _message.addListener(_refresh);
+  }
+
+  void _refresh() => setState(() {});
+
+  @override
   void dispose() {
-    _subjectController.dispose();
-    _messageController.dispose();
+    _subject.dispose();
+    _message.dispose();
     super.dispose();
   }
 
-  void _sendAnnouncement() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Announcement Sent'),
-        content: const Text(
-          'Your announcement has been sent to all ticket holders via '
-          'in-app, email, and push notification.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              Navigator.pop(context);
-            },
-            child: const Text('OK'),
+  bool get _canSend =>
+      !_sending &&
+      _subject.text.trim().isNotEmpty &&
+      _message.text.trim().isNotEmpty;
+
+  Future<void> _send() async {
+    if (!_canSend) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    setState(() {
+      _sending = true;
+      _error = null;
+    });
+    try {
+      final count = await OrganizerAnnouncementService.instance.send(
+        subject: _subject.text,
+        message: _message.text,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      messenger?.showSnackBar(
+        SnackBar(
+          content: Text(
+            count == 0
+                ? 'No one has bought a ticket to your events yet, so there was '
+                      'no one to send this to.'
+                : 'Announcement sent to $count ticket holder'
+                      '${count == 1 ? '' : 's'} via in-app, email, and push '
+                      'notification.',
           ),
-        ],
+        ),
+      );
+    } on OrganizerAnnouncementException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _sending = false;
+        _error = e.message;
+      });
+    }
+  }
+
+  InputDecoration _decoration(FairTixPalette p, String hint, {bool multi = false}) {
+    OutlineInputBorder border(Color c, [double w = 1]) => OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: BorderSide(color: c, width: w),
+    );
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: orgText(p, size: 15, color: p.textSecondary),
+      counterText: '',
+      filled: true,
+      fillColor: p.background,
+      contentPadding: EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: multi ? 16 : 15,
       ),
+      border: border(p.border),
+      enabledBorder: border(p.border),
+      focusedBorder: border(p.accentLabel, 1.6),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final charCount = _messageController.text.length;
+    final p = FairTixPalette.of(context);
+    final count = _message.text.length;
 
-    return OrganizerScaffold(
-      pageTitle: 'Send Announcement',
-      activeItem: OrganizerNavItem.dashboard,
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 680),
+    return Dialog(
+      backgroundColor: p.surface,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: BorderSide(color: p.border),
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 580),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(28),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF3F0FF),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(Icons.info_outline,
-                        color: AppColors.primaryPurple, size: 20),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'This will be sent to users who have purchased '
-                        'tickets from you, via in-app, email, and push '
-                        'notification.',
-                        style: TextStyle(
-                          color: AppColors.primaryPurple,
-                          fontSize: 13,
-                          height: 1.4,
-                        ),
-                      ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'New Announcement',
+                      style: orgText(p, size: 22, weight: FontWeight.w800),
                     ),
-                  ],
+                  ),
+                  IconButton(
+                    tooltip: 'Close',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: Icon(Icons.close_rounded, color: p.textSecondary),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const OrganizerNote(
+                text:
+                    'This will be sent to users who have purchased tickets '
+                    'from you, via in-app, email, and push notification.',
+              ),
+              const SizedBox(height: 22),
+              const OrganizerFieldLabel('Subject'),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _subject,
+                autofocus: true,
+                textInputAction: TextInputAction.next,
+                style: orgText(p, size: 15),
+                decoration: _decoration(
+                  p,
+                  'e.g. Important update for ticket holders',
                 ),
               ),
               const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.borderLight),
+              const OrganizerFieldLabel('Message'),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _message,
+                minLines: 5,
+                maxLines: 6,
+                maxLength: _maxLength,
+                style: orgText(p, size: 15, height: 1.45),
+                decoration: _decoration(
+                  p,
+                  'Write your announcement here...',
+                  multi: true,
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text('New Announcement', style: AppTextStyles.h3),
-                    const SizedBox(height: 20),
-                    const Text('SUBJECT',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textGray,
-                          letterSpacing: 0.6,
-                        )),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _subjectController,
-                      style: AppTextStyles.body,
-                      decoration: InputDecoration(
-                        hintText: 'e.g. Important update for ticket holders',
-                        hintStyle: AppTextStyles.bodyGray,
-                        filled: true,
-                        fillColor: Colors.white,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 14),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide:
-                              const BorderSide(color: AppColors.borderLight),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide:
-                              const BorderSide(color: AppColors.borderLight),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide:
-                              const BorderSide(color: AppColors.primaryPurple),
-                        ),
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    '$count / $_maxLength',
+                    style: orgText(p, size: 12, color: p.textSecondary),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              if (_error != null) ...[
+                Text(
+                  _error!,
+                  style: orgText(p, size: 13, color: p.danger, height: 1.4),
+                ),
+                const SizedBox(height: 14),
+              ],
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 16,
+                runSpacing: 14,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.people_alt_outlined,
+                        size: 18,
+                        color: p.textSecondary,
                       ),
-                    ),
-                    const SizedBox(height: 20),
-                    const Text('MESSAGE',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textGray,
-                          letterSpacing: 0.6,
-                        )),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _messageController,
-                      maxLines: 6,
-                      maxLength: _maxLength,
-                      style: AppTextStyles.body,
-                      decoration: InputDecoration(
-                        hintText: 'Write your announcement here...',
-                        hintStyle: AppTextStyles.bodyGray,
-                        counterText: '',
-                        filled: true,
-                        fillColor: Colors.white,
-                        contentPadding: const EdgeInsets.all(16),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide:
-                              const BorderSide(color: AppColors.borderLight),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide:
-                              const BorderSide(color: AppColors.borderLight),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide:
-                              const BorderSide(color: AppColors.primaryPurple),
-                        ),
-                      ),
-                    ),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          '$charCount / $_maxLength',
-                          style: AppTextStyles.bodyGray.copyWith(fontSize: 12),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
+                      const SizedBox(width: 8),
+                      Text.rich(
+                        TextSpan(
+                          style: orgText(p, size: 14, color: p.textSecondary),
                           children: [
-                            const Icon(Icons.people_alt_outlined,
-                                size: 18, color: AppColors.textGray),
-                            const SizedBox(width: 8),
-                            RichText(
-                              text: TextSpan(
-                                style: AppTextStyles.bodyGray,
-                                children: const [
-                                  TextSpan(text: 'Sending to: '),
-                                  TextSpan(
-                                    text: 'all ticket holders',
-                                    style: TextStyle(
-                                      color: AppColors.textDark,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
+                            const TextSpan(text: 'Sending to: '),
+                            TextSpan(
+                              text: 'all ticket holders',
+                              style: orgText(
+                                p,
+                                size: 14,
+                                weight: FontWeight.w700,
                               ),
                             ),
                           ],
                         ),
-                        ElevatedButton(
-                          onPressed: _sendAnnouncement,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primaryPurple,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 24, vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                          ),
-                          child: const Text('Send Announcement'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  TextButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Drafts are coming soon.'),
-                        ),
-                      );
-                    },
-                    child: const Text('Drafts',
-                        style: TextStyle(
-                            color: AppColors.textGray,
-                            decoration: TextDecoration.underline)),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 24),
-                  TextButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                              'Scheduled announcements are coming soon.'),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 110,
+                        child: OrganizerSecondaryButton(
+                          label: 'Cancel',
+                          height: 46,
+                          onPressed: _sending
+                              ? null
+                              : () => Navigator.of(context).pop(),
                         ),
-                      );
-                    },
-                    child: const Text('Scheduled Announcements',
-                        style: TextStyle(
-                            color: AppColors.textGray,
-                            decoration: TextDecoration.underline)),
+                      ),
+                      const SizedBox(width: 12),
+                      Opacity(
+                        opacity: _canSend ? 1 : 0.5,
+                        child: SizedBox(
+                          width: 190,
+                          child: OrganizerPrimaryButton(
+                            label: 'Send Announcement',
+                            height: 46,
+                            loading: _sending,
+                            onPressed: _canSend ? _send : null,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

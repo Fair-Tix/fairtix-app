@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import 'app_colors.dart';
+import '../../theme/fairtix_palette.dart';
 import '../../models/organizer_event.dart';
 import '../../services/access_control.dart';
 import '../../services/event_repository.dart';
@@ -421,15 +422,17 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
+              Icon(
                 Icons.error_outline,
                 size: 40,
-                color: AppColors.textGray,
+                color: FairTixPalette.of(context).textSecondary,
               ),
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 'This event could not be found.',
-                style: AppTextStyles.h3,
+                style: AppTextStyles.h3.copyWith(
+                  color: FairTixPalette.of(context).textPrimary,
+                ),
               ),
               const SizedBox(height: 16),
               OutlineButtonWidget(
@@ -494,9 +497,9 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
               );
               final cancelButton = TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text(
+                child: Text(
                   'Cancel Changes',
-                  style: TextStyle(color: AppColors.textDark),
+                  style: TextStyle(color: FairTixPalette.of(context).textPrimary),
                 ),
               );
               final draftButton = OutlinedButton(
@@ -588,6 +591,7 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
   }
 
   Widget _leftColumn() {
+    final p = FairTixPalette.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -611,10 +615,10 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
                     hint: '',
                     controller: _dateController,
                     enabled: false,
-                    prefixIcon: const Icon(
+                    prefixIcon: Icon(
                       Icons.calendar_today_outlined,
                       size: 18,
-                      color: AppColors.textGray,
+                      color: p.textSecondary,
                     ),
                   );
                   final venueField = VenueDropdownField(
@@ -646,27 +650,26 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Description', style: AppTextStyles.label),
+                  Text(
+                    'Description',
+                    style: AppTextStyles.label.copyWith(color: p.textPrimary),
+                  ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: _descriptionController,
                     maxLines: 4,
-                    style: AppTextStyles.body,
+                    style: AppTextStyles.body.copyWith(color: p.textPrimary),
                     decoration: InputDecoration(
                       filled: true,
-                      fillColor: Colors.white,
+                      fillColor: p.surface,
                       contentPadding: const EdgeInsets.all(16),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(
-                          color: AppColors.borderLight,
-                        ),
+                        borderSide: BorderSide(color: p.border),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(
-                          color: AppColors.borderLight,
-                        ),
+                        borderSide: BorderSide(color: p.border),
                       ),
                     ),
                   ),
@@ -771,6 +774,7 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
   }
 
   Widget _rightColumn() {
+    final p = FairTixPalette.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -836,7 +840,9 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFEE2E2),
+                    color: AppColors.dangerRed.withValues(
+                      alpha: p.isDark ? 0.16 : 0.10,
+                    ),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Column(
@@ -854,8 +860,8 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
                         const SizedBox(height: 4),
                         Text(
                           _event!.unpublishReason!,
-                          style: const TextStyle(
-                            color: AppColors.textDark,
+                          style: TextStyle(
+                            color: p.textPrimary,
                             fontSize: 12,
                           ),
                         ),
@@ -883,7 +889,10 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
                     ? 'No supporting documents uploaded yet.'
                     : '${_event!.supportingDocumentUrls.length} document'
                           '${_event!.supportingDocumentUrls.length == 1 ? '' : 's'} on file.',
-                style: AppTextStyles.bodyGray.copyWith(fontSize: 12),
+                style: AppTextStyles.bodyGray.copyWith(
+                  fontSize: 12,
+                  color: p.textSecondary,
+                ),
               ),
               const SizedBox(height: 12),
               OutlineButtonWidget(
@@ -903,12 +912,13 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
     required Widget child,
     Widget? headerTrailing,
   }) {
+    final p = FairTixPalette.of(context);
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: p.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.borderLight),
+        border: Border.all(color: p.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -917,9 +927,7 @@ class _OrganizerEditEventScreenState extends State<OrganizerEditEventScreen> {
             builder: (context, constraints) {
               final titleWidget = Text(
                 title,
-                style: AppTextStyles.h3.copyWith(
-                  color: AppColors.primaryPurple,
-                ),
+                style: AppTextStyles.h3.copyWith(color: p.accentLabel),
               );
               if (headerTrailing == null) return titleWidget;
               if (constraints.maxWidth < 440) {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
+import '../../theme/fairtix_palette.dart';
 import '../../models/organizer_event.dart';
 import '../../services/event_repository.dart';
 import 'organizer-scaffold.dart';
@@ -122,6 +123,7 @@ class _OrganizerCancelEventScreenState
 
   @override
   Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
     if (_isLoading) {
       return const OrganizerScaffold(
         pageTitle: 'Cancel Event',
@@ -142,15 +144,11 @@ class _OrganizerCancelEventScreenState
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.error_outline,
-                size: 40,
-                color: AppColors.textGray,
-              ),
+              Icon(Icons.error_outline, size: 40, color: p.textSecondary),
               const SizedBox(height: 12),
               Text(
                 _error ?? 'This event could not be found.',
-                style: AppTextStyles.h3,
+                style: AppTextStyles.h3.copyWith(color: p.textPrimary),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
@@ -178,9 +176,9 @@ class _OrganizerCancelEventScreenState
           child: Container(
             padding: const EdgeInsets.all(40),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: p.surface,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.borderLight),
+              border: Border.all(color: p.border),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -200,9 +198,9 @@ class _OrganizerCancelEventScreenState
                   ),
                 ),
                 const SizedBox(height: 22),
-                const Text(
+                Text(
                   'Cancel This Event?',
-                  style: AppTextStyles.h1,
+                  style: AppTextStyles.h1.copyWith(color: p.textPrimary),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 10),
@@ -211,21 +209,26 @@ class _OrganizerCancelEventScreenState
                   'notified and refunds will be processed automatically.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: AppColors.primaryPurple.withValues(alpha: 0.9),
+                    color: p.textSecondary,
                     fontSize: 14,
                     height: 1.5,
                   ),
                 ),
                 if (event.isMultiDay && _days.isNotEmpty) ...[
                   const SizedBox(height: 22),
-                  const Align(
+                  Align(
                     alignment: Alignment.centerLeft,
-                    child: Text('What to cancel', style: AppTextStyles.label),
+                    child: Text(
+                      'What to cancel',
+                      style: AppTextStyles.label.copyWith(color: p.textPrimary),
+                    ),
                   ),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String?>(
                     initialValue: _selectedDayId,
                     isExpanded: true,
+                    dropdownColor: p.surface,
+                    style: AppTextStyles.body.copyWith(color: p.textPrimary),
                     items: [
                       const DropdownMenuItem<String?>(
                         value: null,
@@ -245,18 +248,14 @@ class _OrganizerCancelEventScreenState
                         : (v) => setState(() => _selectedDayId = v),
                     decoration: InputDecoration(
                       filled: true,
-                      fillColor: Colors.white,
+                      fillColor: p.surface,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(
-                          color: AppColors.borderLight,
-                        ),
+                        borderSide: BorderSide(color: p.border),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(
-                          color: AppColors.borderLight,
-                        ),
+                        borderSide: BorderSide(color: p.border),
                       ),
                     ),
                   ),
@@ -269,22 +268,22 @@ class _OrganizerCancelEventScreenState
                     vertical: 16,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF9FAFB),
+                    color: p.background,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
                     children: [
-                      _infoRow('Event', event.name),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 10),
-                        child: Divider(height: 1, color: AppColors.borderLight),
+                      _infoRow(p, 'Event', event.name),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: Divider(height: 1, color: p.border),
                       ),
-                      _infoRow('Venue', event.venue),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 10),
-                        child: Divider(height: 1, color: AppColors.borderLight),
+                      _infoRow(p, 'Venue', event.venue),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: Divider(height: 1, color: p.border),
                       ),
-                      _infoRow('Tickets to refund', '$_ticketsAtStake'),
+                      _infoRow(p, 'Tickets to refund', '$_ticketsAtStake'),
                     ],
                   ),
                 ),
@@ -293,19 +292,21 @@ class _OrganizerCancelEventScreenState
                   controller: _reasonController,
                   enabled: !_isCancelling,
                   maxLines: 2,
-                  style: AppTextStyles.body,
+                  style: AppTextStyles.body.copyWith(color: p.textPrimary),
                   decoration: InputDecoration(
                     hintText: 'Reason (optional)',
-                    hintStyle: AppTextStyles.bodyGray,
+                    hintStyle: AppTextStyles.bodyGray.copyWith(
+                      color: p.textSecondary,
+                    ),
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: p.surface,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppColors.borderLight),
+                      borderSide: BorderSide(color: p.border),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppColors.borderLight),
+                      borderSide: BorderSide(color: p.border),
                     ),
                   ),
                 ),
@@ -349,16 +350,19 @@ class _OrganizerCancelEventScreenState
     );
   }
 
-  Widget _infoRow(String label, String value) {
+  Widget _infoRow(FairTixPalette p, String label, String value) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: AppTextStyles.bodyGray),
+        Text(
+          label,
+          style: AppTextStyles.bodyGray.copyWith(color: p.textSecondary),
+        ),
         Flexible(
           child: Text(
             value,
             textAlign: TextAlign.right,
-            style: AppTextStyles.label,
+            style: AppTextStyles.label.copyWith(color: p.textPrimary),
           ),
         ),
       ],

@@ -44,6 +44,19 @@ class ScannerSession {
       );
 }
 
+/// A live session together with the event it belongs to.
+class ActiveScannerSession {
+  const ActiveScannerSession({
+    required this.session,
+    required this.eventTitle,
+    required this.createdAt,
+  });
+
+  final ScannerSession session;
+  final String eventTitle;
+  final DateTime createdAt;
+}
+
 /// Result of a staff member entering a PIN — confirms which event
 /// they're now scanning for.
 class ScannerAccess {
@@ -159,6 +172,30 @@ class ScannerRepository {
       throw ScannerRepositoryException(e.message);
     } on ScannerRepositoryException {
       rethrow;
+    } catch (_) {
+      throw const ScannerRepositoryException(_connectionErrorMessage);
+    }
+  }
+
+  /// The organizer's still-live sessions (newest first), so the Scanner page
+  /// can show and revoke them again after the organizer has left it. Needs
+  /// `list_my_scanner_sessions` from supabase/organizer_tools.sql.
+  Future<List<ActiveScannerSession>> fetchMySessions() async {
+    try {
+      final result = await Supabase.instance.client.rpc(
+        'list_my_scanner_sessions',
+      );
+      final rows = result is List ? result : const [];
+      return [
+        for (final r in rows)
+          ActiveScannerSession(
+            session: ScannerSession.fromRow(r as Map<String, dynamic>),
+            eventTitle: (r['event_title'] as String?) ?? 'Event',
+            createdAt: DateTime.parse(r['created_at'] as String),
+          ),
+      ];
+    } on PostgrestException catch (e) {
+      throw ScannerRepositoryException(e.message);
     } catch (_) {
       throw const ScannerRepositoryException(_connectionErrorMessage);
     }

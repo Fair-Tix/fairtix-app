@@ -484,6 +484,14 @@ begin
   ) then
     raise exception 'You are not allowed to edit this event.';
   end if;
+  if not public.is_admin() and not exists (
+    select 1 from public.users u
+    where u.id = auth.uid()
+      and u.id_verification_status = 'verified'
+      and u.account_status = 'active'
+  ) then
+    raise exception 'Only approved, active organizers can edit events.';
+  end if;
   if v_event.parent_event_id is not null then
     raise exception 'Edit a multi-day event from its parent event.';
   end if;
@@ -571,6 +579,15 @@ begin
     not public.is_admin() and v_event.organizer_id <> auth.uid()
   ) then
     raise exception 'You are not allowed to cancel this event.';
+  end if;
+  -- Approval + active account only: an expired plan may still cancel/refund.
+  if not public.is_admin() and not exists (
+    select 1 from public.users u
+    where u.id = auth.uid()
+      and u.id_verification_status = 'verified'
+      and u.account_status = 'active'
+  ) then
+    raise exception 'Only approved, active organizers can cancel events.';
   end if;
   if v_event.status in ('canceled', 'completed') then
     raise exception 'This event is already canceled or completed.';

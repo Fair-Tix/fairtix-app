@@ -6,10 +6,12 @@ import 'package:flutter/material.dart';
 import '../../models/organizer.dart';
 import '../../services/organizer_auth_service.dart';
 import '../../services/organizer_session.dart';
+import '../../services/support_contact.dart';
 import '../../theme/fairtix_palette.dart';
 import '../../widgets/fairtix_mark.dart';
 import '../../widgets/organizer_ui.dart';
 import 'organizer-application-submitted.dart';
+import 'organizer-dashboard.dart';
 
 /// Shown right after an organizer's first successful login if their
 /// proof-of-organization documents never made it to Storage at registration
@@ -23,9 +25,17 @@ import 'organizer-application-submitted.dart';
 /// missing, using the now-real session to upload them via
 /// [OrganizerAuthService.uploadOrganizerDocument].
 class OrganizerDocumentUploadScreen extends StatefulWidget {
-  const OrganizerDocumentUploadScreen({super.key, required this.account});
+  const OrganizerDocumentUploadScreen({
+    super.key,
+    required this.account,
+    this.resubmit = false,
+  });
 
   final OrganizerAccount account;
+
+  /// True for a REJECTED organizer: both documents are replaced and the
+  /// application goes back to the admin for another review.
+  final bool resubmit;
 
   @override
   State<OrganizerDocumentUploadScreen> createState() =>
@@ -47,8 +57,10 @@ class _OrganizerDocumentUploadScreenState
   bool _isSubmitting = false;
   String? _errorText;
 
-  bool get _needsVenueProof => widget.account.venueProofUrl == null;
-  bool get _needsPermit => widget.account.eventPermitUrl == null;
+  bool get _needsVenueProof =>
+      widget.resubmit || widget.account.venueProofUrl == null;
+  bool get _needsPermit =>
+      widget.resubmit || widget.account.eventPermitUrl == null;
 
   Future<void> _pickDocument({required bool isVenueProof}) async {
     final FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -119,6 +131,10 @@ class _OrganizerDocumentUploadScreenState
             );
         updated = updated.copyWith(eventPermitUrl: path);
       }
+      if (widget.resubmit) {
+        // Back to 'pending' on the server; also refreshes the session account.
+        await OrganizerAuthService.instance.resubmitApplication();
+      }
     } on OrganizerAuthException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -128,7 +144,9 @@ class _OrganizerDocumentUploadScreenState
       return;
     }
 
-    OrganizerSession.instance.updateAccount(updated);
+    // On a resubmission the refreshed account is already in the session; do
+    // not overwrite it with the stale 'rejected' copy.
+    if (!widget.resubmit) OrganizerSession.instance.updateAccount(updated);
 
     if (!mounted) return;
     setState(() => _isSubmitting = false);
@@ -158,7 +176,7 @@ class _OrganizerDocumentUploadScreenState
             ),
             const SizedBox(height: 14),
             Text(
-              'One more step',
+              widget.resubmit ? 'Resubmit your application' : 'One more step',
               style: orgText(
                 p,
                 size: 28,
@@ -169,9 +187,13 @@ class _OrganizerDocumentUploadScreenState
             ),
             const SizedBox(height: 8),
             Text(
-              'Your account was created, but we couldn’t finish uploading '
-              'your verification documents. Upload them now so an admin can '
-              'review your application.',
+              widget.resubmit
+                  ? 'Your organizer application was rejected. Upload a clear, valid '
+                      'government or school ID and proof of organization, and an '
+                      'admin will review it again.'
+                  : 'Your account was created, but we couldn’t finish uploading '
+                      'your verification documents. Upload them now so an admin '
+                      'can review your application.',
               style: orgText(p, size: 13.5, color: p.textSecondary),
             ),
             const SizedBox(height: 22),
@@ -211,10 +233,34 @@ class _OrganizerDocumentUploadScreenState
             ],
             const SizedBox(height: 6),
             OrganizerPrimaryButton(
-              label: 'Submit Documents',
+              label: widget.resubmit ? 'Resubmit Application' : 'Submit Documents',
               loading: _isSubmitting,
               onPressed: _canSubmit ? _handleSubmit : null,
             ),
+            if (widget.resubmit) ...[
+              const SizedBox(height: 12),
+              if (FairTixSupport.isAvailable) ...[
+                OrganizerSecondaryButton(
+                  label: 'Contact FairTix support',
+                  onPressed: () => FairTixSupport.compose(
+                    subject: 'Rejected organizer application',
+                    body: 'Organization: ${widget.account.organizationName}\n'
+                        'Account email: ${widget.account.email}\n\n',
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              OrganizerSecondaryButton(
+                label: 'Skip for now (browse only)',
+                onPressed: () => Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const OrganizerDashboardScreen(),
+                  ),
+                  (route) => false,
+                ),
+              ),
+            ],
           ],
         ),
       ),

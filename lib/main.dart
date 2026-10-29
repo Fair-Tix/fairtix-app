@@ -21,6 +21,7 @@ import 'screens/organizer/organizer-landing.dart';
 import 'screens/organizer/app_colors.dart';
 import 'screens/user/login_screen.dart' show LoginScreen, userHomeFor;
 import 'screens/user/app_loading_screen.dart';
+import 'screens/staff/staff_pin_entry_screen.dart';
 import 'theme/fairtix_palette.dart';
 import 'theme/theme_controller.dart';
 import 'theme/page_transitions.dart';
@@ -250,6 +251,16 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       initialRoute: initialRoute ?? '/',
       onGenerateRoute: (settings) {
+        // Scanner link / QR code for entry staff: /StaffPinEntryScreen?pin=1234
+        // opens the PIN screen with the PIN filled in. No sign-in is needed.
+        final staffUri = Uri.tryParse(settings.name ?? '');
+        if (staffUri != null && staffUri.path == '/StaffPinEntryScreen') {
+          return MaterialPageRoute<void>(
+            settings: settings,
+            builder: (_) =>
+                StaffPinEntryScreen(initialPin: staffUri.queryParameters['pin']),
+          );
+        }
         final adminPage = settings.name == '/AdminLoginScreen'
             ? AdminLoginScreen(initialErrorText: startupAuthError)
             : _adminPageForRoute(settings.name);

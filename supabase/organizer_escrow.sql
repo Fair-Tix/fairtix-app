@@ -178,6 +178,74 @@ $$;
 revoke all on function public.organizer_escrow_overview() from public, anon;
 grant execute on function public.organizer_escrow_overview() to authenticated;
 
+-- ── 4. Per-tier sales for the Analytics screen ───────────────────────────
+-- One row per (event, tier name) of the signed-in organizer, using the same
+-- rules as organizer_escrow_overview() and get_event_summary(), so Analytics,
+-- Escrow and the Dashboard always agree:
+--   * a purchase whose ticket was canceled (event canceled) counts as REFUNDED,
+--     never as a sale, so refunds come off the tier they were bought in;
+--   * gross / fees are the amounts actually charged on each purchase
+--     (transactions.amount and transactions.platform_fee), not price x plan
+--     rate, so a price edit or a plan change after the sale cannot skew them.
+-- Multi-day runs are rolled up under their parent and tiers are merged by name
+-- (the same way EventRepository.refresh merges them).
+create or replace function public.organizer_tier_sales()
+returns table (
+  event_id         uuid,
+  tier_name        text,
+  tickets_sold     integer,
+  gross_amount     numeric,
+  platform_fees    numeric,
+  refunded_tickets integer,
+  refunded_amount  numeric
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with roots as (
+    select r.event_id
+      from public.events r
+     where r.organizer_id = auth.uid()
+       and r.parent_event_id is null
+       and r.status::text <> 'draft'
+  ),
+  scope as (
+    select r.event_id as root_id, e.event_id as scoped_id
+      from roots r
+      join public.events e
+        on e.event_id = r.event_id or e.parent_event_id = r.event_id
+  ),
+  purchases as (
+    select s.root_id,
+           tt.tier_name,
+           tr.amount,
+           tr.platform_fee,
+           case when t.ticket_status::text = 'canceled' then 'refunded'
+                else tr.status::text end as pstatus
+      from scope s
+      join public.ticket_tiers tt on tt.event_id = s.scoped_id
+      join public.tickets t       on t.tier_id = tt.tier_id
+      join public.transactions tr on tr.ticket_id = t.ticket_id
+     where tr.transaction_type::text = 'purchase'
+       and tr.status::text in ('completed', 'refunded')
+  )
+  select
+    p.root_id,
+    p.tier_name::text,
+    (count(*) filter (where p.pstatus = 'completed'))::integer,
+    coalesce(sum(p.amount) filter (where p.pstatus = 'completed'), 0),
+    coalesce(sum(p.platform_fee) filter (where p.pstatus = 'completed'), 0),
+    (count(*) filter (where p.pstatus = 'refunded'))::integer,
+    coalesce(sum(p.amount) filter (where p.pstatus = 'refunded'), 0)
+  from purchases p
+  group by p.root_id, p.tier_name;
+$$;
+
+revoke all on function public.organizer_tier_sales() from public, anon;
+grant execute on function public.organizer_tier_sales() to authenticated;
+
 -- ── Quick check you can run in the SQL Editor any time ───────────────────
 -- Where is all the money right now? (primary ticket purchases only)
 --   select escrow_status, count(*) as tickets, sum(amount) as total

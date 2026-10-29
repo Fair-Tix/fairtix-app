@@ -2,6 +2,20 @@ import 'package:flutter/material.dart';
 
 import 'app_colors.dart';
 import '../../services/photon_venue_service.dart';
+import '../../theme/fairtix_palette.dart';
+
+// Theme-aware pieces so these fields stay readable in dark mode.
+TextStyle _labelStyle(FairTixPalette p) =>
+    AppTextStyles.label.copyWith(color: p.textPrimary);
+TextStyle _bodyStyle(FairTixPalette p) =>
+    AppTextStyles.body.copyWith(color: p.textPrimary);
+TextStyle _hintStyle(FairTixPalette p) =>
+    AppTextStyles.bodyGray.copyWith(color: p.textSecondary);
+
+OutlineInputBorder _border(Color color) => OutlineInputBorder(
+  borderRadius: BorderRadius.circular(10),
+  borderSide: BorderSide(color: color),
+);
 
 class VenueDropdownField extends StatelessWidget {
   const VenueDropdownField({
@@ -19,6 +33,7 @@ class VenueDropdownField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
     return _OrganizerAutocompleteField(
       label: 'Venue',
       hint: 'Search or enter a venue',
@@ -26,10 +41,10 @@ class VenueDropdownField extends StatelessWidget {
       enabled: enabled,
       errorText: errorText,
       onChanged: onChanged,
-      prefixIcon: const Icon(
+      prefixIcon: Icon(
         Icons.location_on_outlined,
         size: 18,
-        color: AppColors.textGray,
+        color: p.textSecondary,
       ),
     );
   }
@@ -58,6 +73,7 @@ class TierNameDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
     final currentValue = controller.text.trim();
     final options = [
       ..._tierNames,
@@ -68,14 +84,20 @@ class TierNameDropdown extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Tier Name', style: AppTextStyles.label),
+        Text('Tier Name', style: _labelStyle(p)),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           initialValue: currentValue.isEmpty ? null : currentValue,
           isExpanded: true,
+          dropdownColor: p.surface,
+          style: _bodyStyle(p),
+          iconEnabledColor: p.textSecondary,
           items: [
             for (final option in options)
-              DropdownMenuItem(value: option, child: Text(option)),
+              DropdownMenuItem(
+                value: option,
+                child: Text(option, style: _bodyStyle(p)),
+              ),
           ],
           onChanged: (value) {
             if (value == null) return;
@@ -84,26 +106,17 @@ class TierNameDropdown extends StatelessWidget {
           },
           decoration: InputDecoration(
             hintText: 'Select a tier',
-            hintStyle: AppTextStyles.bodyGray,
+            hintStyle: _hintStyle(p),
             errorText: errorText,
             filled: true,
-            fillColor: Colors.white,
+            fillColor: p.surface,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
               vertical: 14,
             ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.borderLight),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.borderLight),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.primaryPurple),
-            ),
+            border: _border(p.border),
+            enabledBorder: _border(p.border),
+            focusedBorder: _border(p.accentLabel),
           ),
         ),
       ],
@@ -187,6 +200,8 @@ class _OrganizerAutocompleteFieldState
 
   @override
   Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
+
     return RawAutocomplete<String>(
       textEditingController: widget.controller,
       focusNode: _focusNode,
@@ -223,6 +238,7 @@ class _OrganizerAutocompleteFieldState
           alignment: Alignment.topLeft,
           child: Material(
             elevation: 4,
+            color: p.surface,
             borderRadius: BorderRadius.circular(10),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 220),
@@ -233,7 +249,7 @@ class _OrganizerAutocompleteFieldState
                   for (final option in options)
                     ListTile(
                       dense: true,
-                      title: Text(option, style: AppTextStyles.body),
+                      title: Text(option, style: _bodyStyle(p)),
                       onTap: () => onSelected(option),
                     ),
                 ],
@@ -249,7 +265,7 @@ class _OrganizerAutocompleteFieldState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (hasLabel) ...[
-              Text(widget.label, style: AppTextStyles.label),
+              Text(widget.label, style: _labelStyle(p)),
               const SizedBox(height: 8),
             ],
             TextField(
@@ -257,44 +273,24 @@ class _OrganizerAutocompleteFieldState
               focusNode: focusNode,
               enabled: widget.enabled,
               onChanged: widget.onChanged,
-              style: AppTextStyles.body,
+              style: _bodyStyle(p),
               decoration: InputDecoration(
                 hintText: widget.hint,
-                hintStyle: AppTextStyles.bodyGray,
+                hintStyle: _hintStyle(p),
                 errorText: widget.errorText ?? _lookupError,
                 prefixIcon: widget.prefixIcon,
-                suffixIcon: const Icon(
-                  Icons.arrow_drop_down,
-                  color: AppColors.textGray,
-                ),
-                errorBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: AppColors.dangerRed),
-                ),
-                focusedErrorBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: AppColors.dangerRed),
-                ),
+                suffixIcon: Icon(Icons.arrow_drop_down, color: p.textSecondary),
+                errorBorder: _border(AppColors.dangerRed),
+                focusedErrorBorder: _border(AppColors.dangerRed),
                 filled: true,
-                fillColor: widget.enabled
-                    ? Colors.white
-                    : const Color(0xFFF3F4F6),
+                fillColor: widget.enabled ? p.surface : p.background,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 14,
                 ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: AppColors.borderLight),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: AppColors.borderLight),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: AppColors.primaryPurple),
-                ),
+                border: _border(p.border),
+                enabledBorder: _border(p.border),
+                focusedBorder: _border(p.accentLabel),
               ),
             ),
           ],

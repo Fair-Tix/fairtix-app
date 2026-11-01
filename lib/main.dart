@@ -20,6 +20,7 @@ import 'screens/organizer/organizer-splash.dart';
 import 'screens/organizer/organizer-landing.dart';
 import 'screens/organizer/app_colors.dart';
 import 'screens/user/login_screen.dart' show userHomeFor;
+import 'screens/user/app_loading_screen.dart';
 import 'screens/user/splash_screen.dart';
 import 'theme/theme_controller.dart';
 import 'theme/page_transitions.dart';
@@ -31,6 +32,36 @@ import 'services/user_session.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final startup = _startup();
+
+  if (kIsWeb) {
+    // Web keeps its existing flow (organizer splash handles the first view).
+    final result = await startup;
+    runApp(
+      FairTixThemeScope(
+        controller: ThemeController.instance,
+        child: MyApp(
+          initialRoute: result.initialRoute,
+          startupAuthError: result.startupAuthError,
+        ),
+      ),
+    );
+    return;
+  }
+
+  // Mobile: paint the FairTix loading screen on the first frame and let the
+  // startup work below run behind it.
+  runApp(
+    FairTixThemeScope(
+      controller: ThemeController.instance,
+      child: _AppRoot(startup: startup),
+    ),
+  );
+}
+
+/// Everything that used to run in main() before runApp: Supabase, saved theme,
+/// and restoring any signed-in session.
+Future<_StartupResult> _startup() async {
   await Supabase.initialize(
     url: SupabaseConfig.url,
     publishableKey: SupabaseConfig.publishableKey,
@@ -88,15 +119,89 @@ void main() async {
     }
   }
 
-  runApp(
-    FairTixThemeScope(
-      controller: ThemeController.instance,
-      child: MyApp(
-        initialRoute: initialRoute,
-        startupAuthError: startupAuthError,
-      ),
-    ),
+  return _StartupResult(
+    initialRoute: initialRoute,
+    startupAuthError: startupAuthError,
   );
+}
+
+class _StartupResult {
+  const _StartupResult({this.initialRoute = '/', this.startupAuthError});
+
+  final String initialRoute;
+  final String? startupAuthError;
+}
+
+/// Mobile root: shows [AppLoadingScreen] until startup finishes, then fades
+/// into the real app. Lives above MaterialApp, so the splash only ever shows
+/// once per launch and never during normal navigation.
+class _AppRoot extends StatefulWidget {
+  const _AppRoot({required this.startup});
+
+  final Future<_StartupResult> startup;
+
+  @override
+  State<_AppRoot> createState() => _AppRootState();
+}
+
+class _AppRootState extends State<_AppRoot> {
+  _StartupResult _result = const _StartupResult();
+  bool _showApp = false;
+
+  late final Future<void> _ready = widget.startup.then<void>(
+    (result) {
+      _result = result;
+    },
+    onError: (Object error, StackTrace stack) {
+      // Never leave the user stuck on the splash. Fall through to the normal
+      // first screen; the error is logged for debugging.
+      debugPrint('FairTix startup failed: $error\n$stack');
+    },
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 450),
+        switchInCurve: Curves.easeOut,
+        switchOutCurve: Curves.easeIn,
+        child: _showApp
+            ? MyApp(
+                key: const ValueKey('app'),
+                initialRoute: _result.initialRoute,
+                startupAuthError: _result.startupAuthError,
+              )
+            : _LoadingApp(
+                key: const ValueKey('loading'),
+                ready: _ready,
+                onFinished: () => setState(() => _showApp = true),
+              ),
+      ),
+    );
+  }
+}
+
+/// Minimal MaterialApp host for the loading screen (it needs Material,
+/// Directionality and MediaQuery, which exist only below a MaterialApp).
+class _LoadingApp extends StatelessWidget {
+  const _LoadingApp({super.key, required this.ready, required this.onFinished});
+
+  final Future<void> ready;
+  final VoidCallback onFinished;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'FairTix',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(useMaterial3: true, brightness: Brightness.dark),
+      builder: (context, child) =>
+          MediaQuery.withNoTextScaling(child: child ?? const SizedBox.shrink()),
+      home: AppLoadingScreen(ready: ready, onFinished: onFinished),
+    );
+  }
 }
 
 /// Convenience accessor used throughout the app's service layer, e.g.

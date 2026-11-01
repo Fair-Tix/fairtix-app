@@ -19,9 +19,8 @@ import 'screens/admin/admin-user-registrations.dart';
 import 'screens/organizer/organizer-splash.dart';
 import 'screens/organizer/organizer-landing.dart';
 import 'screens/organizer/app_colors.dart';
-import 'screens/user/login_screen.dart' show userHomeFor;
+import 'screens/user/login_screen.dart' show LoginScreen, userHomeFor;
 import 'screens/user/app_loading_screen.dart';
-import 'screens/user/splash_screen.dart';
 import 'theme/theme_controller.dart';
 import 'theme/page_transitions.dart';
 import 'services/admin_auth_service.dart';
@@ -161,23 +160,28 @@ class _AppRootState extends State<_AppRoot> {
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.ltr,
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 450),
-        switchInCurve: Curves.easeOut,
-        switchOutCurve: Curves.easeIn,
-        child: _showApp
-            ? MyApp(
-                key: const ValueKey('app'),
-                initialRoute: _result.initialRoute,
-                startupAuthError: _result.startupAuthError,
-              )
-            : _LoadingApp(
-                key: const ValueKey('loading'),
-                ready: _ready,
-                onFinished: () => setState(() => _showApp = true),
-              ),
+    // The dark base behind the cross-fade keeps the window background from
+    // showing through while the two screens swap.
+    return ColoredBox(
+      color: const Color(0xFF08051B),
+      child: Directionality(
+        textDirection: TextDirection.ltr,
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 450),
+          switchInCurve: Curves.easeOut,
+          switchOutCurve: Curves.easeIn,
+          child: _showApp
+              ? MyApp(
+                  key: const ValueKey('app'),
+                  initialRoute: _result.initialRoute,
+                  startupAuthError: _result.startupAuthError,
+                )
+              : _LoadingApp(
+                  key: const ValueKey('loading'),
+                  ready: _ready,
+                  onFinished: () => setState(() => _showApp = true),
+                ),
+        ),
       ),
     );
   }
@@ -253,7 +257,7 @@ class MyApp extends StatelessWidget {
               // A restored eventgoer skips the splash/login and goes straight
               // to where they belong. Read live so a Log Out is respected.
               final user = UserSession.instance.account;
-              return user != null ? userHomeFor(user) : const SplashScreen();
+              return user != null ? userHomeFor(user) : const LoginScreen();
             }
             // A signed-in organizer (restored after a refresh, or logged in
             // this session) goes straight to where they belong; everyone

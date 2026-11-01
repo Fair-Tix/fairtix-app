@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show AutofillHints;
 
 import '../../models/app_user.dart';
 import '../../navigation/main_shell.dart';
 import '../../services/user_auth_service.dart';
-import '../../theme/app_theme.dart';
-import '../../widgets/gradient_background.dart';
-import '../../widgets/pill_button.dart';
-import '../../widgets/pill_text_field.dart';
-import 'registration_screen.dart';
+import '../../theme/page_transitions.dart';
+import '../../widgets/ft_dark_ui.dart';
 import '../staff/staff_pin_entry_screen.dart';
+import 'forgot_password_screen.dart';
+import 'registration_screen.dart';
 
 /// Picks the first screen for a signed-in eventgoer. Shared by the login flow
 /// and app startup (session restore) so both land in the same place.
@@ -20,6 +20,8 @@ import '../staff/staff_pin_entry_screen.dart';
 /// services/access_control.dart, and the database enforces the same rule.
 Widget userHomeFor(AppUser account) => const MainShell();
 
+/// First screen for anyone who is not signed in (shown right after the
+/// loading screen). Dark FairTix design.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -28,196 +30,232 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _usernameController = TextEditingController();
+  static final RegExp _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+  static const String _offlineMessage =
+      'We couldn’t reach FairTix. Check your connection and try again.';
+
+  final _formKey = GlobalKey<FormState>();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+
   bool _isLoading = false;
+  bool _showFieldErrors = false;
+  String? _error;
+  String? _notice;
 
   @override
   void dispose() {
-    _usernameController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
+  String? _validateEmail(String? value) {
+    final email = (value ?? '').trim();
+    if (email.isEmpty) return 'Enter your email.';
+    if (!_emailPattern.hasMatch(email)) return 'Enter a valid email address.';
+    return null;
+  }
+
+  String? _validatePassword(String? value) {
+    if (value == null || value.isEmpty) return 'Enter your password.';
+    return null;
+  }
+
+  /// Turns raw auth errors into something a person can act on.
+  String _friendlyError(String raw) {
+    final m = raw.toLowerCase();
+    if (m.contains('invalid login credentials') ||
+        m.contains('invalid email or password')) {
+      return 'Incorrect email or password. Please try again.';
+    }
+    if (m.contains('email not confirmed')) {
+      return 'Please confirm your email first. Check your inbox for the code.';
+    }
+    if (m.contains('too many') || m.contains('rate limit')) {
+      return 'Too many attempts. Please wait a moment and try again.';
+    }
+    if (m.contains('socket') ||
+        m.contains('failed host lookup') ||
+        m.contains('clientexception') ||
+        m.contains('network') ||
+        m.contains('timed out')) {
+      return _offlineMessage;
+    }
+    return raw;
+  }
+
   Future<void> _handleLogin() async {
+    if (_isLoading) return; // no double submits
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _showFieldErrors = true;
+      _error = null;
+      _notice = null;
+    });
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+
     setState(() => _isLoading = true);
     AppUser account;
     try {
       account = await UserAuthService.instance.login(
-        email: _usernameController.text,
+        email: _emailController.text,
         password: _passwordController.text,
       );
     } on UserAuthException catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      _fail(_friendlyError(e.message));
+      return;
+    } catch (_) {
+      // Network failures and anything unexpected: never leave the button
+      // spinning forever.
+      _fail(_offlineMessage);
       return;
     }
     if (!mounted) return;
-    setState(() => _isLoading = false);
 
-    // Route based on the account's real id_verification_status (see
-    // [userHomeFor]) rather than always going Home.
+    // Stay in the loading state while navigating, so a second tap can't start
+    // another login.
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => userHomeFor(account)),
       (route) => false,
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: GradientBackground(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const SizedBox(height: 24),
-              Text('FairTix', style: AppTextStyles.logo),
-              const SizedBox(height: 40),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Welcome back!', style: AppTextStyles.heading),
-              ),
-              if (UserAuthService.debugCredentialsHint.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: AppColors.fieldFill,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppColors.fieldBorder),
-                  ),
-                  child: Text(
-                    'Test account: ${UserAuthService.debugCredentialsHint}',
-                    style: AppTextStyles.footerText.copyWith(fontSize: 12),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 24),
-              PillTextField(
-                label: 'Username',
-                controller: _usernameController,
-                hintText: 'you@email.com',
-                keyboardType: TextInputType.emailAddress,
-                textInputAction: TextInputAction.next,
-              ),
-              const SizedBox(height: 20),
-              PillTextField(
-                label: 'Password',
-                controller: _passwordController,
-                hintText: '••••••••',
-                obscureText: true,
-                prefixIcon: Icons.lock_outline,
-                textInputAction: TextInputAction.done,
-              ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () {
-                    // TODO: navigate to Forgot Password flow.
-                  },
-                  style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(0, 0),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: Text('Forgot Password?', style: AppTextStyles.link),
-                ),
-              ),
-              const SizedBox(height: 28),
-              PillButton(
-                label: 'Log In',
-                loading: _isLoading,
-                onPressed: _handleLogin,
-              ),
-              const SizedBox(height: 48),
-              Text('Or log in with', style: AppTextStyles.footerText),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _SocialCircle(icon: Icons.g_mobiledata, onTap: () {}),
-                  const SizedBox(width: 16),
-                  _SocialCircle(icon: Icons.facebook, onTap: () {}),
-                  const SizedBox(width: 16),
-                  _SocialCircle(icon: Icons.apple, onTap: () {}),
-                ],
-              ),
-              const SizedBox(height: 24),
-              GestureDetector(
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const RegistrationScreen()),
-                  );
-                },
-                child: RichText(
-                  text: TextSpan(
-                    style: AppTextStyles.footerText,
-                    children: const [
-                      TextSpan(text: "Don't have an account? "),
-                      TextSpan(
-                        text: 'Sign Up',
-                        style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.white),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              GestureDetector(
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const StaffPinEntryScreen()),
-                  );
-                },
-                child: RichText(
-                  text: TextSpan(
-                    style: AppTextStyles.footerText,
-                    children: const [
-                      TextSpan(text: 'Entry staff? '),
-                      TextSpan(
-                        text: 'Scan tickets',
-                        style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.white),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
-          ),
-        ),
+  void _fail(String message) {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      _error = message;
+    });
+  }
+
+  Future<void> _openForgotPassword() async {
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) =>
+            ForgotPasswordScreen(initialEmail: _emailController.text.trim()),
       ),
     );
+    if (changed == true && mounted) {
+      setState(() {
+        _error = null;
+        _notice = 'Password updated. Log in with your new password.';
+        _passwordController.clear();
+      });
+    }
   }
-}
 
-class _SocialCircle extends StatelessWidget {
-  const _SocialCircle({required this.icon, required this.onTap});
+  void _openRegistration() {
+    Navigator.of(context).push(
+      ftFadeRoute(const RegistrationScreen()),
+    );
+  }
 
-  final IconData icon;
-  final VoidCallback onTap;
+  void _openStaffEntry() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const StaffPinEntryScreen()),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(28),
-      child: Container(
-        width: 56,
-        height: 56,
-        decoration: BoxDecoration(
-          color: AppColors.fieldFill,
-          shape: BoxShape.circle,
-          border: Border.all(color: AppColors.fieldBorder, width: 1),
+    return FtAuthScaffold(
+      title: 'Log in',
+      subtitle: 'Enter your details to continue.',
+      body: [
+        Form(
+          key: _formKey,
+          autovalidateMode: _showFieldErrors
+              ? AutovalidateMode.onUserInteraction
+              : AutovalidateMode.disabled,
+          child: AutofillGroup(
+            child: Column(
+              children: [
+                FtTextField(
+                  label: 'Email',
+                  controller: _emailController,
+                  hintText: 'you@example.com',
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
+                  autofillHints: const [AutofillHints.email],
+                  enabled: !_isLoading,
+                  validator: _validateEmail,
+                ),
+                const SizedBox(height: 26),
+                FtTextField(
+                  label: 'Password',
+                  controller: _passwordController,
+                  hintText: 'Enter your password',
+                  isPassword: true,
+                  textInputAction: TextInputAction.done,
+                  autofillHints: const [AutofillHints.password],
+                  enabled: !_isLoading,
+                  validator: _validatePassword,
+                  onSubmitted: (_) => _handleLogin(),
+                ),
+              ],
+            ),
+          ),
         ),
-        child: Icon(icon, color: AppColors.white, size: 26),
+        const SizedBox(height: 14),
+        Align(
+          alignment: Alignment.centerRight,
+          child: InkWell(
+            onTap: _isLoading ? null : _openForgotPassword,
+            borderRadius: BorderRadius.circular(6),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+              child: Text('Forgot password?', style: FtText.link()),
+            ),
+          ),
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 12),
+          FtBanner(message: _error!),
+        ],
+        if (_notice != null) ...[
+          const SizedBox(height: 12),
+          FtBanner(message: _notice!, isError: false),
+        ],
+      ],
+      button: FtGradientButton(
+        label: 'Log In',
+        loading: _isLoading,
+        onPressed: _isLoading ? null : _handleLogin,
+      ),
+      footer: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('New to FairTix? ', style: FtText.footer()),
+              InkWell(
+                onTap: _isLoading ? null : _openRegistration,
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                  child: Text('Create account', style: FtText.link()),
+                ),
+              ),
+            ],
+          ),
+          // Entry staff have no account, so this is their only way in.
+          InkWell(
+            onTap: _isLoading ? null : _openStaffEntry,
+            borderRadius: BorderRadius.circular(6),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+              child: Text(
+                'Entry staff? Scan tickets',
+                style: FtText.footer().copyWith(
+                  fontSize: 12.5,
+                  color: FtColors.hint,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

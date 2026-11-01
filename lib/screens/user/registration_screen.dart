@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show AutofillHints;
 
+import '../../services/registration_draft.dart';
 import '../../services/user_auth_service.dart';
-import '../../theme/app_theme.dart';
-import '../../widgets/gradient_pill_button.dart';
-import '../../widgets/light_pill_field.dart';
-import '../../widgets/purple_header_bar.dart';
+import '../../theme/page_transitions.dart';
+import '../../widgets/ft_dark_ui.dart';
+import '../../widgets/ft_registration_ui.dart';
 import 'otp_verification_screen.dart';
+import 'terms_privacy_screen.dart';
 
+/// Registration, Step 1 of 5: full name, email and password.
+///
+/// Step 2 is the email code, so the Supabase sign-up (which is what sends
+/// that code) happens when this step is submitted. The account stays
+/// unconfirmed, with no session, until the code is verified.
 class RegistrationScreen extends StatefulWidget {
   const RegistrationScreen({super.key});
 
@@ -15,295 +22,222 @@ class RegistrationScreen extends StatefulWidget {
 }
 
 class _RegistrationScreenState extends State<RegistrationScreen> {
-  final _firstNameController = TextEditingController();
-  final _lastNameController = TextEditingController();
+  static final RegExp _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+  // Letters (any language), spaces, and the punctuation found in real names.
+  static final RegExp _namePattern = RegExp(
+    r"^[\p{L}][\p{L}\p{M}\s.'’\-]*$",
+    unicode: true,
+  );
+  static const int _minPasswordLength = 8;
+  static const String _offlineMessage =
+      'We couldn’t reach FairTix. Check your connection and try again.';
+
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
-  final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
 
-  int _day = 12;
-  String _month = 'March';
-  int _year = 2003;
-
-  bool _obscurePassword = true;
-  bool _obscureConfirmPassword = true;
   bool _isSubmitting = false;
+  bool _showFieldErrors = false;
+  String? _error;
 
-  // Field-level validation messages, keyed by field name. Populated by
-  // [_validate] right before a submit attempt.
-  final Map<String, String?> _errors = {};
+  // The email/password the sign-up already succeeded for. If the user goes
+  // back from Step 2 and continues again without changing them, we don't sign
+  // up a second time. Memory only; it dies with this screen.
+  String? _createdEmail;
+  String? _createdPassword;
 
-  static const _months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
-  ];
-
-  static final _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-  static final _phoneDigitsPattern = RegExp(r'^\d{10}$');
+  @override
+  void initState() {
+    super.initState();
+    final draft = RegistrationDraft.instance;
+    _nameController.text = draft.fullName;
+    _emailController.text = draft.email;
+  }
 
   @override
   void dispose() {
-    _firstNameController.dispose();
-    _lastNameController.dispose();
+    // Leaving Step 1 for good (back to Login, or registration finished).
+    RegistrationDraft.instance.clear();
+    _nameController.dispose();
     _emailController.dispose();
-    _phoneController.dispose();
     _passwordController.dispose();
-    _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  DateTime get _birthDate => DateTime(_year, _months.indexOf(_month) + 1, _day);
+  String _normalizeName(String value) =>
+      value.trim().replaceAll(RegExp(r'\s+'), ' ');
 
-  /// Runs all field validations, stores messages in [_errors], and returns
-  /// whether the form is valid overall.
-  bool _validate() {
-    final errors = <String, String?>{};
-
-    if (_firstNameController.text.trim().isEmpty) {
-      errors['firstName'] = 'Required';
+  String? _validateName(String? value) {
+    final name = _normalizeName(value ?? '');
+    if (name.isEmpty) return 'Enter your full name.';
+    if (!_namePattern.hasMatch(name)) {
+      return 'Use letters only, exactly as shown on your ID.';
     }
-    if (_lastNameController.text.trim().isEmpty) {
-      errors['lastName'] = 'Required';
-    }
-
-    final email = _emailController.text.trim();
-    if (email.isEmpty) {
-      errors['email'] = 'Email is required';
-    } else if (!_emailPattern.hasMatch(email)) {
-      errors['email'] = 'Enter a valid email address';
-    }
-
-    final phoneDigits = _phoneController.text.trim().replaceAll(RegExp(r'\D'), '');
-    if (phoneDigits.isEmpty) {
-      errors['phone'] = 'Phone number is required';
-    } else if (!_phoneDigitsPattern.hasMatch(phoneDigits)) {
-      errors['phone'] = 'Enter a valid 10-digit mobile number';
-    }
-
-    final now = DateTime.now();
-    final hasHadBirthdayThisYear = now.month > _birthDate.month ||
-        (now.month == _birthDate.month && now.day >= _birthDate.day);
-    final age = now.year - _birthDate.year - (hasHadBirthdayThisYear ? 0 : 1);
-    if (age < 13) {
-      errors['birthday'] = 'You must be at least 13 years old';
-    }
-
-    final password = _passwordController.text;
-    if (password.length < 8) {
-      errors['password'] = 'At least 8 characters';
-    }
-
-    if (_confirmPasswordController.text != password) {
-      errors['confirmPassword'] = 'Passwords do not match';
-    }
-
-    setState(() => _errors
-      ..clear()
-      ..addAll(errors));
-
-    return errors.isEmpty;
+    if (!name.contains(' ')) return 'Enter your first and last name.';
+    return null;
   }
 
-  Future<void> _handleContinue() async {
-    if (!_validate()) return;
+  String? _validateEmail(String? value) {
+    final email = (value ?? '').trim();
+    if (email.isEmpty) return 'Enter your email.';
+    if (!_emailPattern.hasMatch(email)) return 'Enter a valid email address.';
+    return null;
+  }
 
-    setState(() => _isSubmitting = true);
+  String? _validatePassword(String? value) {
+    if (value == null || value.isEmpty) return 'Enter a password.';
+    if (value.length < _minPasswordLength) {
+      return 'Use at least $_minPasswordLength characters.';
+    }
+    return null;
+  }
 
-    final fullName = '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}';
-    final email = _emailController.text.trim();
-    final phone = '+63${_phoneController.text.trim().replaceAll(RegExp(r'\D'), '')}';
+  /// Turns raw auth errors into something a person can act on.
+  String _friendlyError(String raw) {
+    final m = raw.toLowerCase();
+    if (m.contains('already exists') || m.contains('already registered')) {
+      return 'An account with this email already exists. Try logging in instead.';
+    }
+    if (m.contains('too many') || m.contains('rate limit')) {
+      return 'Too many attempts. Please wait a moment and try again.';
+    }
+    if (m.contains('socket') ||
+        m.contains('failed host lookup') ||
+        m.contains('clientexception') ||
+        m.contains('network') ||
+        m.contains('timed out')) {
+      return _offlineMessage;
+    }
+    return raw;
+  }
 
-    try {
-      await UserAuthService.instance.register(
-        fullName: fullName,
-        email: email,
-        phone: phone,
-        password: _passwordController.text,
-        birthDate: _birthDate,
-      );
-    } on UserAuthException catch (e) {
+  Future<void> _handleCreateAccount() async {
+    if (_isSubmitting) return; // no double submits
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _showFieldErrors = true;
+      _error = null;
+    });
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+
+    final fullName = _normalizeName(_nameController.text);
+    final email = _emailController.text.trim().toLowerCase();
+    final password = _passwordController.text;
+
+    // Keep for the next steps and for coming back to this one.
+    RegistrationDraft.instance
+      ..fullName = fullName
+      ..email = email;
+
+    final alreadyCreated = _createdEmail == email && _createdPassword == password;
+    if (!alreadyCreated) {
+      setState(() => _isSubmitting = true);
+      try {
+        await UserAuthService.instance.register(
+          fullName: fullName,
+          email: email,
+          password: password,
+        );
+        _createdEmail = email;
+        _createdPassword = password;
+      } on UserAuthException catch (e) {
+        _fail(_friendlyError(e.message));
+        return;
+      } catch (_) {
+        // Network failures and anything unexpected: never leave the button
+        // spinning forever.
+        _fail(_offlineMessage);
+        return;
+      }
       if (!mounted) return;
       setState(() => _isSubmitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
-      return;
     }
 
+    // Step 2 of 5: enter the code that was emailed.
+    Navigator.of(context).push(ftFadeRoute(OtpVerificationScreen(email: email)));
+  }
+
+  void _fail(String message) {
     if (!mounted) return;
-    setState(() => _isSubmitting = false);
+    setState(() {
+      _isSubmitting = false;
+      _error = message;
+    });
+  }
+
+  // Terms and Privacy live on one combined page for now.
+  void _openLegal() {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => OtpVerificationScreen(email: email)),
+      MaterialPageRoute(builder: (_) => const TermsPrivacyScreen()),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.pageBackground,
-      appBar: PurpleHeaderBar(
-        title: 'Create Account',
-        onBack: () => Navigator.of(context).maybePop(),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: AppColors.cardWhite,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 20, offset: const Offset(0, 8)),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Personal Info', style: AppTextStyles.sectionHeading),
-              const SizedBox(height: 20),
-              Text('Your Name', style: AppTextStyles.fieldLabelLight),
-              const SizedBox(height: 8),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: LightPillField(
-                      controller: _firstNameController,
-                      hintText: 'First name',
-                      errorText: _errors['firstName'],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: LightPillField(
-                      controller: _lastNameController,
-                      hintText: 'Last name',
-                      errorText: _errors['lastName'],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              LightPillField(
-                label: 'Email Address',
-                controller: _emailController,
-                hintText: 'herondave@gmail.com',
-                keyboardType: TextInputType.emailAddress,
-                errorText: _errors['email'],
-              ),
-              const SizedBox(height: 18),
-              Text('Phone Number', style: AppTextStyles.fieldLabelLight),
-              const SizedBox(height: 8),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                    decoration: BoxDecoration(
-                      color: AppColors.inputFillLight,
-                      borderRadius: BorderRadius.circular(30),
-                      border: Border.all(color: AppColors.inputBorderLight),
-                    ),
-                    child: const Text('🇵🇭 +63', style: AppTextStyles.fieldInputLight),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: LightPillField(
-                      controller: _phoneController,
-                      hintText: '912 345 6789',
-                      keyboardType: TextInputType.phone,
-                      errorText: _errors['phone'],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              Text('Birthday', style: AppTextStyles.fieldLabelLight),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: LightPillDropdown<int>(
-                      value: _day,
-                      items: List.generate(31, (i) => i + 1)
-                          .map((d) => DropdownMenuItem(value: d, child: Text('$d')))
-                          .toList(),
-                      onChanged: (v) => setState(() => _day = v ?? _day),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    flex: 2,
-                    child: LightPillDropdown<String>(
-                      value: _month,
-                      items: _months.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
-                      onChanged: (v) => setState(() => _month = v ?? _month),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: LightPillDropdown<int>(
-                      value: _year,
-                      items: List.generate(90, (i) => 2025 - i)
-                          .map((y) => DropdownMenuItem(value: y, child: Text('$y')))
-                          .toList(),
-                      onChanged: (v) => setState(() => _year = v ?? _year),
-                    ),
-                  ),
-                ],
-              ),
-              if (_errors['birthday'] != null) ...[
-                const SizedBox(height: 6),
-                Text(
-                  _errors['birthday']!,
-                  style: const TextStyle(fontSize: 12, color: AppColors.error, fontWeight: FontWeight.w600),
+    return FtRegistrationScaffold(
+      step: 1,
+      title: 'Create your account',
+      subtitle: 'Your name and email must match your ID.',
+      onBack: _isSubmitting ? null : () => Navigator.of(context).maybePop(),
+      body: [
+        Form(
+          key: _formKey,
+          autovalidateMode: _showFieldErrors
+              ? AutovalidateMode.onUserInteraction
+              : AutovalidateMode.disabled,
+          child: AutofillGroup(
+            child: Column(
+              children: [
+                FtTextField(
+                  label: 'Full name',
+                  controller: _nameController,
+                  hintText: 'As shown on your ID',
+                  keyboardType: TextInputType.name,
+                  textCapitalization: TextCapitalization.words,
+                  textInputAction: TextInputAction.next,
+                  autofillHints: const [AutofillHints.name],
+                  enabled: !_isSubmitting,
+                  validator: _validateName,
+                ),
+                const SizedBox(height: 24),
+                FtTextField(
+                  label: 'Email',
+                  controller: _emailController,
+                  hintText: 'you@example.com',
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
+                  autofillHints: const [AutofillHints.email],
+                  enabled: !_isSubmitting,
+                  validator: _validateEmail,
+                ),
+                const SizedBox(height: 24),
+                FtTextField(
+                  label: 'Password',
+                  controller: _passwordController,
+                  hintText: 'At least 8 characters',
+                  isPassword: true,
+                  textInputAction: TextInputAction.done,
+                  autofillHints: const [AutofillHints.newPassword],
+                  enabled: !_isSubmitting,
+                  validator: _validatePassword,
+                  onSubmitted: (_) => _handleCreateAccount(),
                 ),
               ],
-              const SizedBox(height: 18),
-              LightPillField(
-                label: 'Password',
-                controller: _passwordController,
-                hintText: 'At least 8 characters',
-                obscureText: _obscurePassword,
-                errorText: _errors['password'],
-                suffixWidget: IconButton(
-                  visualDensity: VisualDensity.compact,
-                  icon: Icon(
-                    _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                    color: AppColors.textMuted,
-                    size: 20,
-                  ),
-                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                ),
-              ),
-              const SizedBox(height: 18),
-              LightPillField(
-                label: 'Confirm Password',
-                controller: _confirmPasswordController,
-                hintText: 'Re-enter your password',
-                obscureText: _obscureConfirmPassword,
-                errorText: _errors['confirmPassword'],
-                suffixWidget: IconButton(
-                  visualDensity: VisualDensity.compact,
-                  icon: Icon(
-                    _obscureConfirmPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                    color: AppColors.textMuted,
-                    size: 20,
-                  ),
-                  onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
-                ),
-              ),
-              const SizedBox(height: 28),
-              GradientPillButton(
-                label: 'Continue',
-                loading: _isSubmitting,
-                onPressed: _handleContinue,
-              ),
-            ],
+            ),
           ),
         ),
+        if (_error != null) ...[
+          const SizedBox(height: 18),
+          FtBanner(message: _error!),
+        ],
+      ],
+      button: FtGradientButton(
+        label: 'Create Account',
+        loading: _isSubmitting,
+        onPressed: _isSubmitting ? null : _handleCreateAccount,
       ),
+      footer: FtLegalText(onTerms: _openLegal, onPrivacy: _openLegal),
     );
   }
 }

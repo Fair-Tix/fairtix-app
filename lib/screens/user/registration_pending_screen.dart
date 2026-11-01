@@ -1,188 +1,197 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../navigation/main_shell.dart';
 import '../../services/user_auth_service.dart';
-import '../../theme/app_theme.dart';
-import '../../widgets/gradient_background.dart';
-import '../../widgets/pill_button.dart';
-import '../../widgets/timeline_step.dart';
+import '../../widgets/ft_dark_ui.dart';
+import '../../widgets/ft_otp_field.dart';
+import '../../widgets/ft_pending_ui.dart';
 
-class RegistrationPendingScreen extends StatelessWidget {
+/// Registration, Step 5 of 5: ID under review.
+///
+/// Dark redesign. The "Proceed to Dashboard" action is the same code the
+/// old "Back to Home" button ran; only the presentation was replaced.
+class RegistrationPendingScreen extends StatefulWidget {
   const RegistrationPendingScreen({
     super.key,
     this.idType = '',
     this.submittedAt,
   });
 
+  // Still passed in by the selfie step; kept so that call site is untouched.
   final String idType;
   final DateTime? submittedAt;
 
-  static const _months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-  ];
+  @override
+  State<RegistrationPendingScreen> createState() =>
+      _RegistrationPendingScreenState();
+}
 
-  String _formatSubmittedAt(DateTime dt) {
-    final hour12 = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
-    final minute = dt.minute.toString().padLeft(2, '0');
-    final period = dt.hour >= 12 ? 'PM' : 'AM';
-    return '${_months[dt.month - 1]} ${dt.day}, ${dt.year} \u2022 $hour12:$minute $period';
+class _RegistrationPendingScreenState extends State<RegistrationPendingScreen>
+    with TickerProviderStateMixin {
+  static const int _totalMs = 1100;
+
+  late final AnimationController _entrance = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: _totalMs),
+  );
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2800),
+  );
+  late final AnimationController _spin = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1500),
+  );
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      // Reduced motion: show everything immediately, nothing loops.
+      _entrance.value = 1;
+    } else {
+      _entrance.forward();
+      _pulse.repeat(reverse: true);
+      _spin.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _entrance.dispose();
+    _pulse.dispose();
+    _spin.dispose();
+    super.dispose();
+  }
+
+  Future<void> _proceedToDashboard() async {
+    // The eventgoer is already signed in (the email OTP created
+    // their session), so go Home. Load their profile first so
+    // the app knows their approval status. Browsing works right
+    // away; buying and reselling stay locked until an admin
+    // approves the account.
+    await UserAuthService.instance.refreshAccount();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const MainShell()),
+      (route) => false,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final displayIdType = idType.isNotEmpty ? idType : 'Not specified';
-    final displaySubmittedAt = submittedAt != null ? _formatSubmittedAt(submittedAt!) : 'Just now';
-    return Scaffold(
-      body: GradientBackground(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-              const SizedBox(height: 12),
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: const Icon(Icons.hourglass_top_rounded, color: AppColors.gradientBottom, size: 30),
-              ),
-              const SizedBox(height: 20),
-              Text('Verification Pending', style: AppTextStyles.heading, textAlign: TextAlign.center),
-              const SizedBox(height: 10),
-              const Text(
-                'Your ID is currently being reviewed. This usually takes 1-2 business days.',
-                textAlign: TextAlign.center,
-                style: AppTextStyles.tagline,
-              ),
-              const SizedBox(height: 28),
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TimelineStep(
-                    title: 'ID Submitted',
-                    statusLabel: 'Completed',
-                    status: TimelineStepStatus.completed,
-                  ),
-                  TimelineStep(
-                    title: 'Under Review',
-                    statusLabel: 'In Progress',
-                    status: TimelineStepStatus.inProgress,
-                  ),
-                  TimelineStep(
-                    title: 'Account Activated',
-                    statusLabel: 'Waiting',
-                    status: TimelineStepStatus.waiting,
-                    showConnector: false,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('SUBMITTED ID DETAILS', style: AppTextStyles.cardLabel),
-                    const SizedBox(height: 14),
-                    _detailRow('ID Type', displayIdType),
-                    const SizedBox(height: 10),
-                    _detailRow('Submitted', displaySubmittedAt),
-                    const SizedBox(height: 10),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light.copyWith(
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor: FtColors.bgBottom,
+        systemNavigationBarIconBrightness: Brightness.light,
+      ),
+      child: Scaffold(
+        backgroundColor: FtColors.bgBottom,
+        body: FtBackground(
+          child: SafeArea(
+            child: Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(21, 56, 21, 24),
+                    child: Column(
                       children: [
-                        const Text('Status', style: AppTextStyles.bodyMuted),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppColors.warning.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(20),
+                        FtReveal(
+                          animation: _entrance,
+                          startMs: 0,
+                          endMs: 400,
+                          totalMs: _totalMs,
+                          scaleFrom: 0.85,
+                          child: FtPendingClock(pulse: _pulse),
+                        ),
+                        const SizedBox(height: 26),
+                        FtReveal(
+                          animation: _entrance,
+                          startMs: 200,
+                          endMs: 550,
+                          totalMs: _totalMs,
+                          slide: 14,
+                          child: Semantics(
+                            header: true,
+                            child: Text(
+                              'ID under review',
+                              textAlign: TextAlign.center,
+                              style: FtText.title().copyWith(
+                                fontSize: 29,
+                                letterSpacing: -0.4,
+                              ),
+                            ),
                           ),
-                          child: const Text(
-                            'Pending Review',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.warning),
+                        ),
+                        const SizedBox(height: 12),
+                        FtReveal(
+                          animation: _entrance,
+                          startMs: 350,
+                          endMs: 650,
+                          totalMs: _totalMs,
+                          slide: 10,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 310),
+                            child: Text(
+                              'We’ll email you as soon as your account is ready.',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 15.5,
+                                height: 23 / 15.5,
+                                fontWeight: FontWeight.w400,
+                                color: FtColors.otpSecondary,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 30),
+                        FtReveal(
+                          animation: _entrance,
+                          startMs: 450,
+                          endMs: 850,
+                          totalMs: _totalMs,
+                          slide: 24,
+                          child: FtVerificationCard(
+                            entrance: _entrance,
+                            totalMs: _totalMs,
+                            spin: _spin,
                           ),
                         ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 18),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppColors.fieldFill,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.info_outline, color: AppColors.white, size: 18),
-                    SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'You will be notified via email and in-app once your account has been activated.',
-                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w400, color: AppColors.white),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              PillButton(
-                label: 'Back to Home',
-                onPressed: () async {
-                  // The eventgoer is already signed in (the email OTP created
-                  // their session), so go Home. Load their profile first so
-                  // the app knows their approval status. Browsing works right
-                  // away; buying and reselling stay locked until an admin
-                  // approves the account.
-                  await UserAuthService.instance.refreshAccount();
-                  if (!context.mounted) return;
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (_) => const MainShell()),
-                    (route) => false,
-                  );
-                },
-              ),
-                    ],
                   ),
                 ),
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _detailRow(String label, String value) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: AppTextStyles.bodyMuted),
-        Flexible(
-          child: Text(
-            value,
-            textAlign: TextAlign.right,
-            style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: AppColors.textDark),
+                FtReveal(
+                  animation: _entrance,
+                  startMs: 600,
+                  endMs: 900,
+                  totalMs: _totalMs,
+                  slide: 12,
+                  child: DecoratedBox(
+                    decoration: const BoxDecoration(
+                      color: FtColors.bgBottom,
+                      border: Border(top: BorderSide(color: FtColors.otpBorder)),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(21, 16, 21, 14),
+                      child: FtVerifyButton(
+                        label: 'Proceed to Dashboard',
+                        onPressed: _proceedToDashboard,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-      ],
+      ),
     );
   }
 }

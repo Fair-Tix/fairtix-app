@@ -61,4 +61,80 @@ class PasswordService {
       );
     }
   }
+
+  // --- Forgot password (signed-out) -----------------------------------------
+  // Code-based, matching how signup confirmation already works: Supabase emails
+  // a one-time code, the user types it in, then sets a new password. Needs the
+  // "Reset password" email template in the Supabase Dashboard
+  // (Authentication > Email Templates) to show `{{ .Token }}` instead of only
+  // the `{{ .ConfirmationURL }}` link.
+
+  /// Emails a reset code to [email]. Supabase does not reveal whether the
+  /// address has an account, so this succeeds either way.
+  Future<void> sendResetCode(String email) async {
+    try {
+      await Supabase.instance.client.auth.resetPasswordForEmail(
+        email.trim().toLowerCase(),
+      );
+    } on AuthException catch (e) {
+      throw PasswordChangeException(e.message);
+    } catch (_) {
+      throw const PasswordChangeException(
+        'Could not send the code. Check your connection and try again.',
+      );
+    }
+  }
+
+  /// Checks the emailed code. On success Supabase opens a short-lived
+  /// recovery session, which [setNewPasswordAfterReset] uses.
+  Future<void> verifyResetCode({
+    required String email,
+    required String code,
+  }) async {
+    try {
+      await Supabase.instance.client.auth.verifyOTP(
+        type: OtpType.recovery,
+        email: email.trim().toLowerCase(),
+        token: code.trim(),
+      );
+    } on AuthException catch (e) {
+      final m = e.message.toLowerCase();
+      if (m.contains('expired') || m.contains('invalid')) {
+        throw const PasswordChangeException(
+          'That code is invalid or has expired. Request a new one.',
+        );
+      }
+      throw PasswordChangeException(e.message);
+    } catch (_) {
+      throw const PasswordChangeException(
+        'Could not verify the code. Check your connection and try again.',
+      );
+    }
+  }
+
+  /// Saves the new password, then signs out the recovery session so the user
+  /// logs in normally with it. If saving fails the session is kept, so they
+  /// can try another password without a new code.
+  Future<void> setNewPasswordAfterReset(String newPassword) async {
+    final client = Supabase.instance.client;
+    try {
+      await client.auth.updateUser(UserAttributes(password: newPassword));
+    } on AuthException catch (e) {
+      throw PasswordChangeException(e.message);
+    } catch (_) {
+      throw const PasswordChangeException(
+        'Could not save your new password. Check your connection and try again.',
+      );
+    }
+    try {
+      await client.auth.signOut();
+    } catch (_) {}
+  }
+
+  /// Ends a recovery session the user walked away from before finishing.
+  Future<void> abandonReset() async {
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } catch (_) {}
+  }
 }

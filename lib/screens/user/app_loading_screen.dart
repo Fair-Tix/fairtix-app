@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../widgets/ft_dark_ui.dart' show FtLogo, FtText;
+
 /// FairTix launch splash / loading screen.
 ///
 /// Always dark (it is the brand moment, not a themed page). It stays on screen
@@ -39,7 +41,7 @@ class AppLoadingScreen extends StatefulWidget {
 
 class _AppLoadingScreenState extends State<AppLoadingScreen>
     with TickerProviderStateMixin {
-  static const String _logoAsset = 'assets/logo/ft_lightlogo.png';
+  static const String _logoAsset = FtLogo.asset;
 
   // Colors from the spec.
   static const Color _bgTop = Color(0xFF241354);
@@ -128,7 +130,12 @@ class _AppLoadingScreenState extends State<AppLoadingScreen>
       const AssetImage(_logoAsset),
       context,
     ).catchError((Object _) {});
-    final fonts = GoogleFonts.pendingFonts([_brandStyle(36), _taglineStyle(15)])
+    final fonts = GoogleFonts.pendingFonts([
+          _brandStyle(36),
+          _taglineStyle(15),
+          // Login-screen fonts too, so the next screen doesn't swap fonts.
+          ...FtText.warmUpStyles(),
+        ])
         .timeout(_fontWait, onTimeout: () => <void>[])
         .then<void>((_) {}, onError: (Object _) {});
     await Future.wait<void>([logo, fonts]);

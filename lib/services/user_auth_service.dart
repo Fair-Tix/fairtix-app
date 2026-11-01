@@ -154,9 +154,9 @@ class UserAuthService {
   Future<void> register({
     required String fullName,
     required String email,
-    required String phone,
+    String? phone,
     required String password,
-    required DateTime birthDate,
+    DateTime? birthDate,
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
     try {
@@ -165,11 +165,12 @@ class UserAuthService {
         password: password,
         data: {
           'full_name': fullName.trim(),
-          'phone': phone.trim(),
-          'birth_date':
-              '${birthDate.year.toString().padLeft(4, '0')}-'
-              '${birthDate.month.toString().padLeft(2, '0')}-'
-              '${birthDate.day.toString().padLeft(2, '0')}',
+          if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
+          if (birthDate != null)
+            'birth_date':
+                '${birthDate.year.toString().padLeft(4, '0')}-'
+                '${birthDate.month.toString().padLeft(2, '0')}-'
+                '${birthDate.day.toString().padLeft(2, '0')}',
         },
       );
       final user = response.user;

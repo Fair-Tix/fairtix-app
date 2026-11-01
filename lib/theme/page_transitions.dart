@@ -84,6 +84,57 @@ const PageTransitionsTheme smoothPageTransitionsTheme = PageTransitionsTheme(
   },
 );
 
+/// Soft fade between the eventgoer auth screens (login to the registration
+/// steps). The screen underneath stays in place, so moving between auth pages
+/// never looks like a trip back to the splash screen.
+Route<T> ftFadeRoute<T>(Widget page) {
+  return PageRouteBuilder<T>(
+    pageBuilder: (_, _, _) => page,
+    transitionDuration: const Duration(milliseconds: 320),
+    reverseTransitionDuration: const Duration(milliseconds: 240),
+    transitionsBuilder: (context, animation, _, child) {
+      if (MediaQuery.disableAnimationsOf(context)) return child;
+      return FadeTransition(
+        opacity: CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOut,
+          reverseCurve: Curves.easeIn,
+        ),
+        child: child,
+      );
+    },
+  );
+}
+
+/// Moving forward between registration steps after a step is completed: the
+/// next step fades in while sliding in from the right (about 420ms), over the
+/// step that is leaving.
+Route<T> ftSlideFadeRoute<T>(Widget page) {
+  return PageRouteBuilder<T>(
+    pageBuilder: (_, _, _) => page,
+    transitionDuration: const Duration(milliseconds: 420),
+    reverseTransitionDuration: const Duration(milliseconds: 320),
+    transitionsBuilder: (context, animation, _, child) {
+      if (MediaQuery.disableAnimationsOf(context)) return child;
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      );
+      return FadeTransition(
+        opacity: curved,
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0.06, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: child,
+        ),
+      );
+    },
+  );
+}
+
 /// Short cross-fade used when switching between the organizer's top-level
 /// pages (Dashboard, My Events, Analytics, Escrow, Profile), so the page
 /// content changes smoothly while the top bar stays put visually.

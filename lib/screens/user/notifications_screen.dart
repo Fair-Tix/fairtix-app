@@ -6,7 +6,22 @@ import '../../models/app_notification.dart';
 import '../../models/ticket.dart';
 import '../../services/notification_repository.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/page_transitions.dart';
+import '../../widgets/ft_dark_ui.dart';
+import '../../widgets/ft_verified_ui.dart';
+import 'account_activated_screen.dart';
 import 'ticket_sold_screen.dart';
+
+/// True for the "your account is verified" notification the database writes
+/// when an admin approves an eventgoer (see trg_notify_user_review in
+/// supabase/notification_functions.sql). Matched by title because the table
+/// has no separate subtype; it recognises both the current wording
+/// ("Account activated") and "You're verified".
+bool isVerificationSuccessNotification(AppNotification n) {
+  if (!n.isRemote || n.type != AppNotificationType.system) return false;
+  final title = n.title.toLowerCase().replaceAll('\u2019', "'").trim();
+  return title == 'account activated' || title.startsWith("you're verified");
+}
 
 /// In-app notification feed, shared by event goers, organizers and admins.
 ///
@@ -140,6 +155,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   void _handleTap(AppNotification notification) {
     if (notification.isRemote) {
       _handleRemoteTap(notification);
+      if (isVerificationSuccessNotification(notification)) {
+        Navigator.of(context).push(ftSlideFadeRoute(const AccountActivatedScreen()));
+      }
     } else {
       _handleLocalTap(notification);
     }
@@ -238,6 +256,94 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 }
 
+/// Dark card for the "you're verified" notification: green shield icon,
+/// white title, lavender message, and a green outline + dot while unread so
+/// it stands out from the other entries. Tapping opens the success screen
+/// (wired in [_NotificationsScreenState._handleTap]).
+class _VerifiedNotificationTile extends StatelessWidget {
+  const _VerifiedNotificationTile({required this.notification, required this.onTap});
+
+  final AppNotification notification;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final unread = !notification.isRead;
+    return Semantics(
+      button: true,
+      hint: 'Opens your verification status',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: FtColors.otpFill,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: unread ? FtVerifiedColors.green.withValues(alpha: 0.55) : FtColors.otpBorder,
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: const BoxDecoration(color: FtVerifiedColors.badge, shape: BoxShape.circle),
+                child: const Icon(Icons.verified_user_rounded, color: FtVerifiedColors.green, size: 21),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            notification.title,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: unread ? FontWeight.w800 : FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        if (unread)
+                          Container(
+                            width: 8,
+                            height: 8,
+                            margin: const EdgeInsets.only(left: 6, top: 4),
+                            decoration: const BoxDecoration(color: FtVerifiedColors.green, shape: BoxShape.circle),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      notification.message,
+                      style: const TextStyle(fontSize: 12.5, height: 1.35, color: FtColors.otpSecondary),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      notification.timeLabel,
+                      style: const TextStyle(fontSize: 11, color: FtColors.hint),
+                    ),
+                  ],
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.only(left: 6, top: 10),
+                child: Icon(Icons.chevron_right_rounded, color: FtColors.otpSecondary, size: 20),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _NotificationTile extends StatelessWidget {
   const _NotificationTile({required this.notification, required this.onTap});
 
@@ -255,6 +361,9 @@ class _NotificationTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (isVerificationSuccessNotification(notification)) {
+      return _VerifiedNotificationTile(notification: notification, onTap: onTap);
+    }
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),

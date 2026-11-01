@@ -1,23 +1,31 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../navigation/main_shell.dart';
-import '../../theme/app_theme.dart';
-import '../../widgets/gradient_background.dart';
-import '../../widgets/pill_button.dart';
+import '../../widgets/ft_dark_ui.dart';
+import '../../widgets/ft_otp_field.dart';
+import '../../widgets/ft_pending_ui.dart' show FtReveal;
+import '../../widgets/ft_verified_ui.dart';
 
-/// Shown once an eventgoer's account has been reviewed and approved.
-/// TODO(backend): this should be reached via a push notification / in-app
-/// alert triggered when an admin actually approves the account (see
-/// RegistrationPendingScreen), with [fullName]/[idType]/[email] populated
-/// from the real Firestore user record and [memberSince] set to the
-/// account's real creation date — not left to the defaults below.
-class AccountActivatedScreen extends StatelessWidget {
+/// Shown once an eventgoer's account has been reviewed and approved
+/// ("You're verified").
+///
+/// Dark redesign. The button runs the same navigation the old "Go to Home"
+/// button did (back to the main shell, clearing the stack); only the
+/// presentation was replaced. The details below are no longer displayed, so
+/// they are optional now, but they stay in the constructor so any existing
+/// caller keeps compiling.
+///
+/// TODO(backend): populate these from the real user record if a future design
+/// needs them.
+class AccountActivatedScreen extends StatefulWidget {
   const AccountActivatedScreen({
     super.key,
-    required this.fullName,
-    required this.idType,
-    required this.email,
-    required this.memberSince,
+    this.fullName = '',
+    this.idType = '',
+    this.email = '',
+    this.memberSince,
     this.accountType = 'Buyer',
   });
 
@@ -25,175 +33,174 @@ class AccountActivatedScreen extends StatelessWidget {
   final String idType;
   final String email;
   final String accountType;
-  final DateTime memberSince;
-
-  static const _months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-  ];
-
-  String _formatMemberSince(DateTime dt) => '${_months[dt.month - 1]} ${dt.day}, ${dt.year}';
+  final DateTime? memberSince;
 
   @override
-  Widget build(BuildContext context) {
-    final firstName = fullName.trim().isEmpty ? 'there' : fullName.trim().split(RegExp(r'\s+')).first;
-    return Scaffold(
-      body: GradientBackground(
-        gradient: AppGradients.confirmation,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-              Container(
-                width: 84,
-                height: 84,
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  borderRadius: BorderRadius.circular(22),
-                  boxShadow: [
-                    BoxShadow(color: AppColors.white.withValues(alpha: 0.5), blurRadius: 30, spreadRadius: 4),
-                  ],
-                ),
-                child: const Icon(Icons.check_rounded, color: AppColors.accentPurple, size: 40),
-              ),
-              const SizedBox(height: 20),
-              Text('Account Activated!', style: AppTextStyles.heading, textAlign: TextAlign.center),
-              const SizedBox(height: 10),
-              Text(
-                'Your identity has been verified. Welcome to\nFairTix, $firstName!',
-                textAlign: TextAlign.center,
-                style: AppTextStyles.tagline,
-              ),
-              const SizedBox(height: 26),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: AppColors.fieldFill,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: AppColors.fieldBorder),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('VERIFICATION STATUS', style: AppTextStyles.fieldLabel),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppColors.success.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text('Verified', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.success)),
-                              SizedBox(width: 4),
-                              Icon(Icons.check_circle, size: 14, color: AppColors.success),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 14),
-                      child: Divider(color: AppColors.fieldBorder, height: 1),
-                    ),
-                    _row('Full Name', fullName),
-                    const SizedBox(height: 12),
-                    _row('ID Type', idType),
-                    const SizedBox(height: 12),
-                    _row('Email', email),
-                    const SizedBox(height: 12),
-                    _row('Account Type', accountType, valueColor: AppColors.white),
-                    const SizedBox(height: 12),
-                    _row('Member Since', _formatMemberSince(memberSince)),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 18),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppColors.fieldFill,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.lock_open_rounded, color: AppColors.white, size: 18),
-                    SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'You can now browse events, purchase tickets, and access the Resale Market.',
-                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w400, color: AppColors.white),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 26),
-              PillButton(
-                label: 'Go to Home',
-                onPressed: () {
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (_) => const MainShell()),
-                    (route) => false,
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                height: 54,
-                child: OutlinedButton(
-                  onPressed: () {
-                    Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(builder: (_) => const MainShell(initialIndex: 3)),
-                      (route) => false,
-                    );
-                  },
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: AppColors.white, width: 1.5),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                  ),
-                  child: const Text(
-                    'View My Profile',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.white),
-                  ),
-                ),
-              ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-      ),
+  State<AccountActivatedScreen> createState() => _AccountActivatedScreenState();
+}
+
+class _AccountActivatedScreenState extends State<AccountActivatedScreen>
+    with SingleTickerProviderStateMixin {
+  static const int _totalMs = 1500;
+
+  late final AnimationController _entrance = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: _totalMs),
+  );
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _entrance.value = 1;
+    } else {
+      _entrance.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _entrance.dispose();
+    super.dispose();
+  }
+
+  void _browseEvents() {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const MainShell()),
+      (route) => false,
     );
   }
 
-  Widget _row(String label, String value, {Color valueColor = AppColors.white}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: AppTextStyles.fieldLabel),
-        Flexible(
-          child: Text(
-            value,
-            textAlign: TextAlign.right,
-            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: valueColor),
+  @override
+  Widget build(BuildContext context) {
+    // Screen fade (0-450 ms), then circle, check, heading, badge, message
+    // and button, each ~130 ms after the previous one.
+    final screenFade = _entrance.drive(
+      CurveTween(curve: Interval(0, 450 / _totalMs, curve: Curves.easeOut)),
+    );
+    final draw = _entrance.drive(
+      CurveTween(
+        curve: Interval(550 / _totalMs, 1100 / _totalMs, curve: Curves.easeInOut),
+      ),
+    );
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light.copyWith(
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor: FtColors.bgBottom,
+        systemNavigationBarIconBrightness: Brightness.light,
+      ),
+      child: Scaffold(
+        backgroundColor: FtColors.bgBottom,
+        body: FadeTransition(
+          opacity: screenFade,
+          child: FtBackground(
+            child: SafeArea(
+              child: Column(
+                children: [
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) => SingleChildScrollView(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(24, 24, 24, 96),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                FtReveal(
+                                  animation: _entrance,
+                                  startMs: 100,
+                                  endMs: 550,
+                                  totalMs: _totalMs,
+                                  scaleFrom: 0.7,
+                                  child: FtVerifiedCircle(draw: draw),
+                                ),
+                                const SizedBox(height: 28),
+                                FtReveal(
+                                  animation: _entrance,
+                                  startMs: 650,
+                                  endMs: 1100,
+                                  totalMs: _totalMs,
+                                  slide: 12,
+                                  child: Semantics(
+                                    header: true,
+                                    child: Text(
+                                      'You’re verified',
+                                      textAlign: TextAlign.center,
+                                      style: FtText.title().copyWith(
+                                        fontSize: 32,
+                                        letterSpacing: -0.5,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                FtReveal(
+                                  animation: _entrance,
+                                  startMs: 780,
+                                  endMs: 1230,
+                                  totalMs: _totalMs,
+                                  slide: 8,
+                                  child: const FtVerifiedBadge(),
+                                ),
+                                const SizedBox(height: 18),
+                                FtReveal(
+                                  animation: _entrance,
+                                  startMs: 910,
+                                  endMs: 1360,
+                                  totalMs: _totalMs,
+                                  slide: 8,
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(maxWidth: 300),
+                                    child: Text(
+                                      'You can now buy tickets and resell them safely.',
+                                      textAlign: TextAlign.center,
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 16,
+                                        height: 1.45,
+                                        fontWeight: FontWeight.w400,
+                                        color: FtColors.otpSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  FtReveal(
+                    animation: _entrance,
+                    startMs: 1040,
+                    endMs: 1500,
+                    totalMs: _totalMs,
+                    slide: 12,
+                    child: DecoratedBox(
+                      decoration: const BoxDecoration(
+                        color: FtColors.bgBottom,
+                        border: Border(top: BorderSide(color: FtColors.otpBorder)),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 14),
+                        child: FtVerifyButton(
+                          label: 'Browse Events',
+                          onPressed: _browseEvents,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
-      ],
+      ),
     );
   }
 }

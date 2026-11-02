@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../services/password_service.dart';
-import '../../theme/app_theme.dart';
-import '../../widgets/purple_header_bar.dart';
+import '../../widgets/ft_dark_ui.dart';
+import '../../widgets/ft_otp_field.dart';
+import '../../widgets/ft_subpage_ui.dart';
 
 /// Lets the signed-in eventgoer change their password via Supabase Auth.
-/// This is the only self-service edit on [ProfileScreen] — full name and
+/// This is the only self-service edit on [ProfileScreen]: full name and
 /// email stay locked to the verified ID document per the capstone's
-/// Account Verification rules.
+/// Account Verification rules. Dark design; the password change itself still
+/// goes through [PasswordService] (current password re-checked first).
 class ChangePasswordScreen extends StatefulWidget {
   const ChangePasswordScreen({super.key});
 
@@ -21,9 +24,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   final _newController = TextEditingController();
   final _confirmController = TextEditingController();
 
-  bool _showCurrent = false;
-  bool _showNew = false;
-  bool _showConfirm = false;
   bool _isSaving = false;
 
   @override
@@ -34,7 +34,29 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     super.dispose();
   }
 
+  void _toast(String message, {bool error = false}) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: error ? FtColors.dangerSurface : FtColors.otpFill,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(
+              color: (error ? FtColors.danger : FtColors.success).withValues(alpha: 0.5),
+            ),
+          ),
+          content: Text(
+            message,
+            style: FtText.banner().copyWith(color: error ? FtColors.danger : Colors.white),
+          ),
+        ),
+      );
+  }
+
   Future<void> _submit() async {
+    if (_isSaving) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     setState(() => _isSaving = true);
@@ -44,174 +66,116 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         newPassword: _newController.text,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password changed successfully.')),
-      );
+      _toast('Password changed successfully.');
       Navigator.of(context).maybePop();
     } on PasswordChangeException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message), backgroundColor: AppColors.error),
-      );
+      _toast(e.message, error: true);
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.pageBackground,
-      appBar: PurpleHeaderBar(
-        title: 'Change Password',
-        onBack: () => Navigator.of(context).maybePop(),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: AppColors.cardWhite,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 18,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Your full name and email stay locked to your verified ID. Only your password can be changed here.',
-                      style: AppTextStyles.bodyMuted.copyWith(fontSize: 12.5),
-                    ),
-                    const SizedBox(height: 20),
-                    _field(
-                      'CURRENT PASSWORD',
-                      _currentController,
-                      _showCurrent,
-                      () => setState(() => _showCurrent = !_showCurrent),
-                      validator: (v) => (v == null || v.isEmpty)
-                          ? 'Enter your current password.'
-                          : null,
-                    ),
-                    const SizedBox(height: 18),
-                    _field(
-                      'NEW PASSWORD',
-                      _newController,
-                      _showNew,
-                      () => setState(() => _showNew = !_showNew),
-                      validator: (v) => (v == null || v.length < 8)
-                          ? 'Use at least 8 characters.'
-                          : null,
-                    ),
-                    const SizedBox(height: 18),
-                    _field(
-                      'CONFIRM NEW PASSWORD',
-                      _confirmController,
-                      _showConfirm,
-                      () => setState(() => _showConfirm = !_showConfirm),
-                      validator: (v) => v != _newController.text
-                          ? 'Passwords do not match.'
-                          : null,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                height: 54,
-                child: ElevatedButton(
-                  onPressed: _isSaving ? null : _submit,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accentPurple,
-                    foregroundColor: AppColors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                  ),
-                  child: _isSaving
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.4,
-                            color: AppColors.white,
-                          ),
-                        )
-                      : const Text(
-                          'Save New Password',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                        ),
-                ),
-              ),
-            ],
+  Widget _requirement(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Container(
+            width: 5,
+            height: 5,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: FtColors.otpSecondary,
+            ),
           ),
-        ),
+          const SizedBox(width: 12),
+          Text(
+            text,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 14,
+              height: 1.3,
+              color: FtColors.otpSecondary,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _field(
-    String label,
-    TextEditingController controller,
-    bool visible,
-    VoidCallback onToggle, {
-    String? Function(String?)? validator,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: AppTextStyles.cardLabel),
-        const SizedBox(height: 8),
-        TextFormField(
-          controller: controller,
-          obscureText: !visible,
-          validator: validator,
+  @override
+  Widget build(BuildContext context) {
+    return FtSubpageScaffold(
+      title: 'Change Password',
+      onBack: _isSaving ? null : () => Navigator.of(context).maybePop(),
+      body: [
+        Form(
+          key: _formKey,
           autovalidateMode: AutovalidateMode.onUserInteraction,
-          style: const TextStyle(fontSize: 14.5, color: AppColors.textDark),
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: AppColors.inputFillLight,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            suffixIcon: IconButton(
-              onPressed: onToggle,
-              icon: Icon(
-                visible ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                color: AppColors.textMuted,
-                size: 20,
-              ),
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.inputBorderLight),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.accentPurple),
-            ),
-            errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.error),
+          child: AutofillGroup(
+            child: Column(
+              children: [
+                FtTextField(
+                  label: 'Current password',
+                  controller: _currentController,
+                  hintText: 'Your current password',
+                  isPassword: true,
+                  textInputAction: TextInputAction.next,
+                  autofillHints: const [AutofillHints.password],
+                  enabled: !_isSaving,
+                  validator: (v) =>
+                      (v == null || v.isEmpty) ? 'Enter your current password.' : null,
+                ),
+                const SizedBox(height: 24),
+                FtTextField(
+                  label: 'New password',
+                  controller: _newController,
+                  hintText: 'At least 8 characters',
+                  isPassword: true,
+                  textInputAction: TextInputAction.next,
+                  autofillHints: const [AutofillHints.newPassword],
+                  enabled: !_isSaving,
+                  validator: (v) {
+                    if (v == null || v.length < 8) return 'Use at least 8 characters.';
+                    if (v == _currentController.text) {
+                      return 'Choose a password different from your current one.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 24),
+                FtTextField(
+                  label: 'Confirm new password',
+                  controller: _confirmController,
+                  hintText: 'Re-enter new password',
+                  isPassword: true,
+                  textInputAction: TextInputAction.done,
+                  autofillHints: const [AutofillHints.newPassword],
+                  enabled: !_isSaving,
+                  validator: (v) => v != _newController.text ? 'Passwords do not match.' : null,
+                  onSubmitted: (_) => _submit(),
+                ),
+              ],
             ),
           ),
         ),
+        const SizedBox(height: 28),
+        Padding(
+          padding: const EdgeInsets.only(left: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _requirement('At least 8 characters'),
+              _requirement('Different from your current password'),
+            ],
+          ),
+        ),
       ],
+      bottomButton: FtVerifyButton(
+        label: 'Update Password',
+        loading: _isSaving,
+        onPressed: _submit,
+      ),
     );
   }
 }

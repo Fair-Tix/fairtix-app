@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show AutofillHints;
 
 import '../../models/app_user.dart';
 import '../../navigation/main_shell.dart';

@@ -165,6 +165,153 @@ class FtDashboardHeader extends StatelessWidget {
       );
 }
 
+/// Dashed perforation line with a half-hidden notch at each card edge, for
+/// ticket-style cards. Place it between the two halves of a card whose
+/// content is padded 22px from the sides; the notches overlap the card edges.
+class FtPerforation extends StatelessWidget {
+  const FtPerforation({super.key});
+
+  Widget _notch() => Container(
+        width: 22,
+        height: 22,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: FtColors.bgBottom,
+          border: Border.all(color: FtColors.otpBorder),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 22,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          const Positioned.fill(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 22),
+              child: CustomPaint(painter: _PerforationDashes()),
+            ),
+          ),
+          Positioned(left: -11, top: 0, child: _notch()),
+          Positioned(right: -11, top: 0, child: _notch()),
+        ],
+      ),
+    );
+  }
+}
+
+class _PerforationDashes extends CustomPainter {
+  const _PerforationDashes();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = FtColors.otpBorder
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round;
+    final y = size.height / 2;
+    var x = 0.0;
+    while (x < size.width) {
+      canvas.drawLine(Offset(x, y), Offset((x + 5).clamp(0, size.width).toDouble(), y), paint);
+      x += 9;
+    }
+  }
+
+  @override
+  bool shouldRepaint(_PerforationDashes old) => false;
+}
+
+/// Round dark back button used in the headers of the pushed screens.
+class FtBackButton extends StatelessWidget {
+  const FtBackButton({super.key, required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Back',
+      excludeSemantics: true,
+      child: FtPressScale(
+        onTap: onTap,
+        child: Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: FtColors.otpFill,
+            border: Border.all(color: FtColors.otpBorder),
+          ),
+          child: const Icon(Icons.chevron_left_rounded, size: 26, color: Colors.white),
+        ),
+      ),
+    );
+  }
+}
+
+/// The purple profile circle (photo if there is one, otherwise the first
+/// letter of the name). [onTap] is the dashboard's existing "open Profile".
+class FtProfileAvatar extends StatelessWidget {
+  const FtProfileAvatar({
+    super.key,
+    required this.initial,
+    required this.onTap,
+    this.photoUrl,
+    this.size = 44,
+  });
+
+  final String initial;
+  final String? photoUrl;
+  final VoidCallback onTap;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget letter() => Text(
+          initial,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: size * 0.41,
+            fontWeight: FontWeight.w800,
+            color: Colors.white,
+          ),
+        );
+    return Semantics(
+      button: true,
+      label: 'Profile',
+      excludeSemantics: true,
+      child: FtPressScale(
+        onTap: onTap,
+        child: Container(
+          width: size,
+          height: size,
+          clipBehavior: Clip.antiAlias,
+          alignment: Alignment.center,
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [FtColors.progressStart, FtColors.otpButtonEnd],
+            ),
+          ),
+          child: photoUrl == null
+              ? letter()
+              : Image.network(
+                  photoUrl!,
+                  width: size,
+                  height: size,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => letter(),
+                ),
+        ),
+      ),
+    );
+  }
+}
+
 /// "Welcome back" over the user's first name.
 class FtWelcome extends StatelessWidget {
   const FtWelcome({super.key, required this.name});

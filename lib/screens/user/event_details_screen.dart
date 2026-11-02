@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../data/sample_tickets.dart';
 import '../../models/event.dart';
@@ -8,10 +10,16 @@ import '../../services/public_event_repository.dart';
 import '../../services/ticket_repository.dart';
 import '../../services/user_session.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/gradient_pill_button.dart';
-import '../../widgets/ticket_tier_row.dart';
+import '../../widgets/ft_dark_ui.dart';
+import '../../widgets/ft_dashboard_ui.dart' show FtBackButton, FtPressScale;
+import '../../widgets/ft_pending_ui.dart' show FtReveal;
 import 'checkout_screen.dart';
 
+/// Event Details — banner, info, ticket tiers and the buy button. Dark design.
+///
+/// The banner is the image the organizer uploads when creating or editing
+/// the event (`events.banner_image_url`, delivered as
+/// [EventSummary.bannerUrl]). Without one, a purple placeholder is shown.
 class EventDetailsScreen extends StatefulWidget {
   const EventDetailsScreen({super.key, required this.event, this.readOnly = false});
 
@@ -26,8 +34,17 @@ class EventDetailsScreen extends StatefulWidget {
   State<EventDetailsScreen> createState() => _EventDetailsScreenState();
 }
 
-class _EventDetailsScreenState extends State<EventDetailsScreen> {
+class _EventDetailsScreenState extends State<EventDetailsScreen>
+    with SingleTickerProviderStateMixin {
+  static const int _entranceMs = 800;
+
   TicketTier? _selectedTier;
+
+  late final AnimationController _entrance = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: _entranceMs),
+  );
+  bool _entranceStarted = false;
 
   /// The freshest copy of this event (tiers include the latest
   /// remaining_quantity). Falls back to the one passed in if the
@@ -64,6 +81,24 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
         if (mounted) setState(() {});
       });
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_entranceStarted) return;
+    _entranceStarted = true;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _entrance.value = 1;
+    } else {
+      _entrance.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _entrance.dispose();
+    super.dispose();
   }
 
   /// Reloads the catalogue so tier availability is current. Failures are
@@ -110,192 +145,333 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
     navigateToTab(context, 1);
   }
 
-  Widget _bannerPlaceholder() {
-    return Center(
-      child: Icon(Icons.music_note_rounded, size: 72, color: AppColors.white.withValues(alpha: 0.35)),
-    );
+  /// "₱3,000" style, or "Free".
+  static String _pesoShort(double price) =>
+      price <= 0 ? 'Free' : formatPeso(price).replaceAll('.00', '');
+
+  /// Bottom button text: the chosen tier's price once one is picked,
+  /// otherwise the starting price.
+  String get _buttonLabel {
+    if (_limitReached) return 'Purchase Limit Reached';
+    final tiers = _activeEvent.tiers;
+    if (_selectedTier != null) {
+      return 'Get Ticket \u00B7 ${_pesoShort(_selectedTier!.price)}';
+    }
+    if (tiers.isEmpty) return 'Get Ticket';
+    final lowest = tiers.map((t) => t.price).reduce((a, b) => a < b ? a : b);
+    return 'Get Ticket \u00B7 From ${_pesoShort(lowest)}';
   }
 
   @override
   Widget build(BuildContext context) {
     final event = _event;
-    return Scaffold(
-      backgroundColor: AppColors.pageBackground,
-      body: Stack(
-        children: [
-          CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(
-                child: Container(
-                  height: 280,
-                  decoration: BoxDecoration(color: event.accentColor),
-                  clipBehavior: Clip.antiAlias,
-                  child: event.bannerUrl != null
-                      ? Image.network(
-                          event.bannerUrl!,
-                          width: double.infinity,
-                          height: 280,
-                          fit: BoxFit.cover,
-                          loadingBuilder: (context, child, progress) => progress == null
-                              ? child
-                              : const Center(child: CircularProgressIndicator(color: AppColors.white)),
-                          // If the banner can't load, fall back to the placeholder.
-                          errorBuilder: (_, _, _) => _bannerPlaceholder(),
-                        )
-                      : _bannerPlaceholder(),
-                ),
-              ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(event.title, style: AppTextStyles.sectionHeading),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          const Icon(Icons.calendar_today_rounded, size: 16, color: AppColors.accentPurple),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              event.dateLabel,
-                              style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: AppColors.textDark),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          const Icon(Icons.location_on_rounded, size: 16, color: AppColors.accentPurple),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              event.venue,
-                              style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: AppColors.textDark),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      if (event.description != null)
-                        Text(event.description!, style: AppTextStyles.bodyMuted.copyWith(height: 1.5)),
-                      const SizedBox(height: 22),
-                      if (event.isMultiDay) ...[
-                        Text(
-                          'Event Days (${event.days.length})',
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.textDark),
+    final lock = widget.readOnly ? null : buyerLockMessage(UserSession.instance.account);
+    final topInset = MediaQuery.paddingOf(context).top;
+    final heroHeight = (MediaQuery.sizeOf(context).height * 0.33).clamp(240.0, 340.0);
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light.copyWith(
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor: FtColors.bgBottom,
+        systemNavigationBarIconBrightness: Brightness.light,
+      ),
+      child: Scaffold(
+        backgroundColor: FtColors.bgBottom,
+        body: Column(
+          children: [
+            Expanded(
+              child: Stack(
+                children: [
+                  CustomScrollView(
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: FtReveal(
+                          animation: _entrance,
+                          startMs: 0,
+                          endMs: 350,
+                          totalMs: _entranceMs,
+                          child: _EventBanner(url: event.bannerUrl, height: heroHeight),
                         ),
-                        const SizedBox(height: 10),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            for (var i = 0; i < event.days.length; i++)
-                              ChoiceChip(
-                                label: Text('Day ${i + 1} \u2022 ${event.days[i].dateLabel}'),
-                                selected: _selectedDay?.id == event.days[i].id,
-                                selectedColor: AppColors.accentPurple,
-                                labelStyle: TextStyle(
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: _selectedDay?.id == event.days[i].id ? AppColors.white : AppColors.textDark,
+                      ),
+                      SliverToBoxAdapter(
+                        child: DecoratedBox(
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              stops: [0.0, 0.5],
+                              colors: [Color(0xFF0E0829), FtColors.bgBottom],
+                            ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(22, 22, 22, 28),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                FtReveal(
+                                  animation: _entrance,
+                                  startMs: 150,
+                                  endMs: 500,
+                                  totalMs: _entranceMs,
+                                  slide: 14,
+                                  child: _buildInfo(event),
                                 ),
-                                onSelected: (_) => setState(() {
-                                  _selectedDay = event.days[i];
-                                  _selectedTier = null; // tiers differ per day
-                                }),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 22),
-                      ],
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: AppColors.accentPurple,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Text(
-                          'Ticket Tiers',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.white),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      if (!widget.readOnly &&
-                          buyerLockMessage(UserSession.instance.account) != null) ...[
-                        _BuyerLockNotice(
-                          message: buyerLockMessage(UserSession.instance.account)!,
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                      if (_limitReached) ...[
-                        _PurchaseLimitNotice(onViewMyTicket: _handleViewMyTicket),
-                        const SizedBox(height: 16),
-                      ],
-                      if (widget.readOnly) ...[
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: AppColors.accentPurple.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(12),
+                                if (event.isMultiDay) ...[
+                                  const SizedBox(height: 22),
+                                  _SectionLabel('Event days (${event.days.length})'),
+                                  const SizedBox(height: 12),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: [
+                                      for (var i = 0; i < event.days.length; i++)
+                                        _DayChip(
+                                          label: 'Day ${i + 1} \u2022 ${event.days[i].dateLabel}',
+                                          selected: _selectedDay?.id == event.days[i].id,
+                                          onTap: () => setState(() {
+                                            _selectedDay = event.days[i];
+                                            _selectedTier = null; // tiers differ per day
+                                          }),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                                const SizedBox(height: 22),
+                                const _SectionLabel('Tickets'),
+                                const SizedBox(height: 12),
+                                if (lock != null) ...[
+                                  _Notice(
+                                    icon: Icons.lock_outline_rounded,
+                                    title: 'Buying tickets is locked',
+                                    message: lock,
+                                  ),
+                                  const SizedBox(height: 14),
+                                ],
+                                if (_limitReached) ...[
+                                  _Notice(
+                                    icon: Icons.info_outline_rounded,
+                                    title: 'You already have a ticket for this event',
+                                    message: 'FairTix allows one ticket per account per event.',
+                                    actionLabel: 'View My Ticket',
+                                    onAction: _handleViewMyTicket,
+                                  ),
+                                  const SizedBox(height: 14),
+                                ],
+                                if (widget.readOnly) ...[
+                                  const _Notice(
+                                    icon: Icons.visibility_outlined,
+                                    title: 'View only',
+                                    message: 'You\u2019re viewing this event. Only event goers can buy tickets.',
+                                  ),
+                                  const SizedBox(height: 14),
+                                ],
+                                if (_activeEvent.tiers.isEmpty)
+                                  Text(
+                                    'No ticket tiers have been set up yet.',
+                                    style: FtText.subtitle().copyWith(color: FtColors.otpSecondary),
+                                  ),
+                                for (var i = 0; i < _activeEvent.tiers.length; i++) ...[
+                                  _tierReveal(
+                                    i,
+                                    _TierCard(
+                                      tier: _activeEvent.tiers[i],
+                                      selected: _selectedTier?.id == _activeEvent.tiers[i].id,
+                                      onTap: (_limitReached || widget.readOnly)
+                                          ? null
+                                          : () => setState(() => _selectedTier = _activeEvent.tiers[i]),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                ],
+                              ],
+                            ),
                           ),
-                          child: Text(
-                            'You\u2019re viewing this event. Only event goers can buy tickets.',
-                            style: AppTextStyles.bodyMuted.copyWith(fontSize: 12.5),
-                          ),
                         ),
-                        const SizedBox(height: 12),
-                      ],
-                      if (_activeEvent.tiers.isEmpty)
-                        Text('No ticket tiers have been set up yet.', style: AppTextStyles.bodyMuted),
-                      ..._activeEvent.tiers.map(
-                        (tier) => TicketTierRow(
-                          tier: tier,
-                          isSelected: _selectedTier?.id == tier.id,
-                          onTap: (_limitReached || widget.readOnly) ? null : () => setState(() => _selectedTier = tier),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      const Row(
-                        children: [
-                          Icon(Icons.confirmation_number_outlined, size: 14, color: AppColors.accentPurple),
-                          SizedBox(width: 6),
-                          Text(
-                            '1 ticket per account per event',
-                            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w500, color: AppColors.accentPurple),
-                          ),
-                        ],
                       ),
                     ],
                   ),
-                ),
-              ),
-            ],
-          ),
-          Positioned(
-            top: 48,
-            left: 16,
-            child: _BackCircleButton(onTap: () => Navigator.of(context).maybePop()),
-          ),
-          if (!widget.readOnly)
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
-              decoration: BoxDecoration(
-                color: AppColors.pageBackground,
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 16, offset: const Offset(0, -4)),
+                  Positioned(
+                    top: topInset + 14,
+                    left: 22,
+                    child: FtReveal(
+                      animation: _entrance,
+                      startMs: 0,
+                      endMs: 300,
+                      totalMs: _entranceMs,
+                      child: FtBackButton(onTap: () => Navigator.of(context).maybePop()),
+                    ),
+                  ),
                 ],
               ),
-              child: GradientPillButton(
-                label: _limitReached ? 'Purchase Limit Reached' : 'Buy Ticket',
-                onPressed: (_selectedTier != null && !_limitReached) ? _handleBuyTicket : null,
+            ),
+            if (!widget.readOnly)
+              FtReveal(
+                animation: _entrance,
+                startMs: 300,
+                endMs: 650,
+                totalMs: _entranceMs,
+                slide: 12,
+                child: DecoratedBox(
+                  decoration: const BoxDecoration(
+                    color: FtColors.bgBottom,
+                    border: Border(top: BorderSide(color: FtColors.otpBorder)),
+                  ),
+                  child: SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(22, 16, 22, 14),
+                      child: FtGradientButton(
+                        label: _buttonLabel,
+                        onPressed: (_selectedTier != null && !_limitReached) ? _handleBuyTicket : null,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _tierReveal(int index, Widget child) {
+    if (index >= 4) return child;
+    return FtReveal(
+      animation: _entrance,
+      startMs: 250 + index * 50,
+      endMs: 250 + index * 50 + 300,
+      totalMs: _entranceMs,
+      slide: 12,
+      child: child,
+    );
+  }
+
+  Widget _buildInfo(EventSummary event) {
+    final hasDescription = event.description != null && event.description!.trim().isNotEmpty;
+    TextStyle meta() => GoogleFonts.plusJakartaSans(
+          fontSize: 15,
+          height: 1.3,
+          fontWeight: FontWeight.w500,
+          color: FtColors.otpSecondary,
+        );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Semantics(
+          header: true,
+          child: Text(
+            event.title,
+            style: FtText.title().copyWith(fontSize: 34, letterSpacing: -0.6),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 10,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.calendar_today_outlined, size: 17, color: FtColors.otpSecondary),
+                const SizedBox(width: 8),
+                Flexible(child: Text(event.dateLabel, style: meta())),
+              ],
+            ),
+            Text('\u2022', style: meta()),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.location_on_outlined, size: 17, color: FtColors.otpSecondary),
+                const SizedBox(width: 6),
+                Flexible(child: Text(event.venue, style: meta())),
+              ],
+            ),
+          ],
+        ),
+        if (hasDescription) ...[
+          const SizedBox(height: 24),
+          const _SectionLabel('About'),
+          const SizedBox(height: 10),
+          Text(
+            event.description!,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 15,
+              height: 1.5,
+              color: FtColors.otpSecondary,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// The event's banner. Fades in once loaded; a purple placeholder shows while
+/// loading, when the organizer hasn't uploaded one, or if it fails to load.
+class _EventBanner extends StatelessWidget {
+  const _EventBanner({required this.url, required this.height});
+
+  final String? url;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduce = MediaQuery.disableAnimationsOf(context);
+    final placeholder = DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF5B2FC4), Color(0xFF3A1F8F)],
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.confirmation_number_outlined,
+          size: 64,
+          color: Colors.white.withValues(alpha: 0.18),
+        ),
+      ),
+    );
+
+    return SizedBox(
+      width: double.infinity,
+      height: height,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          placeholder,
+          if (url != null)
+            Image.network(
+              url!,
+              fit: BoxFit.cover,
+              frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                if (wasSynchronouslyLoaded) return child;
+                return AnimatedOpacity(
+                  opacity: frame == null ? 0 : 1,
+                  duration: reduce ? Duration.zero : const Duration(milliseconds: 250),
+                  curve: Curves.easeOut,
+                  child: child,
+                );
+              },
+              // If the banner can't load, the placeholder underneath stays.
+              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+            ),
+          // Soft shade at the top so the back button stays visible on
+          // bright photos.
+          const Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 110,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0x66000000), Color(0x00000000)],
+                ),
               ),
             ),
           ),
@@ -305,122 +481,255 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
   }
 }
 
-/// Shown on the Event Details screen in place of ticket-tier selection
-/// when FairTix's one-ticket-per-account-per-event purchase limit blocks
-/// the current user from buying because they still hold a ticket for it.
-class _PurchaseLimitNotice extends StatelessWidget {
-  const _PurchaseLimitNotice({required this.onViewMyTicket});
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
 
-  final VoidCallback onViewMyTicket;
+  final String text;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.warningBackground,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.warning.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.info_outline_rounded, size: 18, color: AppColors.warning),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'You already have a ticket for this event',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.warning),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'FairTix allows one ticket per account per event.',
-                  style: AppTextStyles.bodyMuted.copyWith(fontSize: 12, height: 1.35),
-                ),
-                const SizedBox(height: 8),
-                GestureDetector(
-                  onTap: onViewMyTicket,
-                  child: const Text(
-                    'View My Ticket',
-                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: AppColors.accentPurple, decoration: TextDecoration.underline),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+    return Semantics(
+      header: true,
+      child: Text(
+        text.toUpperCase(),
+        style: GoogleFonts.plusJakartaSans(
+          fontSize: 13,
+          height: 1.2,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1.3,
+          color: FtColors.otpSecondary,
+        ),
       ),
     );
   }
 }
 
-/// Shown on the Event Details screen while the signed-in eventgoer's account
-/// is not yet approved by an admin: they can read everything here, but buying
-/// is locked, and this says why.
-class _BuyerLockNotice extends StatelessWidget {
-  const _BuyerLockNotice({required this.message});
+class _DayChip extends StatelessWidget {
+  const _DayChip({required this.label, required this.selected, required this.onTap});
 
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.warningBackground,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.warning.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.lock_outline_rounded, size: 18, color: AppColors.warning),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Buying tickets is locked',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.warning),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  message,
-                  style: AppTextStyles.bodyMuted.copyWith(fontSize: 12, height: 1.35),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _BackCircleButton extends StatelessWidget {
-  const _BackCircleButton({required this.onTap});
-
+  final String label;
+  final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: AppColors.white.withValues(alpha: 0.85),
-          shape: BoxShape.circle,
+    final reduce = MediaQuery.disableAnimationsOf(context);
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      excludeSemantics: true,
+      child: FtPressScale(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: reduce ? Duration.zero : const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            gradient: selected
+                ? const LinearGradient(
+                    colors: [FtColors.progressStart, FtColors.otpButtonEnd],
+                  )
+                : null,
+            color: selected ? null : FtColors.otpFill.withValues(alpha: 0.75),
+            border: Border.all(color: selected ? Colors.transparent : FtColors.otpBorder),
+          ),
+          child: Text(
+            label,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 13.5,
+              height: 1.2,
+              fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
+              color: selected ? Colors.white : FtColors.otpSecondary,
+            ),
+          ),
         ),
-        child: const Icon(Icons.arrow_back, color: AppColors.textDark, size: 20),
+      ),
+    );
+  }
+}
+
+/// Selectable ticket tier. A null [onTap] (purchase limit reached, or
+/// view-only) dims it; a sold-out tier is dimmed and can't be picked.
+class _TierCard extends StatelessWidget {
+  const _TierCard({required this.tier, required this.selected, required this.onTap});
+
+  final TicketTier tier;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  bool get _disabled => onTap == null || tier.isSoldOut;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduce = MediaQuery.disableAnimationsOf(context);
+    final remaining = tier.remainingQuantity;
+    final lowStock = !tier.isSoldOut && remaining != null && remaining <= 10;
+
+    final String subtitle = tier.isSoldOut
+        ? 'Sold out'
+        : lowStock
+            ? 'Only $remaining left'
+            : '1 ticket per account';
+    final Color subtitleColor = tier.isSoldOut
+        ? FtColors.danger
+        : lowStock
+            ? AppColors.warning
+            : FtColors.otpSecondary;
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      enabled: !_disabled,
+      label: '${tier.name}, ${_priceText(tier)}, $subtitle',
+      excludeSemantics: true,
+      child: Opacity(
+        opacity: _disabled ? 0.45 : 1,
+        child: FtPressScale(
+          onTap: tier.isSoldOut ? null : onTap,
+          child: AnimatedContainer(
+            duration: reduce ? Duration.zero : const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(22),
+              gradient: selected
+                  ? LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        FtColors.progressStart.withValues(alpha: 0.34),
+                        FtColors.progressStart.withValues(alpha: 0.16),
+                      ],
+                    )
+                  : null,
+              color: selected ? null : FtColors.otpFill.withValues(alpha: 0.75),
+              border: Border.all(
+                color: selected ? FtColors.fieldBorderFocused : FtColors.otpBorder,
+                width: selected ? 1.5 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        tier.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 18,
+                          height: 1.2,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 14,
+                          height: 1.2,
+                          fontWeight: lowStock || tier.isSoldOut ? FontWeight.w700 : FontWeight.w400,
+                          color: subtitleColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  _priceText(tier),
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 23,
+                    height: 1.1,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _priceText(TicketTier tier) =>
+      tier.price <= 0 ? 'Free' : formatPeso(tier.price).replaceAll('.00', '');
+}
+
+/// Dark info box used for the locked-buying, purchase-limit and view-only
+/// messages.
+class _Notice extends StatelessWidget {
+  const _Notice({
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.warning.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 19, color: AppColors.warning),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 14,
+                    height: 1.25,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  message,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 13,
+                    height: 1.4,
+                    color: FtColors.otpSecondary,
+                  ),
+                ),
+                if (actionLabel != null) ...[
+                  const SizedBox(height: 10),
+                  GestureDetector(
+                    onTap: onAction,
+                    behavior: HitTestBehavior.opaque,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(actionLabel!, style: FtText.link()),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

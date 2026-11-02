@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../models/event.dart';
@@ -8,15 +10,15 @@ import '../../services/resale_repository.dart';
 import '../../services/screen_protection.dart';
 import '../../services/ticket_repository.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/dashed_divider.dart';
-import '../../widgets/gradient_pill_button.dart';
+import '../../widgets/ft_dark_ui.dart';
+import '../../widgets/ft_dashboard_ui.dart' show FtBackButton;
+import '../../widgets/ft_pending_ui.dart' show FtReveal;
 import '../../widgets/offline_copy_banner.dart';
-import '../../widgets/purple_header_bar.dart';
 import 'resale_listing_screen.dart';
 
 /// "My Ticket" screen — shown after tapping a ticket from the My Tickets
 /// list. Displays the ticket's details and QR code, and is the entry
-/// point into the in-app resale flow.
+/// point into the in-app resale flow. Dark design.
 ///
 /// Screenshots and screen recording are blocked while this screen is open
 /// (see [ScreenProtection]) so the QR code can't be copied.
@@ -29,7 +31,10 @@ class TicketDetailScreen extends StatefulWidget {
   State<TicketDetailScreen> createState() => _TicketDetailScreenState();
 }
 
-class _TicketDetailScreenState extends State<TicketDetailScreen> {
+class _TicketDetailScreenState extends State<TicketDetailScreen>
+    with SingleTickerProviderStateMixin {
+  static const int _entranceMs = 650;
+
   Ticket get ticket => widget.ticket;
 
   /// The QR is only shown while the ticket can still get someone in: valid,
@@ -40,6 +45,12 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
 
   bool _isCancelingListing = false;
 
+  late final AnimationController _entrance = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: _entranceMs),
+  );
+  bool _entranceStarted = false;
+
   @override
   void initState() {
     super.initState();
@@ -47,7 +58,20 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_entranceStarted) return;
+    _entranceStarted = true;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _entrance.value = 1;
+    } else {
+      _entrance.forward();
+    }
+  }
+
+  @override
   void dispose() {
+    _entrance.dispose();
     ScreenProtection.disable();
     super.dispose();
   }
@@ -66,18 +90,35 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Cancel this listing?'),
-        content: const Text(
+        backgroundColor: FtColors.otpFill,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: const BorderSide(color: FtColors.otpBorder),
+        ),
+        title: Text(
+          'Cancel this listing?',
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: Colors.white,
+          ),
+        ),
+        content: Text(
           'Your ticket will come off the Resale Market and go back to being a regular ticket in your wallet.',
+          style: FtText.subtitle().copyWith(color: FtColors.otpSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Keep Listing'),
+            child: Text('Keep Listing', style: FtText.link()),
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Cancel Listing'),
+            child: Text(
+              'Cancel Listing',
+              style: FtText.link().copyWith(color: FtColors.danger),
+            ),
           ),
         ],
       ),
@@ -110,177 +151,329 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     Navigator.of(context).maybePop();
   }
 
+  ({String label, Color color}) get _statusBadge => switch (ticket.status) {
+        TicketStatus.valid => (label: 'Valid', color: FtColors.success),
+        TicketStatus.listed => (label: 'Listed', color: FtColors.progressEnd),
+        TicketStatus.used => (label: 'Used', color: FtColors.otpSecondary),
+        TicketStatus.canceled => (label: 'Canceled', color: FtColors.danger),
+      };
+
   @override
   Widget build(BuildContext context) {
     final event = ticket.event;
-    return Scaffold(
-      backgroundColor: AppColors.pageBackground,
-      appBar: PurpleHeaderBar(
-        title: 'My Ticket',
-        onBack: () => Navigator.of(context).maybePop(),
+    final badge = _statusBadge;
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light.copyWith(
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor: FtColors.bgBottom,
+        systemNavigationBarIconBrightness: Brightness.light,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+      child: Scaffold(
+        backgroundColor: FtColors.bgBottom,
+        body: FtBackground(
+          child: SafeArea(
+            child: Column(
+              children: [
+                FtReveal(
+                  animation: _entrance,
+                  startMs: 0,
+                  endMs: 300,
+                  totalMs: _entranceMs,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(22, 14, 22, 0),
+                    child: Row(
+                      children: [
+                        FtBackButton(onTap: () => Navigator.of(context).maybePop()),
+                        Expanded(
+                          child: Semantics(
+                            header: true,
+                            child: Text(
+                              'My Ticket',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 20,
+                                height: 1.2,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 48),
+                      ],
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(22, 20, 22, 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (TicketRepository.instance.isFromCache) ...[
+                          OfflineCopyBanner(
+                            dark: true,
+                            lastSyncedAt: TicketRepository.instance.lastSyncedAt,
+                          ),
+                          const SizedBox(height: 14),
+                        ],
+                        FtReveal(
+                          animation: _entrance,
+                          startMs: 80,
+                          endMs: 480,
+                          totalMs: _entranceMs,
+                          slide: 16,
+                          child: _buildCard(event, badge),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                FtReveal(
+                  animation: _entrance,
+                  startMs: 200,
+                  endMs: 600,
+                  totalMs: _entranceMs,
+                  slide: 12,
+                  child: DecoratedBox(
+                    decoration: const BoxDecoration(
+                      color: FtColors.bgBottom,
+                      border: Border(top: BorderSide(color: FtColors.otpBorder)),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(22, 16, 22, 14),
+                      child: _buildAction(context),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCard(EventSummary event, ({String label, Color color}) badge) {
+    return Semantics(
+      container: true,
+      label: '${event.title}, ${ticket.tier.name} ticket for ${ticket.ownerName}, '
+          '${event.dateLabel.split(' \u2022 ').first}, ${event.venue}. ${badge.label}',
+      child: Container(
+        decoration: BoxDecoration(
+          color: FtColors.otpFill.withValues(alpha: 0.8),
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(color: FtColors.otpBorder),
+        ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (TicketRepository.instance.isFromCache) ...[
-              OfflineCopyBanner(lastSyncedAt: TicketRepository.instance.lastSyncedAt),
-              const SizedBox(height: 14),
-            ],
-            Container(
-              padding: const EdgeInsets.all(22),
-              decoration: BoxDecoration(
-                color: AppColors.cardWhite,
-                borderRadius: BorderRadius.circular(22),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 24, offset: const Offset(0, 10)),
-                ],
-              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 26, 22, 0),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    event.title,
-                    style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800, color: AppColors.textDark, height: 1.25),
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      const Icon(Icons.calendar_today_rounded, size: 15, color: AppColors.accentPurple),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          event.dateLabel.split(' \u2022 ').first,
-                          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: AppColors.textDark),
-                        ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    constraints: const BoxConstraints(maxWidth: 200),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(999),
+                      gradient: const LinearGradient(
+                        colors: [FtColors.progressStart, FtColors.otpButtonEnd],
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Icon(Icons.location_on_rounded, size: 15, color: AppColors.accentPurple),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          event.venue,
-                          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: AppColors.textDark),
-                        ),
+                    ),
+                    child: Text(
+                      ticket.tier.name.toUpperCase(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13,
+                        height: 1.2,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
                       ),
-                    ],
+                    ),
                   ),
                   const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: AppColors.accentPurple,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          ticket.tier.name,
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.white),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: AppColors.accentPurple.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          ticket.tier.seatingLabel,
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.accentPurple),
-                        ),
-                      ),
-                    ],
+                  Text(
+                    event.title,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: FtText.title().copyWith(fontSize: 32, letterSpacing: -0.5),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${event.dateLabel.split(' \u2022 ').first} \u2022 ${event.venue}',
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 15,
+                      height: 1.35,
+                      color: FtColors.otpSecondary,
+                    ),
                   ),
                   const SizedBox(height: 22),
-                  Row(
-                    children: [
-                      const Icon(Icons.person_rounded, size: 17, color: AppColors.accentPurple),
-                      const SizedBox(width: 8),
-                      Text(
-                        ticket.ownerName,
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textDark),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 22),
-                  const DashedDivider(),
-                  const SizedBox(height: 24),
                   if (_isQrActive) ...[
-                    const Center(
-                      child: Text(
-                        'SCAN TO ENTER',
-                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: AppColors.accentPurple, letterSpacing: 1.2),
-                      ),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        // QR fills the card width, minus its white frame.
+                        final qrSize = (constraints.maxWidth - 28).clamp(160.0, 260.0);
+                        return _TicketQrCode(qrToken: ticket.qrToken, size: qrSize);
+                      },
                     ),
-                    const SizedBox(height: 18),
-                    Center(
-                      child: _TicketQrCode(qrToken: ticket.qrToken, size: 200),
-                    ),
-                    const SizedBox(height: 18),
-                    const Center(
-                      child: Text(
-                        'This QR code is unique to your account. Do not share.',
-                        textAlign: TextAlign.center,
-                        style: AppTextStyles.bodyMuted,
+                    const SizedBox(height: 12),
+                    Text(
+                      'Unique to your account. Do not share.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13.5,
+                        height: 1.3,
+                        color: FtColors.otpSecondary,
                       ),
                     ),
                   ] else
                     _InactiveQrNotice(status: ticket.status),
+                  const SizedBox(height: 22),
                 ],
               ),
             ),
-            const SizedBox(height: 24),
-            _buildAction(context),
+            // Perforation: dashed line with a notch at each card edge.
+            SizedBox(
+              height: 22,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Positioned.fill(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 22),
+                      child: CustomPaint(painter: _DashPainter()),
+                    ),
+                  ),
+                  Positioned(left: -11, top: 0, child: _notch()),
+                  Positioned(right: -11, top: 0, child: _notch()),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 8, 22, 20),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: badge.color.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(shape: BoxShape.circle, color: badge.color),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          badge.label,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 13.5,
+                            height: 1.2,
+                            fontWeight: FontWeight.w700,
+                            color: badge.color,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Spacer(),
+                  // Screen protection is switched on for the whole screen
+                  // (initState), so this simply says so while a QR is shown.
+                  if (_isQrActive) ...[
+                    const Icon(Icons.lock_outline_rounded, size: 16, color: FtColors.otpSecondary),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Screenshots blocked',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13.5,
+                        height: 1.2,
+                        color: FtColors.otpSecondary,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
+  Widget _notch() => Container(
+        width: 22,
+        height: 22,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: FtColors.bgBottom,
+          border: Border.all(color: FtColors.otpBorder),
+        ),
+      );
+
   Widget _buildAction(BuildContext context) {
     switch (ticket.status) {
       case TicketStatus.valid:
-        return GradientPillButton(
+        return FtGradientButton(
           label: 'List for Resale',
           onPressed: () => _handleListForResale(context),
         );
       case TicketStatus.listed:
         return Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            GradientPillButton(
+            FtGradientButton(
               label: 'Listed for Resale \u2014 ${formatPeso(ticket.resalePrice ?? ticket.tier.price)}',
               onPressed: null,
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 6),
             TextButton(
               onPressed: _isCancelingListing ? null : _handleCancelListing,
               child: Text(
                 _isCancelingListing ? 'Canceling\u2026' : 'Cancel Listing',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.accentPurple),
+                style: FtText.link().copyWith(fontSize: 14.5),
               ),
             ),
           ],
         );
       case TicketStatus.used:
-        return const GradientPillButton(
-          label: 'Ticket Already Used',
-          onPressed: null,
-        );
+        return const FtGradientButton(label: 'Ticket Already Used', onPressed: null);
       case TicketStatus.canceled:
-        return const GradientPillButton(
-          label: 'Ticket Canceled',
-          onPressed: null,
-        );
+        return const FtGradientButton(label: 'Ticket Canceled', onPressed: null);
     }
   }
+}
+
+/// Dashed perforation line between the two card notches.
+class _DashPainter extends CustomPainter {
+  const _DashPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = FtColors.otpBorder
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round;
+    final y = size.height / 2;
+    var x = 0.0;
+    while (x < size.width) {
+      canvas.drawLine(Offset(x, y), Offset((x + 5).clamp(0, size.width).toDouble(), y), paint);
+      x += 9;
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashPainter old) => false;
 }
 
 /// Shown in place of the QR code when the ticket is used or canceled.
@@ -296,21 +489,25 @@ class _InactiveQrNotice extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
       decoration: BoxDecoration(
-        color: AppColors.inputFillLight,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.inputBorderLight),
+        color: FtColors.bgBottom.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: FtColors.otpBorder),
       ),
       child: Column(
         children: [
           Icon(
             isUsed ? Icons.check_circle_outline_rounded : Icons.block_rounded,
             size: 44,
-            color: AppColors.textMuted,
+            color: FtColors.otpSecondary,
           ),
           const SizedBox(height: 12),
-          const Text(
+          Text(
             'QR code no longer active',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textDark),
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 15.5,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+            ),
           ),
           const SizedBox(height: 6),
           Text(
@@ -318,7 +515,7 @@ class _InactiveQrNotice extends StatelessWidget {
                 ? 'This ticket was already scanned at the event entrance.'
                 : 'This ticket was canceled, so it can no longer be used to enter.',
             textAlign: TextAlign.center,
-            style: AppTextStyles.bodyMuted,
+            style: FtText.subtitle().copyWith(color: FtColors.otpSecondary),
           ),
         ],
       ),
@@ -333,6 +530,8 @@ class _InactiveQrNotice extends StatelessWidget {
 /// What makes it viewable offline (including after an app restart) is
 /// that the token itself is saved to encrypted device storage by
 /// TicketRepository / TicketCache, not anything in this widget.
+///
+/// Kept dark-on-white with a quiet margin so scanners read it reliably.
 class _TicketQrCode extends StatelessWidget {
   const _TicketQrCode({required this.qrToken, required this.size});
 
@@ -341,20 +540,26 @@ class _TicketQrCode extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.inputBorderLight),
-      ),
-      child: QrImageView(
-        data: qrToken,
-        version: QrVersions.auto,
-        size: size,
-        backgroundColor: AppColors.white,
-        eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: AppColors.textDark),
-        dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: AppColors.textDark),
+    return Semantics(
+      label: 'Ticket QR code',
+      image: true,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(22),
+        ),
+        child: QrImageView(
+          data: qrToken,
+          version: QrVersions.auto,
+          size: size,
+          backgroundColor: Colors.white,
+          eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: FtColors.bgBottom),
+          dataModuleStyle: const QrDataModuleStyle(
+            dataModuleShape: QrDataModuleShape.square,
+            color: FtColors.bgBottom,
+          ),
+        ),
       ),
     );
   }

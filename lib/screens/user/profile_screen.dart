@@ -1,18 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../models/app_user.dart';
+import '../../navigation/tab_index_notifier.dart';
 import '../../services/user_auth_service.dart';
 import '../../services/user_session.dart';
-import '../../theme/app_theme.dart';
+import '../../widgets/ft_dark_ui.dart';
+import '../../widgets/ft_dashboard_ui.dart' show FtProfileAvatar;
+import '../../widgets/ft_pending_ui.dart' show FtReveal;
+import '../../widgets/ft_profile_ui.dart';
+import '../../widgets/ft_verified_ui.dart' show FtVerifiedBadge;
 import 'change_password_screen.dart';
 import 'help_support_screen.dart';
 import 'login_screen.dart';
 import 'notification_preferences_screen.dart';
 import 'transactions_screen.dart';
 
-/// "My Profile" tab — account details, ID verification status, app
-/// settings, and log out.
+/// "My Profile" tab: account details, ID verification status, settings, and
+/// log out. Dark design.
 /// [UserSession.instance.account] is populated by [UserAuthService.login]
 /// from the real signed-in Supabase user + their `public.users` row.
 class ProfileScreen extends StatefulWidget {
@@ -22,9 +29,54 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProviderStateMixin {
+  static const int _revealMs = 800;
+  static const int _profileTab = 3;
+
   final ImagePicker _picker = ImagePicker();
   bool _isUploadingPhoto = false;
+
+  late final AnimationController _reveal = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: _revealMs),
+  );
+  bool _motionSet = false;
+  bool _revealPlayed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    mainShellTabIndex.addListener(_maybePlayReveal);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_motionSet) return;
+    _motionSet = true;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _reveal.value = 1;
+      _revealPlayed = true;
+    } else {
+      _maybePlayReveal();
+    }
+  }
+
+  @override
+  void dispose() {
+    mainShellTabIndex.removeListener(_maybePlayReveal);
+    _reveal.dispose();
+    super.dispose();
+  }
+
+  /// This tab lives inside the shell's PageView and is built at app start, so
+  /// the entrance plays the first time the tab is actually shown.
+  void _maybePlayReveal() {
+    if (_revealPlayed || !mounted) return;
+    if (mainShellTabIndex.value != _profileTab) return;
+    _revealPlayed = true;
+    _reveal.forward(from: 0);
+  }
 
   Future<void> _handleLogOut(BuildContext context) async {
     await UserAuthService.instance.logout();
@@ -43,23 +95,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
   /// choose a photo, or remove the current one.
   void _showPhotoOptions() {
     final hasPhoto = UserSession.instance.account?.profilePhotoUrl != null;
+    final tileStyle = GoogleFonts.plusJakartaSans(
+      fontSize: 15.5,
+      fontWeight: FontWeight.w600,
+      color: Colors.white,
+    );
     showModalBottomSheet<void>(
       context: context,
+      backgroundColor: FtColors.otpFill,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (sheetContext) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            const SizedBox(height: 10),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: FtColors.otpBorder,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 12),
             ListTile(
-              leading: const Icon(Icons.photo_camera_outlined),
-              title: const Text('Take a photo'),
+              leading: const Icon(Icons.photo_camera_outlined, color: FtColors.otpActive),
+              title: Text('Take a photo', style: tileStyle),
               onTap: () {
                 Navigator.pop(sheetContext);
                 _pickAndUpload(ImageSource.camera);
               },
             ),
             ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Choose from gallery'),
+              leading: const Icon(Icons.photo_library_outlined, color: FtColors.otpActive),
+              title: Text('Choose from gallery', style: tileStyle),
               onTap: () {
                 Navigator.pop(sheetContext);
                 _pickAndUpload(ImageSource.gallery);
@@ -67,13 +138,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             if (hasPhoto)
               ListTile(
-                leading: const Icon(Icons.delete_outline_rounded, color: AppColors.error),
-                title: const Text('Remove photo', style: TextStyle(color: AppColors.error)),
+                leading: const Icon(Icons.delete_outline_rounded, color: FtColors.danger),
+                title: Text('Remove photo', style: tileStyle.copyWith(color: FtColors.danger)),
                 onTap: () {
                   Navigator.pop(sheetContext);
                   _removePhoto();
                 },
               ),
+            const SizedBox(height: 8),
           ],
         ),
       ),
@@ -123,66 +195,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Widget _initialsText(AppUser user) {
-    return Center(
-      child: Text(
-        user.initials,
-        style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: AppColors.white),
-      ),
-    );
+  void _push(Widget screen) {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
   }
 
-  Widget _buildAvatar(AppUser user) {
-    final photoUrl = UserAuthService.instance.profilePhotoPublicUrl(user.profilePhotoUrl);
-    return GestureDetector(
-      onTap: _isUploadingPhoto ? null : _showPhotoOptions,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            width: 84,
-            height: 84,
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              color: const Color(0xFF1C1526),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppColors.accentPurple, width: 2),
-            ),
-            child: _isUploadingPhoto
-                ? const Center(
-                    child: SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.white),
-                    ),
-                  )
-                : photoUrl != null
-                    ? Image.network(
-                        photoUrl,
-                        width: 84,
-                        height: 84,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => _initialsText(user),
-                      )
-                    : _initialsText(user),
-          ),
-          Positioned(
-            right: -6,
-            bottom: -6,
-            child: Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: AppColors.accentPurple,
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.pageBackground, width: 2),
-              ),
-              child: const Icon(Icons.camera_alt_rounded, size: 14, color: AppColors.white),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _reveal_(int step, Widget child) => FtReveal(
+        animation: _reveal,
+        startMs: step * 70,
+        endMs: step * 70 + 350,
+        totalMs: _revealMs,
+        slide: 14,
+        child: child,
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -194,258 +218,153 @@ class _ProfileScreenState extends State<ProfileScreen> {
           idType: 'Not verified',
           isVerified: false,
         );
-    return Scaffold(
-      backgroundColor: AppColors.pageBackground,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-                child: Column(
-                  children: [
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text('My Profile', style: AppTextStyles.sectionHeading),
-                    ),
-                    const SizedBox(height: 20),
-                    _buildAvatar(user),
-                    const SizedBox(height: 14),
-                    Text(user.fullName, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: AppColors.textDark)),
-                    if (user.username.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(user.username, style: AppTextStyles.bodyMuted),
-                    ],
-                    const SizedBox(height: 12),
-                    if (user.isVerified)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: AppColors.success.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.verified_rounded, size: 15, color: AppColors.success),
-                            SizedBox(width: 6),
-                            Text('FairTix Verified', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.success)),
-                          ],
-                        ),
-                      ),
-                    const SizedBox(height: 24),
+    final photoUrl = UserAuthService.instance.profilePhotoPublicUrl(user.profilePhotoUrl);
+    final firstName = user.fullName.trim().split(RegExp(r'\s+')).first;
+    final initial = firstName.isEmpty ? 'E' : firstName.substring(0, 1).toUpperCase();
+    final photoAction = _isUploadingPhoto ? null : _showPhotoOptions;
 
-                    // Account Details
-                    _SectionCard(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light.copyWith(
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor: FtColors.bgBottom,
+        systemNavigationBarIconBrightness: Brightness.light,
+      ),
+      child: Scaffold(
+        backgroundColor: FtColors.bgBottom,
+        body: FtBackground(
+          child: SafeArea(
+            bottom: false,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(22, 18, 22, 28),
+              child: Column(
+                children: [
+                  _reveal_(
+                    0,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Semantics(
+                            header: true,
+                            child: Text(
+                              'My Profile',
+                              style: FtText.title().copyWith(fontSize: 33, letterSpacing: -0.6),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        FtProfileAvatar(
+                          initial: initial,
+                          photoUrl: photoUrl,
+                          onTap: photoAction ?? () {},
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  _reveal_(
+                    1,
+                    Column(
+                      children: [
+                        FtProfileHero(
+                          initials: user.initials,
+                          photoUrl: photoUrl,
+                          busy: _isUploadingPhoto,
+                          onTap: photoAction,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          user.fullName,
+                          textAlign: TextAlign.center,
+                          style: FtText.title().copyWith(fontSize: 26, letterSpacing: -0.4),
+                        ),
+                        if (user.username.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            user.username,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 15,
+                              color: FtColors.otpSecondary,
+                            ),
+                          ),
+                        ],
+                        if (user.isVerified) ...[
+                          const SizedBox(height: 12),
+                          const FtVerifiedBadge(),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  _reveal_(
+                    2,
+                    FtInfoCard(
                       title: 'Account Details',
                       children: [
-                        _LockedField(label: 'FULL NAME', value: user.fullName),
-                        const Divider(color: AppColors.inputBorderLight, height: 28),
-                        _LockedField(label: 'EMAIL ADDRESS', value: user.email),
-                        const SizedBox(height: 4),
+                        FtLockedField(label: 'FULL NAME', value: user.fullName),
+                        const FtRowDivider(vertical: 16),
+                        FtLockedField(label: 'EMAIL ADDRESS', value: user.email),
+                        const SizedBox(height: 14),
                         Text(
-                          'These fields are locked to your verified ID and cannot be changed.',
-                          style: AppTextStyles.bodyMuted.copyWith(fontSize: 12, fontStyle: FontStyle.italic),
-                        ),
-                        const Divider(color: AppColors.inputBorderLight, height: 28),
-                        _IconNavRow(
-                          icon: Icons.lock_outline_rounded,
-                          label: 'CHANGE PASSWORD',
-                          value: 'Change Password',
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => const ChangePasswordScreen()),
+                          'Locked to your verified ID and cannot be changed.',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 13.5,
+                            height: 1.3,
+                            fontStyle: FontStyle.italic,
+                            color: FtColors.otpSecondary,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 18),
-
-                    // ID Verification
-                    _SectionCard(
+                  ),
+                  const SizedBox(height: 16),
+                  _reveal_(
+                    3,
+                    FtInfoCard(
                       title: 'ID Verification',
                       children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.verified_user_rounded, size: 18, color: AppColors.success),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                user.idType,
-                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textDark),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppColors.success,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.check, size: 12, color: AppColors.white),
-                              SizedBox(width: 4),
-                              Text('Verified', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.white)),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          'Your government/school ID has been verified.',
-                          style: AppTextStyles.bodyMuted.copyWith(fontSize: 12.5),
-                        ),
+                        FtIdStatusRow(idType: user.idType, verified: user.isVerified),
                       ],
                     ),
-                    const SizedBox(height: 18),
-
-                    // Payments
-                    _SectionCard(
-                      title: 'Payments',
+                  ),
+                  const SizedBox(height: 16),
+                  _reveal_(
+                    4,
+                    FtInfoCard(
+                      title: 'Settings',
                       children: [
-                        _IconNavRow(
-                          icon: Icons.receipt_long_rounded,
-                          label: 'TRANSACTIONS',
-                          value: 'View Transactions',
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => const TransactionsScreen()),
-                          ),
+                        FtSettingsRow(
+                          icon: Icons.lock_outline_rounded,
+                          label: 'Change Password',
+                          onTap: () => _push(const ChangePasswordScreen()),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-
-                    // App Settings
-                    _SectionCard(
-                      title: 'App Settings',
-                      children: [
-                        _IconNavRow(
+                        const FtRowDivider(),
+                        FtSettingsRow(
+                          icon: Icons.receipt_long_outlined,
+                          label: 'View Transactions',
+                          onTap: () => _push(const TransactionsScreen()),
+                        ),
+                        const FtRowDivider(),
+                        FtSettingsRow(
                           icon: Icons.notifications_none_rounded,
-                          label: 'NOTIFICATION PREFERENCES',
-                          value: 'Notification Preferences',
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => const NotificationPreferencesScreen()),
-                          ),
+                          label: 'Notification Preferences',
+                          onTap: () => _push(const NotificationPreferencesScreen()),
                         ),
-                        const Divider(color: AppColors.inputBorderLight, height: 28),
-                        _IconNavRow(
+                        const FtRowDivider(),
+                        FtSettingsRow(
                           icon: Icons.help_outline_rounded,
-                          label: 'HELP & SUPPORT',
-                          value: 'Help & Support',
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => const HelpSupportScreen()),
-                          ),
+                          label: 'Help & Support',
+                          onTap: () => _push(const HelpSupportScreen()),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 24),
-
-                    SizedBox(
-                      width: double.infinity,
-                      height: 54,
-                      child: ElevatedButton(
-                        onPressed: () => _handleLogOut(context),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.error,
-                          foregroundColor: AppColors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                        ),
-                        child: const Text('Log Out', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                      ),
-                    ),
-                  ],
-        ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.title, required this.children});
-
-  final String title;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.cardWhite,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 18, offset: const Offset(0, 6)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800, color: AppColors.textDark)),
-          const SizedBox(height: 14),
-          ...children,
-        ],
-      ),
-    );
-  }
-}
-
-class _LockedField extends StatelessWidget {
-  const _LockedField({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: AppTextStyles.cardLabel),
-              const SizedBox(height: 4),
-              Text(value, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600, color: AppColors.textDark)),
-            ],
-          ),
-        ),
-        const Icon(Icons.lock_outline_rounded, size: 18, color: AppColors.textMuted),
-      ],
-    );
-  }
-}
-
-class _IconNavRow extends StatelessWidget {
-  const _IconNavRow({required this.icon, required this.label, required this.value, required this.onTap});
-
-  final IconData icon;
-  final String label;
-  final String value;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: AppColors.accentPurple),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: AppTextStyles.cardLabel),
-                const SizedBox(height: 3),
-                Text(value, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: AppColors.textDark)),
-              ],
+                  ),
+                  const SizedBox(height: 20),
+                  _reveal_(5, FtLogoutButton(onPressed: () => _handleLogOut(context))),
+                ],
+              ),
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted, size: 22),
-        ],
+        ),
       ),
     );
   }

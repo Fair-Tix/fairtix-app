@@ -87,7 +87,8 @@ serve(async (req) => {
     const attrs = pmPayload.data.attributes;
     // A Checkout Session is paid once one of its payments has status "paid"
     // (or its payment intent has succeeded).
-    const payments: Array<{ attributes?: { status?: string } }> = attrs.payments ?? [];
+    const payments: Array<{ attributes?: { status?: string; source?: { type?: string } } }> =
+      attrs.payments ?? [];
     const isPaid =
       payments.some((p) => p?.attributes?.status === 'paid') ||
       attrs.payment_intent?.attributes?.status === 'succeeded';
@@ -101,6 +102,12 @@ serve(async (req) => {
         402,
       );
     }
+
+    // How the buyer paid (e.g. "gcash", "paymaya", "card"), shown on the
+    // confirmation screen. Informational only; null if PayMongo doesn't say.
+    const paidPayment = payments.find((p) => p?.attributes?.status === 'paid');
+    const paymentMethod: string | null =
+      attrs.payment_method_used ?? paidPayment?.attributes?.source?.type ?? null;
 
     // Payment is confirmed. Read tier/buyer from the server-written metadata.
     const remarks: {
@@ -171,7 +178,14 @@ serve(async (req) => {
         return json({ error: resaleError.message }, 400);
       }
       const resaleTicket = Array.isArray(resaleData) ? resaleData[0] : resaleData;
-      return json({ ticket_id: resaleTicket.ticket_id, qr_code_token: resaleTicket.qr_code_token }, 200);
+      return json(
+        {
+          ticket_id: resaleTicket.ticket_id,
+          qr_code_token: resaleTicket.qr_code_token,
+          payment_method: paymentMethod,
+        },
+        200,
+      );
     }
 
     // Same deterministic token as paymongo-webhook, so whichever of the two
@@ -188,7 +202,14 @@ serve(async (req) => {
     }
 
     const ticket = Array.isArray(data) ? data[0] : data;
-    return json({ ticket_id: ticket.ticket_id, qr_code_token: ticket.qr_code_token }, 200);
+    return json(
+      {
+        ticket_id: ticket.ticket_id,
+        qr_code_token: ticket.qr_code_token,
+        payment_method: paymentMethod,
+      },
+      200,
+    );
   } catch (err) {
     return json({ error: (err as Error).message }, 500);
   }

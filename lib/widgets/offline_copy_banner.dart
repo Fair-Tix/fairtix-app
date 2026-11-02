@@ -7,9 +7,12 @@ import '../theme/app_theme.dart';
 /// TicketRepository.isFromCache). Tells the user the QR codes are still
 /// valid to show, but statuses may be out of date.
 class OfflineCopyBanner extends StatelessWidget {
-  const OfflineCopyBanner({super.key, this.lastSyncedAt});
+  const OfflineCopyBanner({super.key, this.lastSyncedAt, this.dark = false});
 
   final DateTime? lastSyncedAt;
+
+  /// Light text for the dark eventgoer screens.
+  final bool dark;
 
   static const Color _amber = Color(0xFFD97706);
 
@@ -45,7 +48,7 @@ class OfflineCopyBanner extends StatelessWidget {
               synced == null
                   ? 'You\u2019re offline. Showing your saved tickets; statuses may be out of date.'
                   : 'You\u2019re offline. Showing tickets saved ${_format(synced)}; statuses may be out of date.',
-              style: AppTextStyles.bodyMuted.copyWith(fontSize: 12.5, color: AppColors.textDark),
+              style: AppTextStyles.bodyMuted.copyWith(fontSize: 12.5, color: dark ? Colors.white : AppColors.textDark),
             ),
           ),
         ],

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show AutofillHints;
 
 import '../../services/registration_draft.dart';
 import '../../services/user_auth_service.dart';
@@ -166,10 +165,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     });
   }
 
-  // Terms and Privacy live on one combined page for now.
-  void _openLegal() {
+  // Terms and Privacy are one screen with two tabs; each link opens its tab.
+  void _openLegal({required bool privacy}) {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const TermsPrivacyScreen()),
+      MaterialPageRoute(
+        builder: (_) => TermsPrivacyScreen(initialTab: privacy ? 1 : 0),
+      ),
     );
   }
 
@@ -237,7 +238,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         loading: _isSubmitting,
         onPressed: _isSubmitting ? null : _handleCreateAccount,
       ),
-      footer: FtLegalText(onTerms: _openLegal, onPrivacy: _openLegal),
+      footer: FtLegalText(
+        onTerms: () => _openLegal(privacy: false),
+        onPrivacy: () => _openLegal(privacy: true),
+      ),
     );
   }
 }

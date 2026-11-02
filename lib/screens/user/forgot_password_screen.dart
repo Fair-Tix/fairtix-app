@@ -123,7 +123,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         _newPassword.text,
       ),
     );
-    if (ok) {
+    if (ok && mounted) {
       _finished = true;
       Navigator.of(context).pop(true);
     }

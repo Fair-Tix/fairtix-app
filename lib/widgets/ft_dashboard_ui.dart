@@ -173,31 +173,32 @@ class FtDashboardHeader extends StatelessWidget {
 class FtPerforation extends StatelessWidget {
   const FtPerforation({super.key});
 
-  Widget _notch() => Container(
+  Widget _notch(FtAuthTheme t) => Container(
         width: 22,
         height: 22,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: FtColors.bgBottom,
-          border: Border.all(color: FtColors.otpBorder),
+          color: t.bgBottom,
+          border: Border.all(color: t.surfaceBorder),
         ),
       );
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     return SizedBox(
       height: 22,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          const Positioned.fill(
+          Positioned.fill(
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 22),
-              child: CustomPaint(painter: _PerforationDashes()),
+              padding: const EdgeInsets.symmetric(horizontal: 22),
+              child: CustomPaint(painter: _PerforationDashes(t.surfaceBorder)),
             ),
           ),
-          Positioned(left: -11, top: 0, child: _notch()),
-          Positioned(right: -11, top: 0, child: _notch()),
+          Positioned(left: -11, top: 0, child: _notch(t)),
+          Positioned(right: -11, top: 0, child: _notch(t)),
         ],
       ),
     );
@@ -205,12 +206,14 @@ class FtPerforation extends StatelessWidget {
 }
 
 class _PerforationDashes extends CustomPainter {
-  const _PerforationDashes();
+  const _PerforationDashes(this.color);
+
+  final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = FtColors.otpBorder
+      ..color = color
       ..strokeWidth = 1.5
       ..strokeCap = StrokeCap.round;
     final y = size.height / 2;
@@ -222,7 +225,7 @@ class _PerforationDashes extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_PerforationDashes old) => false;
+  bool shouldRepaint(_PerforationDashes old) => old.color != color;
 }
 
 /// Round back button used in the headers of the pushed screens. Dark unless

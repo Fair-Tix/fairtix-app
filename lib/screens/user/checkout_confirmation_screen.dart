@@ -5,14 +5,16 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../models/event.dart';
 import '../../models/ticket.dart';
 import '../../navigation/app_nav.dart';
+import '../../theme/fairtix_palette.dart';
 import '../../widgets/ft_dark_ui.dart';
 import '../../widgets/ft_dashboard_ui.dart' show FtPerforation;
 import '../../widgets/ft_pending_ui.dart' show FtReveal;
 import '../../widgets/ft_verified_ui.dart' show FtVerifiedCircle;
 import 'ticket_detail_screen.dart';
 
-/// Shown right after a successful purchase ("Ticket purchased"). Dark design,
-/// with the same animated check as the "You're verified" screen.
+/// Shown right after a successful purchase ("Ticket purchased"). Follows the
+/// Light / Dark switch, with the same animated check as the "You're verified"
+/// screen.
 class CheckoutConfirmationScreen extends StatefulWidget {
   const CheckoutConfirmationScreen({
     super.key,
@@ -94,15 +96,20 @@ class _CheckoutConfirmationScreenState extends State<CheckoutConfirmationScreen>
       ),
     );
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light.copyWith(
-        statusBarColor: Colors.transparent,
-        systemNavigationBarColor: FtColors.bgBottom,
-        systemNavigationBarIconBrightness: Brightness.light,
-      ),
+    final t = FtAuthTheme.live(context);
+    final p = FairTixPalette.of(context);
+    // Dark keeps the original verified colors; Light uses the palette's.
+    final Color? verifiedBg = t.isDark ? null : p.verifiedSurface;
+    final Color? verifiedFg = t.isDark ? null : p.verified;
+
+    return FtAuthThemeScope(
+      theme: t,
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+      value: t.overlayStyle,
       child: Scaffold(
-        backgroundColor: FtColors.bgBottom,
-        body: FtBackground(
+        backgroundColor: t.bgBottom,
+        body: FtAuthBackground(
+          theme: t,
           child: SafeArea(
             child: Column(
               children: [
@@ -117,7 +124,11 @@ class _CheckoutConfirmationScreenState extends State<CheckoutConfirmationScreen>
                           endMs: 550,
                           totalMs: _totalMs,
                           scaleFrom: 0.7,
-                          child: FtVerifiedCircle(draw: draw),
+                          child: FtVerifiedCircle(
+                            draw: draw,
+                            background: verifiedBg,
+                            checkColor: verifiedFg,
+                          ),
                         ),
                         const SizedBox(height: 26),
                         FtReveal(
@@ -132,7 +143,11 @@ class _CheckoutConfirmationScreenState extends State<CheckoutConfirmationScreen>
                             child: Text(
                               'Ticket purchased',
                               textAlign: TextAlign.center,
-                              style: FtText.title().copyWith(fontSize: 32, letterSpacing: -0.5),
+                              style: FtText.title().copyWith(
+                                fontSize: 32,
+                                letterSpacing: -0.5,
+                                color: t.titleColor,
+                              ),
                             ),
                           ),
                         ),
@@ -151,7 +166,7 @@ class _CheckoutConfirmationScreenState extends State<CheckoutConfirmationScreen>
                               style: GoogleFonts.plusJakartaSans(
                                 fontSize: 16,
                                 height: 1.45,
-                                color: FtColors.otpSecondary,
+                                color: t.secondaryText,
                               ),
                             ),
                           ),
@@ -182,9 +197,9 @@ class _CheckoutConfirmationScreenState extends State<CheckoutConfirmationScreen>
                   totalMs: _totalMs,
                   slide: 12,
                   child: DecoratedBox(
-                    decoration: const BoxDecoration(
-                      color: FtColors.bgBottom,
-                      border: Border(top: BorderSide(color: FtColors.otpBorder)),
+                    decoration: BoxDecoration(
+                      color: t.bgBottom,
+                      border: Border(top: BorderSide(color: t.surfaceBorder)),
                     ),
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(22, 16, 22, 8),
@@ -207,7 +222,7 @@ class _CheckoutConfirmationScreenState extends State<CheckoutConfirmationScreen>
                               style: GoogleFonts.plusJakartaSans(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w700,
-                                color: FtColors.otpSecondary,
+                                color: t.secondaryText,
                               ),
                             ),
                           ),
@@ -220,6 +235,7 @@ class _CheckoutConfirmationScreenState extends State<CheckoutConfirmationScreen>
             ),
           ),
         ),
+      ),
       ),
     );
   }
@@ -256,6 +272,7 @@ class _ReceiptCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     return Semantics(
       container: true,
       label: '${event.title}, ${tier.name}, ${event.dateLabel}, ${event.venue}. '
@@ -263,9 +280,9 @@ class _ReceiptCard extends StatelessWidget {
       excludeSemantics: true,
       child: Container(
         decoration: BoxDecoration(
-          color: FtColors.otpFill.withValues(alpha: 0.8),
+          color: t.isDark ? t.surfaceFill.withValues(alpha: 0.8) : t.surfaceFill,
           borderRadius: BorderRadius.circular(26),
-          border: Border.all(color: FtColors.otpBorder),
+          border: Border.all(color: t.surfaceBorder),
         ),
         child: Column(
           children: [
@@ -303,7 +320,7 @@ class _ReceiptCard extends StatelessWidget {
                             fontSize: 20,
                             height: 1.2,
                             fontWeight: FontWeight.w800,
-                            color: Colors.white,
+                            color: t.titleColor,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -314,7 +331,7 @@ class _ReceiptCard extends StatelessWidget {
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 15,
                             height: 1.3,
-                            color: FtColors.otpSecondary,
+                            color: t.secondaryText,
                           ),
                         ),
                         Text(
@@ -324,7 +341,7 @@ class _ReceiptCard extends StatelessWidget {
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 15,
                             height: 1.3,
-                            color: FtColors.otpSecondary,
+                            color: t.secondaryText,
                           ),
                         ),
                       ],
@@ -344,7 +361,7 @@ class _ReceiptCard extends StatelessWidget {
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 15,
                         height: 1.2,
-                        color: FtColors.otpSecondary,
+                        color: t.secondaryText,
                       ),
                     ),
                   ),
@@ -355,7 +372,7 @@ class _ReceiptCard extends StatelessWidget {
                       fontSize: 22,
                       height: 1.1,
                       fontWeight: FontWeight.w800,
-                      color: Colors.white,
+                      color: t.titleColor,
                     ),
                   ),
                 ],

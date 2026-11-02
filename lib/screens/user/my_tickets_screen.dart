@@ -14,7 +14,8 @@ import '../../widgets/offline_copy_banner.dart';
 import 'ticket_detail_screen.dart';
 
 /// "My Tickets" tab — lists every ticket the current user owns, backed by
-/// [TicketRepository] (real query against `public.tickets`). Dark design.
+/// [TicketRepository] (real query against `public.tickets`). Follows the
+/// Light / Dark switch.
 class MyTicketsScreen extends StatefulWidget {
   const MyTicketsScreen({super.key});
 
@@ -151,21 +152,21 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
 
     final showOffline =
         !_isLoading && _errorMessage == null && TicketRepository.instance.isFromCache;
+    final t = FtAuthTheme.live(context);
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light.copyWith(
-        statusBarColor: Colors.transparent,
-        systemNavigationBarColor: FtColors.bgBottom,
-        systemNavigationBarIconBrightness: Brightness.light,
-      ),
+    return FtAuthThemeScope(
+      theme: t,
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+      value: t.overlayStyle,
       child: Scaffold(
-        backgroundColor: FtColors.bgBottom,
-        body: FtBackground(
+        backgroundColor: t.bgBottom,
+        body: FtAuthBackground(
+          theme: t,
           child: SafeArea(
             bottom: false,
             child: RefreshIndicator(
-              color: FtColors.progressEnd,
-              backgroundColor: FtColors.otpFill,
+              color: t.activeAccent,
+              backgroundColor: t.surfaceFill,
               onRefresh: _loadTickets,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
@@ -185,6 +186,7 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
                                 style: FtText.title().copyWith(
                                   fontSize: 33,
                                   letterSpacing: -0.6,
+                                  color: t.titleColor,
                                 ),
                               ),
                             ),
@@ -194,7 +196,7 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
                               style: GoogleFonts.plusJakartaSans(
                                 fontSize: 15,
                                 height: 1.3,
-                                color: FtColors.otpSecondary,
+                                color: t.secondaryText,
                               ),
                             ),
                           ],
@@ -228,7 +230,7 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
                   const SizedBox(height: 18),
                   if (showOffline) ...[
                     OfflineCopyBanner(
-                      dark: true,
+                      dark: t.isDark,
                       lastSyncedAt: TicketRepository.instance.lastSyncedAt,
                     ),
                     const SizedBox(height: 16),
@@ -273,6 +275,7 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
           ),
         ),
       ),
+      ),
     );
   }
 
@@ -298,6 +301,7 @@ class _FilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     final reduce = MediaQuery.disableAnimationsOf(context);
     return Semantics(
       button: true,
@@ -319,9 +323,11 @@ class _FilterChip extends StatelessWidget {
                     colors: [FtColors.progressStart, FtColors.otpButtonEnd],
                   )
                 : null,
-            color: selected ? null : FtColors.otpFill.withValues(alpha: 0.75),
+            color: selected
+                ? null
+                : (t.isDark ? t.surfaceFill.withValues(alpha: 0.75) : t.surfaceFill),
             border: Border.all(
-              color: selected ? Colors.transparent : FtColors.otpBorder,
+              color: selected ? Colors.transparent : t.surfaceBorder,
             ),
           ),
           child: Text(
@@ -330,7 +336,7 @@ class _FilterChip extends StatelessWidget {
               fontSize: 15,
               height: 1.2,
               fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
-              color: selected ? Colors.white : FtColors.otpSecondary,
+              color: selected ? Colors.white : t.secondaryText,
             ),
           ),
         ),
@@ -349,9 +355,10 @@ const double _kNotchRadius = 11;
 /// out of each side at the perforation, a border around that shape, and the
 /// dashed line between the notches.
 class _TicketShapePainter extends CustomPainter {
-  _TicketShapePainter({required this.fill});
+  _TicketShapePainter({required this.fill, required this.border});
 
   final Color fill;
+  final Color border;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -368,11 +375,11 @@ class _TicketShapePainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1
-        ..color = FtColors.otpBorder,
+        ..color = border,
     );
 
     final dash = Paint()
-      ..color = FtColors.otpBorder
+      ..color = border
       ..strokeWidth = 1.5
       ..strokeCap = StrokeCap.round;
     var x = _kNotchRadius + 14;
@@ -388,7 +395,7 @@ class _TicketShapePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_TicketShapePainter old) => old.fill != fill;
+  bool shouldRepaint(_TicketShapePainter old) => old.fill != fill || old.border != border;
 }
 
 class _TicketCard extends StatelessWidget {
@@ -397,16 +404,17 @@ class _TicketCard extends StatelessWidget {
   final Ticket ticket;
   final VoidCallback onTap;
 
-  ({String label, Color color}) get _status => switch (ticket.status) {
-        TicketStatus.valid => (label: 'Valid', color: FtColors.success),
-        TicketStatus.listed => (label: 'Listed', color: FtColors.progressEnd),
-        TicketStatus.used => (label: 'Used', color: FtColors.otpSecondary),
-        TicketStatus.canceled => (label: 'Canceled', color: FtColors.danger),
+  ({String label, Color color}) _status(FtAuthTheme t) => switch (ticket.status) {
+        TicketStatus.valid => (label: 'Valid', color: t.success),
+        TicketStatus.listed => (label: 'Listed', color: t.activeAccent),
+        TicketStatus.used => (label: 'Used', color: t.secondaryText),
+        TicketStatus.canceled => (label: 'Canceled', color: t.danger),
       };
 
   @override
   Widget build(BuildContext context) {
-    final status = _status;
+    final t = FtAuthTheme.of(context);
+    final status = _status(t);
     final accent = ticket.event.accentColor;
     final hsl = HSLColor.fromColor(accent);
     final deeper = hsl.withLightness((hsl.lightness - 0.12).clamp(0.0, 1.0)).toColor();
@@ -419,7 +427,10 @@ class _TicketCard extends StatelessWidget {
       child: FtPressScale(
         onTap: onTap,
         child: CustomPaint(
-          painter: _TicketShapePainter(fill: FtColors.otpFill.withValues(alpha: 0.8)),
+          painter: _TicketShapePainter(
+            fill: t.isDark ? t.surfaceFill.withValues(alpha: 0.8) : t.surfaceFill,
+            border: t.surfaceBorder,
+          ),
           child: Column(
             children: [
               SizedBox(
@@ -459,7 +470,7 @@ class _TicketCard extends StatelessWidget {
                                 fontSize: 19,
                                 height: 1.2,
                                 fontWeight: FontWeight.w800,
-                                color: Colors.white,
+                                color: t.titleColor,
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -487,10 +498,10 @@ class _TicketCard extends StatelessWidget {
                                   ),
                                 ),
                                 const SizedBox(width: 10),
-                                const Icon(
+                                Icon(
                                   Icons.calendar_today_outlined,
                                   size: 15,
-                                  color: FtColors.otpSecondary,
+                                  color: t.secondaryText,
                                 ),
                                 const SizedBox(width: 6),
                                 Expanded(
@@ -501,7 +512,7 @@ class _TicketCard extends StatelessWidget {
                                     style: GoogleFonts.plusJakartaSans(
                                       fontSize: 14,
                                       height: 1.2,
-                                      color: FtColors.otpSecondary,
+                                      color: t.secondaryText,
                                     ),
                                   ),
                                 ),
@@ -557,11 +568,11 @@ class _TicketCard extends StatelessWidget {
                           fontSize: 15,
                           height: 1.2,
                           fontWeight: FontWeight.w800,
-                          color: FtColors.accent,
+                          color: t.accent,
                         ),
                       ),
                       const SizedBox(width: 4),
-                      const Icon(Icons.chevron_right_rounded, size: 20, color: FtColors.accent),
+                      Icon(Icons.chevron_right_rounded, size: 20, color: t.accent),
                     ],
                   ),
                 ),
@@ -583,11 +594,12 @@ class _SkeletonCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     return AnimatedBuilder(
       animation: pulse,
       builder: (context, _) {
-        final t = Curves.easeInOut.transform(pulse.value);
-        final block = FtColors.otpBorder.withValues(alpha: 0.35 + 0.3 * t);
+        final wave = Curves.easeInOut.transform(pulse.value);
+        final block = t.surfaceBorder.withValues(alpha: 0.35 + 0.3 * wave);
         Widget bar(double w, double h) => Container(
               width: w,
               height: h,
@@ -597,7 +609,7 @@ class _SkeletonCard extends StatelessWidget {
               ),
             );
         return CustomPaint(
-          painter: _TicketShapePainter(fill: FtColors.otpFill.withValues(alpha: 0.6)),
+          painter: _TicketShapePainter(fill: t.cardFill, border: t.surfaceBorder),
           child: SizedBox(
             height: _kTopHeight + _kBottomHeight,
             child: Padding(
@@ -641,7 +653,7 @@ class _SkeletonCard extends StatelessWidget {
   }
 }
 
-/// Empty / error message in the dark style.
+/// Empty / error message, in the current theme.
 class _Message extends StatelessWidget {
   const _Message({
     required this.text,
@@ -659,12 +671,13 @@ class _Message extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     return Padding(
       padding: const EdgeInsets.only(top: 56),
       child: Column(
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 46, color: FtColors.progressEnd.withValues(alpha: 0.5)),
+            Icon(icon, size: 46, color: t.activeAccent.withValues(alpha: 0.5)),
             const SizedBox(height: 14),
           ],
           if (title != null) ...[
@@ -673,7 +686,7 @@ class _Message extends StatelessWidget {
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
-                color: Colors.white,
+                color: t.titleColor,
               ),
             ),
             const SizedBox(height: 6),
@@ -681,12 +694,12 @@ class _Message extends StatelessWidget {
           Text(
             text,
             textAlign: TextAlign.center,
-            style: FtText.subtitle().copyWith(color: FtColors.otpSecondary),
+            style: t.subtitle().copyWith(color: t.secondaryText),
           ),
           if (actionLabel != null)
             TextButton(
               onPressed: onAction,
-              child: Text(actionLabel!, style: FtText.link()),
+              child: Text(actionLabel!, style: t.link()),
             ),
         ],
       ),

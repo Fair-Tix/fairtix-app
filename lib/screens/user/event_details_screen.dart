@@ -15,7 +15,8 @@ import '../../widgets/ft_dashboard_ui.dart' show FtBackButton, FtPressScale;
 import '../../widgets/ft_pending_ui.dart' show FtReveal;
 import 'checkout_screen.dart';
 
-/// Event Details — banner, info, ticket tiers and the buy button. Dark design.
+/// Event Details — banner, info, ticket tiers and the buy button. Follows the
+/// Light / Dark switch.
 ///
 /// The banner is the image the organizer uploads when creating or editing
 /// the event (`events.banner_image_url`, delivered as
@@ -168,15 +169,20 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
     final lock = widget.readOnly ? null : buyerLockMessage(UserSession.instance.account);
     final topInset = MediaQuery.paddingOf(context).top;
     final heroHeight = (MediaQuery.sizeOf(context).height * 0.33).clamp(240.0, 340.0);
+    final t = FtAuthTheme.live(context);
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
+    return FtAuthThemeScope(
+      theme: t,
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+      // Status bar icons stay light in both modes: the banner (or its purple
+      // placeholder) sits right under them.
       value: SystemUiOverlayStyle.light.copyWith(
         statusBarColor: Colors.transparent,
-        systemNavigationBarColor: FtColors.bgBottom,
-        systemNavigationBarIconBrightness: Brightness.light,
+        systemNavigationBarColor: t.bgBottom,
+        systemNavigationBarIconBrightness: t.isDark ? Brightness.light : Brightness.dark,
       ),
       child: Scaffold(
-        backgroundColor: FtColors.bgBottom,
+        backgroundColor: t.bgBottom,
         body: Column(
           children: [
             Expanded(
@@ -195,12 +201,15 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
                       ),
                       SliverToBoxAdapter(
                         child: DecoratedBox(
-                          decoration: const BoxDecoration(
+                          decoration: BoxDecoration(
                             gradient: LinearGradient(
                               begin: Alignment.topCenter,
                               end: Alignment.bottomCenter,
-                              stops: [0.0, 0.5],
-                              colors: [Color(0xFF0E0829), FtColors.bgBottom],
+                              stops: const [0.0, 0.5],
+                              colors: [
+                                t.isDark ? const Color(0xFF0E0829) : t.bgTop,
+                                t.bgBottom,
+                              ],
                             ),
                           ),
                           child: Padding(
@@ -214,7 +223,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
                                   endMs: 500,
                                   totalMs: _entranceMs,
                                   slide: 14,
-                                  child: _buildInfo(event),
+                                  child: _buildInfo(event, t),
                                 ),
                                 if (event.isMultiDay) ...[
                                   const SizedBox(height: 22),
@@ -268,7 +277,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
                                 if (_activeEvent.tiers.isEmpty)
                                   Text(
                                     'No ticket tiers have been set up yet.',
-                                    style: FtText.subtitle().copyWith(color: FtColors.otpSecondary),
+                                    style: FtText.subtitle().copyWith(color: t.secondaryText),
                                   ),
                                 for (var i = 0; i < _activeEvent.tiers.length; i++) ...[
                                   _tierReveal(
@@ -312,9 +321,9 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
                 totalMs: _entranceMs,
                 slide: 12,
                 child: DecoratedBox(
-                  decoration: const BoxDecoration(
-                    color: FtColors.bgBottom,
-                    border: Border(top: BorderSide(color: FtColors.otpBorder)),
+                  decoration: BoxDecoration(
+                    color: t.bgBottom,
+                    border: Border(top: BorderSide(color: t.surfaceBorder)),
                   ),
                   child: SafeArea(
                     top: false,
@@ -331,6 +340,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -346,13 +356,13 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
     );
   }
 
-  Widget _buildInfo(EventSummary event) {
+  Widget _buildInfo(EventSummary event, FtAuthTheme t) {
     final hasDescription = event.description != null && event.description!.trim().isNotEmpty;
     TextStyle meta() => GoogleFonts.plusJakartaSans(
           fontSize: 15,
           height: 1.3,
           fontWeight: FontWeight.w500,
-          color: FtColors.otpSecondary,
+          color: t.secondaryText,
         );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -361,7 +371,11 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
           header: true,
           child: Text(
             event.title,
-            style: FtText.title().copyWith(fontSize: 34, letterSpacing: -0.6),
+            style: FtText.title().copyWith(
+              fontSize: 34,
+              letterSpacing: -0.6,
+              color: t.titleColor,
+            ),
           ),
         ),
         const SizedBox(height: 12),
@@ -373,7 +387,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.calendar_today_outlined, size: 17, color: FtColors.otpSecondary),
+                Icon(Icons.calendar_today_outlined, size: 17, color: t.secondaryText),
                 const SizedBox(width: 8),
                 Flexible(child: Text(event.dateLabel, style: meta())),
               ],
@@ -382,7 +396,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.location_on_outlined, size: 17, color: FtColors.otpSecondary),
+                Icon(Icons.location_on_outlined, size: 17, color: t.secondaryText),
                 const SizedBox(width: 6),
                 Flexible(child: Text(event.venue, style: meta())),
               ],
@@ -398,7 +412,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
             style: GoogleFonts.plusJakartaSans(
               fontSize: 15,
               height: 1.5,
-              color: FtColors.otpSecondary,
+              color: t.secondaryText,
             ),
           ),
         ],
@@ -488,6 +502,7 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     return Semantics(
       header: true,
       child: Text(
@@ -497,7 +512,7 @@ class _SectionLabel extends StatelessWidget {
           height: 1.2,
           fontWeight: FontWeight.w800,
           letterSpacing: 1.3,
-          color: FtColors.otpSecondary,
+          color: t.secondaryText,
         ),
       ),
     );
@@ -513,6 +528,7 @@ class _DayChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     final reduce = MediaQuery.disableAnimationsOf(context);
     return Semantics(
       button: true,
@@ -531,8 +547,10 @@ class _DayChip extends StatelessWidget {
                     colors: [FtColors.progressStart, FtColors.otpButtonEnd],
                   )
                 : null,
-            color: selected ? null : FtColors.otpFill.withValues(alpha: 0.75),
-            border: Border.all(color: selected ? Colors.transparent : FtColors.otpBorder),
+            color: selected
+                ? null
+                : (t.isDark ? t.surfaceFill.withValues(alpha: 0.75) : t.surfaceFill),
+            border: Border.all(color: selected ? Colors.transparent : t.surfaceBorder),
           ),
           child: Text(
             label,
@@ -540,7 +558,7 @@ class _DayChip extends StatelessWidget {
               fontSize: 13.5,
               height: 1.2,
               fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
-              color: selected ? Colors.white : FtColors.otpSecondary,
+              color: selected ? Colors.white : t.secondaryText,
             ),
           ),
         ),
@@ -562,6 +580,7 @@ class _TierCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     final reduce = MediaQuery.disableAnimationsOf(context);
     final remaining = tier.remainingQuantity;
     final lowStock = !tier.isSoldOut && remaining != null && remaining <= 10;
@@ -572,10 +591,10 @@ class _TierCard extends StatelessWidget {
             ? 'Only $remaining left'
             : '1 ticket per account';
     final Color subtitleColor = tier.isSoldOut
-        ? FtColors.danger
+        ? t.danger
         : lowStock
             ? AppColors.warning
-            : FtColors.otpSecondary;
+            : t.secondaryText;
 
     return Semantics(
       button: true,
@@ -603,9 +622,11 @@ class _TierCard extends StatelessWidget {
                       ],
                     )
                   : null,
-              color: selected ? null : FtColors.otpFill.withValues(alpha: 0.75),
+              color: selected
+                  ? null
+                  : (t.isDark ? t.surfaceFill.withValues(alpha: 0.75) : t.surfaceFill),
               border: Border.all(
-                color: selected ? FtColors.fieldBorderFocused : FtColors.otpBorder,
+                color: selected ? t.fieldBorderFocused : t.surfaceBorder,
                 width: selected ? 1.5 : 1,
               ),
             ),
@@ -623,7 +644,7 @@ class _TierCard extends StatelessWidget {
                           fontSize: 18,
                           height: 1.2,
                           fontWeight: FontWeight.w800,
-                          color: Colors.white,
+                          color: t.titleColor,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -646,7 +667,7 @@ class _TierCard extends StatelessWidget {
                     fontSize: 23,
                     height: 1.1,
                     fontWeight: FontWeight.w800,
-                    color: Colors.white,
+                    color: t.titleColor,
                   ),
                 ),
               ],
@@ -661,7 +682,7 @@ class _TierCard extends StatelessWidget {
       tier.price <= 0 ? 'Free' : formatPeso(tier.price).replaceAll('.00', '');
 }
 
-/// Dark info box used for the locked-buying, purchase-limit and view-only
+/// Info box used for the locked-buying, purchase-limit and view-only
 /// messages.
 class _Notice extends StatelessWidget {
   const _Notice({
@@ -680,6 +701,7 @@ class _Notice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -703,7 +725,7 @@ class _Notice extends StatelessWidget {
                     fontSize: 14,
                     height: 1.25,
                     fontWeight: FontWeight.w800,
-                    color: Colors.white,
+                    color: t.titleColor,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -712,7 +734,7 @@ class _Notice extends StatelessWidget {
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 13,
                     height: 1.4,
-                    color: FtColors.otpSecondary,
+                    color: t.secondaryText,
                   ),
                 ),
                 if (actionLabel != null) ...[
@@ -722,7 +744,7 @@ class _Notice extends StatelessWidget {
                     behavior: HitTestBehavior.opaque,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Text(actionLabel!, style: FtText.link()),
+                      child: Text(actionLabel!, style: t.link()),
                     ),
                   ),
                 ],

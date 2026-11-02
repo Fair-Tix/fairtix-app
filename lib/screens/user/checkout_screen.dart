@@ -37,7 +37,7 @@ import 'checkout_confirmation_screen.dart';
 /// ticket when PayMongo notifies us server-to-server; both use the same
 /// deterministic token, so a payment can never yield two tickets.
 ///
-/// Dark design. The screen lets the buyer switch between the event's tiers
+/// Follows the Light / Dark switch. The screen lets the buyer switch between the event's tiers
 /// before paying; whichever tier is selected is the one sent to the server
 /// (which re-checks price, availability and the one-ticket limit itself).
 class CheckoutScreen extends StatefulWidget {
@@ -326,29 +326,29 @@ class _CheckoutScreenState extends State<CheckoutScreen>
     final event = widget.event;
     final tiers = event.tiers.isEmpty ? [widget.tier] : event.tiers;
 
+    final t = FtAuthTheme.live(context);
     TextStyle label() => GoogleFonts.plusJakartaSans(
           fontSize: 13,
           height: 1.2,
           fontWeight: FontWeight.w800,
           letterSpacing: 1.3,
-          color: FtColors.progressEnd,
+          color: t.activeAccent,
         );
     TextStyle meta() => GoogleFonts.plusJakartaSans(
           fontSize: 14.5,
           height: 1.3,
           fontWeight: FontWeight.w500,
-          color: FtColors.otpSecondary,
+          color: t.secondaryText,
         );
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light.copyWith(
-        statusBarColor: Colors.transparent,
-        systemNavigationBarColor: FtColors.bgBottom,
-        systemNavigationBarIconBrightness: Brightness.light,
-      ),
+    return FtAuthThemeScope(
+      theme: t,
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+      value: t.overlayStyle,
       child: Scaffold(
-        backgroundColor: FtColors.bgBottom,
-        body: FtBackground(
+        backgroundColor: t.bgBottom,
+        body: FtAuthBackground(
+          theme: t,
           child: SafeArea(
             child: Column(
               children: [
@@ -376,7 +376,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
-                              color: FtColors.otpSecondary,
+                              color: t.secondaryText,
                             ),
                           ),
                         ),
@@ -424,7 +424,11 @@ class _CheckoutScreenState extends State<CheckoutScreen>
                                       event.title,
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
-                                      style: FtText.title().copyWith(fontSize: 27, letterSpacing: -0.4),
+                                      style: FtText.title().copyWith(
+                                        fontSize: 27,
+                                        letterSpacing: -0.4,
+                                        color: t.titleColor,
+                                      ),
                                     ),
                                     const SizedBox(height: 6),
                                     Wrap(
@@ -435,8 +439,8 @@ class _CheckoutScreenState extends State<CheckoutScreen>
                                         Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            const Icon(Icons.calendar_today_outlined,
-                                                size: 15, color: FtColors.otpSecondary),
+                                            Icon(Icons.calendar_today_outlined,
+                                                size: 15, color: t.secondaryText),
                                             const SizedBox(width: 6),
                                             Flexible(child: Text(event.dateLabel, style: meta())),
                                           ],
@@ -444,8 +448,8 @@ class _CheckoutScreenState extends State<CheckoutScreen>
                                         Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            const Icon(Icons.location_on_outlined,
-                                                size: 15, color: FtColors.otpSecondary),
+                                            Icon(Icons.location_on_outlined,
+                                                size: 15, color: t.secondaryText),
                                             const SizedBox(width: 4),
                                             Flexible(child: Text(event.venue, style: meta())),
                                           ],
@@ -505,7 +509,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 12.5,
                               height: 1.4,
-                              color: FtColors.otpSecondary,
+                              color: t.secondaryText,
                             ),
                           ),
                         ],
@@ -513,9 +517,9 @@ class _CheckoutScreenState extends State<CheckoutScreen>
                         Container(
                           padding: const EdgeInsets.fromLTRB(22, 20, 22, 20),
                           decoration: BoxDecoration(
-                            color: FtColors.otpFill.withValues(alpha: 0.75),
+                            color: t.isDark ? t.surfaceFill.withValues(alpha: 0.75) : t.surfaceFill,
                             borderRadius: BorderRadius.circular(24),
-                            border: Border.all(color: FtColors.otpBorder),
+                            border: Border.all(color: t.surfaceBorder),
                           ),
                           child: Column(
                             children: [
@@ -526,13 +530,13 @@ class _CheckoutScreenState extends State<CheckoutScreen>
                               const SizedBox(height: 14),
                               // The buyer pays exactly the listed price; FairTix's
                               // fee comes out of the organizer's proceeds.
-                              const _SummaryRow(
+                              _SummaryRow(
                                 label: 'Buyer fees',
                                 value: 'None',
-                                valueColor: FtColors.success,
+                                valueColor: t.success,
                               ),
                               const SizedBox(height: 14),
-                              const Divider(height: 1, thickness: 1, color: FtColors.otpBorder),
+                              Divider(height: 1, thickness: 1, color: t.surfaceBorder),
                               const SizedBox(height: 14),
                               _SummaryRow(
                                 label: 'Total',
@@ -546,12 +550,12 @@ class _CheckoutScreenState extends State<CheckoutScreen>
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Padding(
-                              padding: EdgeInsets.only(top: 1),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 1),
                               child: Icon(
                                 Icons.shield_outlined,
                                 size: 16,
-                                color: FtColors.otpSecondary,
+                                color: t.secondaryText,
                               ),
                             ),
                             const SizedBox(width: 10),
@@ -564,7 +568,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
                                 style: GoogleFonts.plusJakartaSans(
                                   fontSize: 13,
                                   height: 1.4,
-                                  color: FtColors.otpSecondary,
+                                  color: t.secondaryText,
                                 ),
                               ),
                             ),
@@ -596,9 +600,9 @@ class _CheckoutScreenState extends State<CheckoutScreen>
                   totalMs: _entranceMs,
                   slide: 12,
                   child: DecoratedBox(
-                    decoration: const BoxDecoration(
-                      color: FtColors.bgBottom,
-                      border: Border(top: BorderSide(color: FtColors.otpBorder)),
+                    decoration: BoxDecoration(
+                      color: t.bgBottom,
+                      border: Border(top: BorderSide(color: t.surfaceBorder)),
                     ),
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(22, 16, 22, 14),
@@ -609,12 +613,12 @@ class _CheckoutScreenState extends State<CheckoutScreen>
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  const SizedBox(
+                                  SizedBox(
                                     width: 20,
                                     height: 20,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2.4,
-                                      color: FtColors.progressEnd,
+                                      color: t.activeAccent,
                                     ),
                                   ),
                                   const SizedBox(width: 12),
@@ -625,7 +629,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
                                     style: GoogleFonts.plusJakartaSans(
                                       fontSize: 15,
                                       fontWeight: FontWeight.w700,
-                                      color: FtColors.progressEnd,
+                                      color: t.activeAccent,
                                     ),
                                   ),
                                 ],
@@ -646,6 +650,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
           ),
         ),
       ),
+      ),
     );
   }
 }
@@ -662,6 +667,7 @@ class _TierOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     final reduce = MediaQuery.disableAnimationsOf(context);
     final duration = reduce ? Duration.zero : const Duration(milliseconds: 180);
     final remaining = tier.remainingQuantity;
@@ -670,7 +676,7 @@ class _TierOption extends StatelessWidget {
         : (remaining != null && remaining <= 10)
             ? 'Only $remaining left'
             : '1 ticket per account';
-    final subtitleColor = tier.isSoldOut ? FtColors.danger : FtColors.otpSecondary;
+    final subtitleColor = tier.isSoldOut ? t.danger : t.secondaryText;
     final price = _CheckoutScreenState._peso(tier.price);
 
     return Semantics(
@@ -699,9 +705,11 @@ class _TierOption extends StatelessWidget {
                       ],
                     )
                   : null,
-              color: selected ? null : FtColors.otpFill.withValues(alpha: 0.75),
+              color: selected
+                  ? null
+                  : (t.isDark ? t.surfaceFill.withValues(alpha: 0.75) : t.surfaceFill),
               border: Border.all(
-                color: selected ? FtColors.fieldBorderFocused : FtColors.otpBorder,
+                color: selected ? t.fieldBorderFocused : t.surfaceBorder,
                 width: selected ? 1.5 : 1,
               ),
             ),
@@ -719,7 +727,7 @@ class _TierOption extends StatelessWidget {
                           fontSize: 18,
                           height: 1.2,
                           fontWeight: FontWeight.w800,
-                          color: Colors.white,
+                          color: t.titleColor,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -741,7 +749,7 @@ class _TierOption extends StatelessWidget {
                     fontSize: 22,
                     height: 1.1,
                     fontWeight: FontWeight.w800,
-                    color: Colors.white,
+                    color: t.titleColor,
                   ),
                 ),
                 const SizedBox(width: 14),
@@ -753,7 +761,7 @@ class _TierOption extends StatelessWidget {
                     shape: BoxShape.circle,
                     color: selected ? FtColors.progressStart : Colors.transparent,
                     border: Border.all(
-                      color: selected ? FtColors.progressStart : FtColors.otpBorder,
+                      color: selected ? FtColors.progressStart : t.surfaceBorder,
                       width: 2,
                     ),
                   ),
@@ -777,12 +785,13 @@ class _MethodChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(999),
-        color: FtColors.otpFill.withValues(alpha: 0.75),
-        border: Border.all(color: FtColors.otpBorder),
+        color: t.isDark ? t.surfaceFill.withValues(alpha: 0.75) : t.surfaceFill,
+        border: Border.all(color: t.surfaceBorder),
       ),
       child: Text(
         label,
@@ -790,7 +799,7 @@ class _MethodChip extends StatelessWidget {
           fontSize: 15,
           height: 1.2,
           fontWeight: FontWeight.w700,
-          color: FtColors.otpSecondary,
+          color: t.secondaryText,
         ),
       ),
     );
@@ -812,6 +821,7 @@ class _SummaryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     return Row(
       children: [
         Expanded(
@@ -823,7 +833,7 @@ class _SummaryRow extends StatelessWidget {
               fontSize: strong ? 19 : 16,
               height: 1.2,
               fontWeight: strong ? FontWeight.w800 : FontWeight.w400,
-              color: strong ? Colors.white : FtColors.otpSecondary,
+              color: strong ? t.titleColor : t.secondaryText,
             ),
           ),
         ),
@@ -834,7 +844,7 @@ class _SummaryRow extends StatelessWidget {
             fontSize: strong ? 22 : 16,
             height: 1.2,
             fontWeight: strong ? FontWeight.w800 : (valueColor != null ? FontWeight.w700 : FontWeight.w600),
-            color: valueColor ?? Colors.white,
+            color: valueColor ?? t.titleColor,
           ),
         ),
       ],
@@ -850,6 +860,7 @@ class _AwaitingPaymentPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -863,14 +874,14 @@ class _AwaitingPaymentPanel extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.open_in_new_rounded, size: 18, color: FtColors.progressEnd),
+              Icon(Icons.open_in_new_rounded, size: 18, color: t.activeAccent),
               const SizedBox(width: 8),
               Text(
                 'Complete your payment',
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 14.5,
                   fontWeight: FontWeight.w800,
-                  color: Colors.white,
+                  color: t.titleColor,
                 ),
               ),
             ],
@@ -881,7 +892,7 @@ class _AwaitingPaymentPanel extends StatelessWidget {
             style: GoogleFonts.plusJakartaSans(
               fontSize: 13,
               height: 1.45,
-              color: FtColors.otpSecondary,
+              color: t.secondaryText,
             ),
           ),
           if (onReopen != null) ...[
@@ -893,7 +904,7 @@ class _AwaitingPaymentPanel extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Text(
                   'Reopen payment page',
-                  style: FtText.link().copyWith(decoration: TextDecoration.underline),
+                  style: t.link().copyWith(decoration: TextDecoration.underline),
                 ),
               ),
             ),

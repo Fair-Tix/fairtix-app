@@ -18,7 +18,7 @@ import 'resale_listing_screen.dart';
 
 /// "My Ticket" screen — shown after tapping a ticket from the My Tickets
 /// list. Displays the ticket's details and QR code, and is the entry
-/// point into the in-app resale flow. Dark design.
+/// point into the in-app resale flow. Follows the Light / Dark switch.
 ///
 /// Screenshots and screen recording are blocked while this screen is open
 /// (see [ScreenProtection]) so the QR code can't be copied.
@@ -87,37 +87,40 @@ class _TicketDetailScreenState extends State<TicketDetailScreen>
   }
 
   Future<void> _handleCancelListing() async {
+    // The dialog is its own route, outside the screen's theme scope, so it
+    // reads the Light / Dark switch directly.
+    final t = FtAuthTheme.live(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: FtColors.otpFill,
+        backgroundColor: t.surfaceFill,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(22),
-          side: const BorderSide(color: FtColors.otpBorder),
+          side: BorderSide(color: t.surfaceBorder),
         ),
         title: Text(
           'Cancel this listing?',
           style: GoogleFonts.plusJakartaSans(
             fontSize: 18,
             fontWeight: FontWeight.w800,
-            color: Colors.white,
+            color: t.titleColor,
           ),
         ),
         content: Text(
           'Your ticket will come off the Resale Market and go back to being a regular ticket in your wallet.',
-          style: FtText.subtitle().copyWith(color: FtColors.otpSecondary),
+          style: t.subtitle().copyWith(color: t.secondaryText),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text('Keep Listing', style: FtText.link()),
+            child: Text('Keep Listing', style: t.link()),
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: Text(
               'Cancel Listing',
-              style: FtText.link().copyWith(color: FtColors.danger),
+              style: t.link().copyWith(color: t.danger),
             ),
           ),
         ],
@@ -151,27 +154,27 @@ class _TicketDetailScreenState extends State<TicketDetailScreen>
     Navigator.of(context).maybePop();
   }
 
-  ({String label, Color color}) get _statusBadge => switch (ticket.status) {
-        TicketStatus.valid => (label: 'Valid', color: FtColors.success),
-        TicketStatus.listed => (label: 'Listed', color: FtColors.progressEnd),
-        TicketStatus.used => (label: 'Used', color: FtColors.otpSecondary),
-        TicketStatus.canceled => (label: 'Canceled', color: FtColors.danger),
+  ({String label, Color color}) _statusBadge(FtAuthTheme t) => switch (ticket.status) {
+        TicketStatus.valid => (label: 'Valid', color: t.success),
+        TicketStatus.listed => (label: 'Listed', color: t.activeAccent),
+        TicketStatus.used => (label: 'Used', color: t.secondaryText),
+        TicketStatus.canceled => (label: 'Canceled', color: t.danger),
       };
 
   @override
   Widget build(BuildContext context) {
     final event = ticket.event;
-    final badge = _statusBadge;
+    final t = FtAuthTheme.live(context);
+    final badge = _statusBadge(t);
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light.copyWith(
-        statusBarColor: Colors.transparent,
-        systemNavigationBarColor: FtColors.bgBottom,
-        systemNavigationBarIconBrightness: Brightness.light,
-      ),
+    return FtAuthThemeScope(
+      theme: t,
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+      value: t.overlayStyle,
       child: Scaffold(
-        backgroundColor: FtColors.bgBottom,
-        body: FtBackground(
+        backgroundColor: t.bgBottom,
+        body: FtAuthBackground(
+          theme: t,
           child: SafeArea(
             child: Column(
               children: [
@@ -195,7 +198,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen>
                                 fontSize: 20,
                                 height: 1.2,
                                 fontWeight: FontWeight.w800,
-                                color: Colors.white,
+                                color: t.titleColor,
                               ),
                             ),
                           ),
@@ -213,7 +216,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen>
                       children: [
                         if (TicketRepository.instance.isFromCache) ...[
                           OfflineCopyBanner(
-                            dark: true,
+                            dark: t.isDark,
                             lastSyncedAt: TicketRepository.instance.lastSyncedAt,
                           ),
                           const SizedBox(height: 14),
@@ -224,7 +227,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen>
                           endMs: 480,
                           totalMs: _entranceMs,
                           slide: 16,
-                          child: _buildCard(event, badge),
+                          child: _buildCard(event, badge, t),
                         ),
                       ],
                     ),
@@ -237,13 +240,13 @@ class _TicketDetailScreenState extends State<TicketDetailScreen>
                   totalMs: _entranceMs,
                   slide: 12,
                   child: DecoratedBox(
-                    decoration: const BoxDecoration(
-                      color: FtColors.bgBottom,
-                      border: Border(top: BorderSide(color: FtColors.otpBorder)),
+                    decoration: BoxDecoration(
+                      color: t.bgBottom,
+                      border: Border(top: BorderSide(color: t.surfaceBorder)),
                     ),
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(22, 16, 22, 14),
-                      child: _buildAction(context),
+                      child: _buildAction(context, t),
                     ),
                   ),
                 ),
@@ -252,19 +255,24 @@ class _TicketDetailScreenState extends State<TicketDetailScreen>
           ),
         ),
       ),
+      ),
     );
   }
 
-  Widget _buildCard(EventSummary event, ({String label, Color color}) badge) {
+  Widget _buildCard(
+    EventSummary event,
+    ({String label, Color color}) badge,
+    FtAuthTheme t,
+  ) {
     return Semantics(
       container: true,
       label: '${event.title}, ${ticket.tier.name} ticket for ${ticket.ownerName}, '
           '${event.dateLabel.split(' \u2022 ').first}, ${event.venue}. ${badge.label}',
       child: Container(
         decoration: BoxDecoration(
-          color: FtColors.otpFill.withValues(alpha: 0.8),
+          color: t.isDark ? t.surfaceFill.withValues(alpha: 0.8) : t.surfaceFill,
           borderRadius: BorderRadius.circular(26),
-          border: Border.all(color: FtColors.otpBorder),
+          border: Border.all(color: t.surfaceBorder),
         ),
         child: Column(
           children: [
@@ -299,7 +307,11 @@ class _TicketDetailScreenState extends State<TicketDetailScreen>
                     textAlign: TextAlign.center,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: FtText.title().copyWith(fontSize: 32, letterSpacing: -0.5),
+                    style: FtText.title().copyWith(
+                      fontSize: 32,
+                      letterSpacing: -0.5,
+                      color: t.titleColor,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -310,7 +322,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen>
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 15,
                       height: 1.35,
-                      color: FtColors.otpSecondary,
+                      color: t.secondaryText,
                     ),
                   ),
                   const SizedBox(height: 22),
@@ -329,7 +341,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen>
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 13.5,
                         height: 1.3,
-                        color: FtColors.otpSecondary,
+                        color: t.secondaryText,
                       ),
                     ),
                   ] else
@@ -344,14 +356,14 @@ class _TicketDetailScreenState extends State<TicketDetailScreen>
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  const Positioned.fill(
+                  Positioned.fill(
                     child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 22),
-                      child: CustomPaint(painter: _DashPainter()),
+                      padding: const EdgeInsets.symmetric(horizontal: 22),
+                      child: CustomPaint(painter: _DashPainter(t.surfaceBorder)),
                     ),
                   ),
-                  Positioned(left: -11, top: 0, child: _notch()),
-                  Positioned(right: -11, top: 0, child: _notch()),
+                  Positioned(left: -11, top: 0, child: _notch(t)),
+                  Positioned(right: -11, top: 0, child: _notch(t)),
                 ],
               ),
             ),
@@ -390,14 +402,14 @@ class _TicketDetailScreenState extends State<TicketDetailScreen>
                   // Screen protection is switched on for the whole screen
                   // (initState), so this simply says so while a QR is shown.
                   if (_isQrActive) ...[
-                    const Icon(Icons.lock_outline_rounded, size: 16, color: FtColors.otpSecondary),
+                    Icon(Icons.lock_outline_rounded, size: 16, color: t.secondaryText),
                     const SizedBox(width: 6),
                     Text(
                       'Screenshots blocked',
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 13.5,
                         height: 1.2,
-                        color: FtColors.otpSecondary,
+                        color: t.secondaryText,
                       ),
                     ),
                   ],
@@ -410,17 +422,17 @@ class _TicketDetailScreenState extends State<TicketDetailScreen>
     );
   }
 
-  Widget _notch() => Container(
+  Widget _notch(FtAuthTheme t) => Container(
         width: 22,
         height: 22,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: FtColors.bgBottom,
-          border: Border.all(color: FtColors.otpBorder),
+          color: t.bgBottom,
+          border: Border.all(color: t.surfaceBorder),
         ),
       );
 
-  Widget _buildAction(BuildContext context) {
+  Widget _buildAction(BuildContext context, FtAuthTheme t) {
     switch (ticket.status) {
       case TicketStatus.valid:
         return FtGradientButton(
@@ -441,7 +453,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen>
               onPressed: _isCancelingListing ? null : _handleCancelListing,
               child: Text(
                 _isCancelingListing ? 'Canceling\u2026' : 'Cancel Listing',
-                style: FtText.link().copyWith(fontSize: 14.5),
+                style: t.link().copyWith(fontSize: 14.5),
               ),
             ),
           ],
@@ -456,12 +468,14 @@ class _TicketDetailScreenState extends State<TicketDetailScreen>
 
 /// Dashed perforation line between the two card notches.
 class _DashPainter extends CustomPainter {
-  const _DashPainter();
+  const _DashPainter(this.color);
+
+  final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = FtColors.otpBorder
+      ..color = color
       ..strokeWidth = 1.5
       ..strokeCap = StrokeCap.round;
     final y = size.height / 2;
@@ -473,7 +487,7 @@ class _DashPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_DashPainter old) => false;
+  bool shouldRepaint(_DashPainter old) => old.color != color;
 }
 
 /// Shown in place of the QR code when the ticket is used or canceled.
@@ -484,21 +498,22 @@ class _InactiveQrNotice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     final isUsed = status == TicketStatus.used;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
       decoration: BoxDecoration(
-        color: FtColors.bgBottom.withValues(alpha: 0.5),
+        color: t.isDark ? t.bgBottom.withValues(alpha: 0.5) : t.bgBottom,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: FtColors.otpBorder),
+        border: Border.all(color: t.surfaceBorder),
       ),
       child: Column(
         children: [
           Icon(
             isUsed ? Icons.check_circle_outline_rounded : Icons.block_rounded,
             size: 44,
-            color: FtColors.otpSecondary,
+            color: t.secondaryText,
           ),
           const SizedBox(height: 12),
           Text(
@@ -506,7 +521,7 @@ class _InactiveQrNotice extends StatelessWidget {
             style: GoogleFonts.plusJakartaSans(
               fontSize: 15.5,
               fontWeight: FontWeight.w800,
-              color: Colors.white,
+              color: t.titleColor,
             ),
           ),
           const SizedBox(height: 6),
@@ -515,7 +530,7 @@ class _InactiveQrNotice extends StatelessWidget {
                 ? 'This ticket was already scanned at the event entrance.'
                 : 'This ticket was canceled, so it can no longer be used to enter.',
             textAlign: TextAlign.center,
-            style: FtText.subtitle().copyWith(color: FtColors.otpSecondary),
+            style: t.subtitle().copyWith(color: t.secondaryText),
           ),
         ],
       ),
@@ -540,6 +555,7 @@ class _TicketQrCode extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     return Semantics(
       label: 'Ticket QR code',
       image: true,
@@ -548,6 +564,8 @@ class _TicketQrCode extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(22),
+          // On Light the white frame sits on a white card, so it gets a hairline.
+          border: t.isDark ? null : Border.all(color: t.surfaceBorder),
         ),
         child: QrImageView(
           data: qrToken,

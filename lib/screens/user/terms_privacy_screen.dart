@@ -97,16 +97,16 @@ class _TermsPrivacyScreenState extends State<TermsPrivacyScreen> {
   Widget build(BuildContext context) {
     final reduce = MediaQuery.disableAnimationsOf(context);
     final sections = _tab == 0 ? _terms : _privacy;
+    final t = FtAuthTheme.live(context);
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light.copyWith(
-        statusBarColor: Colors.transparent,
-        systemNavigationBarColor: FtColors.bgBottom,
-        systemNavigationBarIconBrightness: Brightness.light,
-      ),
+    return FtAuthThemeScope(
+      theme: t,
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+      value: t.overlayStyle,
       child: Scaffold(
-        backgroundColor: FtColors.bgBottom,
-        body: FtBackground(
+        backgroundColor: t.bgBottom,
+        body: FtAuthBackground(
+          theme: t,
           child: SafeArea(
             child: FtEntrance(
               child: SingleChildScrollView(
@@ -132,7 +132,7 @@ class _TermsPrivacyScreenState extends State<TermsPrivacyScreen> {
                               style: GoogleFonts.plusJakartaSans(
                                 fontSize: 19,
                                 fontWeight: FontWeight.w800,
-                                color: Colors.white,
+                                color: t.titleColor,
                               ),
                             ),
                           ),
@@ -164,7 +164,7 @@ class _TermsPrivacyScreenState extends State<TermsPrivacyScreen> {
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 12.5,
                           fontStyle: FontStyle.italic,
-                          color: FtColors.otpSecondary,
+                          color: t.secondaryText,
                         ),
                       ),
                     ),
@@ -174,6 +174,7 @@ class _TermsPrivacyScreenState extends State<TermsPrivacyScreen> {
             ),
           ),
         ),
+      ),
       ),
     );
   }
@@ -189,6 +190,7 @@ class _Tabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     final reduce = MediaQuery.disableAnimationsOf(context);
     final duration = reduce ? Duration.zero : const Duration(milliseconds: 220);
 
@@ -196,9 +198,9 @@ class _Tabs extends StatelessWidget {
       height: 56,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: FtColors.otpFill,
+        color: t.surfaceFill,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: FtColors.otpBorder),
+        border: Border.all(color: t.surfaceBorder),
       ),
       child: Stack(
         children: [
@@ -215,7 +217,7 @@ class _Tabs extends StatelessWidget {
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: FtColors.glow.withValues(alpha: 0.35),
+                      color: FtColors.glow.withValues(alpha: t.glowAlpha),
                       blurRadius: 14,
                     ),
                   ],
@@ -241,7 +243,7 @@ class _Tabs extends StatelessWidget {
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 17,
                             fontWeight: FontWeight.w700,
-                            color: i == selected ? Colors.white : FtColors.otpSecondary,
+                            color: i == selected ? Colors.white : t.secondaryText,
                           ),
                           child: Text(labels[i]),
                         ),
@@ -264,13 +266,14 @@ class _PolicyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(22, 22, 22, 24),
       decoration: BoxDecoration(
-        color: FtColors.otpFill.withValues(alpha: 0.75),
+        color: t.isDark ? t.surfaceFill.withValues(alpha: 0.75) : t.surfaceFill,
         borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: FtColors.otpBorder),
+        border: Border.all(color: t.surfaceBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -285,7 +288,7 @@ class _PolicyCard extends StatelessWidget {
                   fontSize: 18,
                   height: 1.25,
                   fontWeight: FontWeight.w800,
-                  color: Colors.white,
+                  color: t.titleColor,
                 ),
               ),
             ),
@@ -296,7 +299,7 @@ class _PolicyCard extends StatelessWidget {
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 14.5,
                   height: 1.55,
-                  color: FtColors.otpSecondary,
+                  color: t.secondaryText,
                 ),
               ),
             ],

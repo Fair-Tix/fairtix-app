@@ -6,7 +6,7 @@ import '../../models/event.dart';
 import '../../services/public_event_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/ft_dark_ui.dart';
-import '../../widgets/ft_dashboard_ui.dart' show FtPressScale, FtSearchField;
+import '../../widgets/ft_dashboard_ui.dart' show FtBackButton, FtSearchField;
 import '../../widgets/ft_pending_ui.dart' show FtReveal;
 import '../../widgets/purple_header_bar.dart';
 import '../../widgets/upcoming_event_tile.dart';
@@ -16,7 +16,8 @@ import 'event_details_screen.dart';
 /// Events section. Backed by `public.events` (status == published) via
 /// [PublicEventRepository].
 ///
-/// Eventgoers see the dark design. The organizer and admin portals open this
+/// Eventgoers see the redesigned layout, which follows the Light / Dark
+/// switch. The organizer and admin portals open this
 /// same screen with [readOnly] set; they keep the previous light layout so
 /// they still match their own pages.
 class AllEventsScreen extends StatefulWidget {
@@ -112,29 +113,29 @@ class _AllEventsScreenState extends State<AllEventsScreen>
   @override
   Widget build(BuildContext context) {
     if (widget.readOnly) return _buildLight(context);
-    return _buildDark(context);
+    return _buildEventgoer(context);
   }
 
   // ---------------------------------------------------------------------
-  // Dark design (eventgoers)
+  // Eventgoer layout (follows the Light / Dark switch)
   // ---------------------------------------------------------------------
 
-  Widget _buildDark(BuildContext context) {
+  Widget _buildEventgoer(BuildContext context) {
+    final t = FtAuthTheme.live(context);
     final events = _filteredEvents;
     // Spinner only when there is nothing to show yet; a refresh keeps the
     // list on screen.
     final showSpinner =
         _isLoading && PublicEventRepository.instance.events.isEmpty;
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light.copyWith(
-        statusBarColor: Colors.transparent,
-        systemNavigationBarColor: FtColors.bgBottom,
-        systemNavigationBarIconBrightness: Brightness.light,
-      ),
+    return FtAuthThemeScope(
+      theme: t,
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+      value: t.overlayStyle,
       child: Scaffold(
-        backgroundColor: FtColors.bgBottom,
-        body: FtBackground(
+        backgroundColor: t.bgBottom,
+        body: FtAuthBackground(
+          theme: t,
           child: SafeArea(
             child: Column(
               children: [
@@ -142,28 +143,7 @@ class _AllEventsScreenState extends State<AllEventsScreen>
                   padding: const EdgeInsets.fromLTRB(22, 14, 22, 0),
                   child: Row(
                     children: [
-                      Semantics(
-                        button: true,
-                        label: 'Back',
-                        excludeSemantics: true,
-                        child: FtPressScale(
-                          onTap: () => Navigator.of(context).maybePop(),
-                          child: Container(
-                            width: 48,
-                            height: 48,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: FtColors.otpFill,
-                              border: Border.all(color: FtColors.otpBorder),
-                            ),
-                            child: const Icon(
-                              Icons.chevron_left_rounded,
-                              size: 26,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
+                      FtBackButton(onTap: () => Navigator.of(context).maybePop()),
                       Expanded(
                         child: Semantics(
                           header: true,
@@ -174,7 +154,7 @@ class _AllEventsScreenState extends State<AllEventsScreen>
                               fontSize: 20,
                               height: 1.2,
                               fontWeight: FontWeight.w800,
-                              color: Colors.white,
+                              color: t.titleColor,
                             ),
                           ),
                         ),
@@ -194,17 +174,17 @@ class _AllEventsScreenState extends State<AllEventsScreen>
                 const SizedBox(height: 18),
                 Expanded(
                   child: RefreshIndicator(
-                    color: FtColors.progressEnd,
-                    backgroundColor: FtColors.otpFill,
+                    color: t.activeAccent,
+                    backgroundColor: t.surfaceFill,
                     onRefresh: _loadEvents,
                     child: showSpinner
                         ? ListView(
                             physics: const AlwaysScrollableScrollPhysics(),
-                            children: const [
-                              SizedBox(height: 80),
+                            children: [
+                              const SizedBox(height: 80),
                               Center(
                                 child: CircularProgressIndicator(
-                                  color: FtColors.progressEnd,
+                                  color: t.activeAccent,
                                 ),
                               ),
                             ],
@@ -229,10 +209,12 @@ class _AllEventsScreenState extends State<AllEventsScreen>
           ),
         ),
       ),
+      ),
     );
   }
 
   Widget _darkMessage(String text, {VoidCallback? retry}) {
+    final t = FtAuthTheme.live(context);
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -241,13 +223,13 @@ class _AllEventsScreenState extends State<AllEventsScreen>
         Text(
           text,
           textAlign: TextAlign.center,
-          style: FtText.subtitle().copyWith(color: FtColors.otpSecondary),
+          style: t.subtitle().copyWith(color: t.secondaryText),
         ),
         if (retry != null)
           Center(
             child: TextButton(
               onPressed: retry,
-              child: Text('Try again', style: FtText.link()),
+              child: Text('Try again', style: t.link()),
             ),
           ),
       ],
@@ -255,6 +237,7 @@ class _AllEventsScreenState extends State<AllEventsScreen>
   }
 
   Widget _eventsCard(List<EventSummary> events) {
+    final t = FtAuthTheme.live(context);
     final rows = <Widget>[];
     for (var i = 0; i < events.length; i++) {
       if (i > 0) {
@@ -263,7 +246,7 @@ class _AllEventsScreenState extends State<AllEventsScreen>
           thickness: 1,
           indent: 16,
           endIndent: 16,
-          color: FtColors.otpBorder.withValues(alpha: 0.7),
+          color: t.surfaceBorder.withValues(alpha: 0.7),
         ));
       }
       Widget row = _EventRow(event: events[i], onTap: () => _openEvent(events[i]));
@@ -282,9 +265,9 @@ class _AllEventsScreenState extends State<AllEventsScreen>
 
     return Container(
       decoration: BoxDecoration(
-        color: FtColors.otpFill.withValues(alpha: 0.75),
+        color: t.isDark ? t.surfaceFill.withValues(alpha: 0.75) : t.surfaceFill,
         borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: FtColors.otpBorder),
+        border: Border.all(color: t.surfaceBorder),
       ),
       clipBehavior: Clip.antiAlias,
       child: Material(
@@ -387,7 +370,8 @@ const _months = [
   'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC',
 ];
 
-/// One row of the dark list: date badge, title and venue, price on the right.
+/// One row of the eventgoer list: date badge, title and venue, price on the
+/// right.
 class _EventRow extends StatelessWidget {
   const _EventRow({required this.event, required this.onTap});
 
@@ -425,6 +409,7 @@ class _EventRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     final badge = _badge;
     final price = _price;
     return Semantics(
@@ -460,7 +445,7 @@ class _EventRow extends StatelessWidget {
                           height: 1.2,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 0.8,
-                          color: FtColors.progressEnd,
+                          color: t.activeAccent,
                         ),
                       ),
                     ),
@@ -473,7 +458,7 @@ class _EventRow extends StatelessWidget {
                           fontSize: 20,
                           height: 1.1,
                           fontWeight: FontWeight.w800,
-                          color: Colors.white,
+                          color: t.titleColor,
                         ),
                       ),
                     ),
@@ -493,7 +478,7 @@ class _EventRow extends StatelessWidget {
                         fontSize: 17,
                         height: 1.2,
                         fontWeight: FontWeight.w800,
-                        color: Colors.white,
+                        color: t.titleColor,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -504,7 +489,7 @@ class _EventRow extends StatelessWidget {
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 13.5,
                         height: 1.2,
-                        color: FtColors.otpSecondary,
+                        color: t.secondaryText,
                       ),
                     ),
                   ],
@@ -522,7 +507,7 @@ class _EventRow extends StatelessWidget {
                     fontSize: 16,
                     height: 1.2,
                     fontWeight: FontWeight.w800,
-                    color: FtColors.accent,
+                    color: t.accent,
                   ),
                 ),
               ),

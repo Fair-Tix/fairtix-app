@@ -159,15 +159,18 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     borderRadius: BorderRadius.circular(6),
     child: Padding(
       padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-      child: Text(label, style: FtText.link()),
+      child: Text(label, style: FtAuthTheme.live(context).link()),
     ),
   );
 
   @override
   Widget build(BuildContext context) {
+    // Read here (above the scaffolds) for the footers this screen builds.
+    final t = FtAuthTheme.live(context);
     switch (_step) {
       case _Step.email:
         return FtAuthScaffold(
+          followTheme: true,
           title: 'Forgot password?',
           subtitle:
               'Enter the email you signed up with and we’ll send you a code.',
@@ -204,7 +207,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           footer: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text('Remembered it? ', style: FtText.footer()),
+              Text('Remembered it? ', style: t.footer()),
               _link('Log in', () => Navigator.of(context).maybePop()),
             ],
           ),
@@ -212,6 +215,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
       case _Step.code:
         return FtAuthScaffold(
+          followTheme: true,
           title: 'Check your email',
           subtitle:
               'If an account exists for ${_email.text.trim()}, we sent a code to it. Enter it below.',
@@ -250,9 +254,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             crossAxisAlignment: WrapCrossAlignment.center,
             spacing: 6,
             children: [
-              Text('Didn’t get it?', style: FtText.footer()),
+              Text('Didn’t get it?', style: t.footer()),
               _link('Resend code', () => _sendCode(resend: true)),
-              Text('·', style: FtText.footer()),
+              Text('·', style: t.footer()),
               _link('Change email', _changeEmail),
             ],
           ),
@@ -260,6 +264,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
       case _Step.password:
         return FtAuthScaffold(
+          followTheme: true,
           title: 'New password',
           subtitle: 'Choose a new password for your FairTix account.',
           body: [

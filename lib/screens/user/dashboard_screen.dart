@@ -12,12 +12,15 @@ import '../../services/user_auth_service.dart';
 import '../../services/user_session.dart';
 import '../../widgets/ft_dark_ui.dart';
 import '../../widgets/ft_dashboard_ui.dart';
+import '../../theme/fairtix_palette.dart';
 import '../../widgets/ft_pending_ui.dart' show FtReveal;
+import '../../widgets/ft_profile_ui.dart' show FtPaletteBackground, ftOverlayStyle;
 import 'all_events_screen.dart';
 import 'event_details_screen.dart';
 import 'notifications_screen.dart';
 
-/// Home tab. Dark redesign; one screen with two ticket states (new user /
+/// Home tab. Dark by default, Light when chosen in Settings > Appearance;
+/// one screen with two ticket states (new user /
 /// owns tickets). Events, notifications, search and navigation are the same
 /// as before, and the ticket numbers come from the existing
 /// [TicketRepository], the same data the My Tickets tab shows.
@@ -171,6 +174,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   Future<void> _refreshAll() => Future.wait([_loadEvents(), _loadTickets()]);
 
   Widget _loadingOrMessage(String text, {VoidCallback? retry}) {
+    final p = FairTixPalette.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 28),
       child: Center(
@@ -179,13 +183,16 @@ class _DashboardScreenState extends State<DashboardScreen>
             Text(
               text,
               textAlign: TextAlign.center,
-              style: FtText.subtitle().copyWith(color: FtColors.otpSecondary),
+              style: FtText.subtitle().copyWith(color: p.textSoft),
             ),
             if (retry != null) ...[
               const SizedBox(height: 8),
               TextButton(
                 onPressed: retry,
-                child: Text('Try again', style: FtText.link()),
+                child: Text(
+                  'Try again',
+                  style: FtText.link().copyWith(color: p.tileAccent),
+                ),
               ),
             ],
           ],
@@ -215,20 +222,18 @@ class _DashboardScreenState extends State<DashboardScreen>
     final firstLoad =
         _isLoading && PublicEventRepository.instance.events.isEmpty;
 
+    final p = FairTixPalette.of(context);
+
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light.copyWith(
-        statusBarColor: Colors.transparent,
-        systemNavigationBarColor: FtColors.bgBottom,
-        systemNavigationBarIconBrightness: Brightness.light,
-      ),
+      value: ftOverlayStyle(p),
       child: Scaffold(
-        backgroundColor: FtColors.bgBottom,
-        body: FtBackground(
+        backgroundColor: p.gradientBottom,
+        body: FtPaletteBackground(
           child: SafeArea(
             bottom: false,
             child: RefreshIndicator(
-              color: FtColors.progressEnd,
-              backgroundColor: FtColors.otpFill,
+              color: p.tileAccent,
+              backgroundColor: p.surface,
               onRefresh: _refreshAll,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
@@ -275,10 +280,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                     ),
                     const SizedBox(height: 20),
                     if (firstLoad)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 60),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 60),
                         child: Center(
-                          child: CircularProgressIndicator(color: FtColors.progressEnd),
+                          child: CircularProgressIndicator(color: p.tileAccent),
                         ),
                       )
                     else if (_errorMessage != null && events.isEmpty)

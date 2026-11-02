@@ -21,6 +21,7 @@ import 'screens/organizer/organizer-landing.dart';
 import 'screens/organizer/app_colors.dart';
 import 'screens/user/login_screen.dart' show LoginScreen, userHomeFor;
 import 'screens/user/app_loading_screen.dart';
+import 'theme/fairtix_palette.dart';
 import 'theme/theme_controller.dart';
 import 'theme/page_transitions.dart';
 import 'services/admin_auth_service.dart';
@@ -31,6 +32,9 @@ import 'services/user_session.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Load the saved Light / Dark choice before the first frame, so the launch
+  // splash already paints in the right mode (a quick local read).
+  await ThemeController.instance.load();
   final startup = _startup();
 
   if (kIsWeb) {
@@ -163,7 +167,7 @@ class _AppRootState extends State<_AppRoot> {
     // The dark base behind the cross-fade keeps the window background from
     // showing through while the two screens swap.
     return ColoredBox(
-      color: const Color(0xFF08051B),
+      color: FairTixPalette.of(context).gradientBottom,
       child: Directionality(
         textDirection: TextDirection.ltr,
         child: AnimatedSwitcher(

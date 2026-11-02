@@ -315,9 +315,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
 
   Widget _resendLine() {
     final reduce = MediaQuery.disableAnimationsOf(context);
+    final t = FtAuthTheme.live(context);
     final base = FtText.legal().copyWith(
       fontSize: 14,
-      color: FtColors.otpSecondary,
+      color: t.secondaryText,
     );
     final strong = base.copyWith(fontWeight: FontWeight.w700);
 
@@ -327,16 +328,16 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
         key: const ValueKey('sending'),
         width: 16,
         height: 16,
-        child: const CircularProgressIndicator(
+        child: CircularProgressIndicator(
           strokeWidth: 2,
-          color: FtColors.otpActive,
+          color: t.activeAccent,
         ),
       );
     } else if (_secondsLeft > 0) {
       trailing = Text(
         'Resend in ${_countdownLabel(_secondsLeft)}',
         key: const ValueKey('countdown'),
-        style: strong.copyWith(color: FtColors.otpActive.withValues(alpha: 0.8)),
+        style: strong.copyWith(color: t.activeAccent.withValues(alpha: 0.8)),
       );
     } else {
       trailing = InkWell(
@@ -347,7 +348,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
           child: Text(
             'Resend Code',
-            style: strong.copyWith(color: FtColors.otpActive),
+            style: strong.copyWith(color: t.activeAccent),
           ),
         ),
       );
@@ -370,21 +371,23 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
   @override
   Widget build(BuildContext context) {
     final complete = _codeController.text.length == FtOtpField.length;
+    final t = FtAuthTheme.live(context);
 
     return FtRegistrationScaffold(
+      followTheme: true,
       step: 2,
       entrance: true,
       title: 'Check your email',
       subtitle: 'We sent a 6-digit code to ${_maskEmail(widget.email)}.',
-      subtitleColor: FtColors.otpSecondary,
+      subtitleColor: t.secondaryText,
       onBack: (_verifying || _success) ? null : () => Navigator.of(context).maybePop(),
       body: [
         AnimatedBuilder(
           animation: _shake,
           builder: (context, child) {
-            final t = _shake.value;
+            final shake = _shake.value;
             return Transform.translate(
-              offset: Offset(math.sin(t * math.pi * 6) * 9 * (1 - t), 0),
+              offset: Offset(math.sin(shake * math.pi * 6) * 9 * (1 - shake), 0),
               child: child,
             );
           },
@@ -408,8 +411,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
                       _error ?? _notice!,
                       style: FtText.error().copyWith(
                         color: _error != null
-                            ? FtColors.danger
-                            : FtColors.otpSecondary,
+                            ? t.danger
+                            : t.secondaryText,
                         fontWeight: _error != null
                             ? FontWeight.w600
                             : FontWeight.w500,

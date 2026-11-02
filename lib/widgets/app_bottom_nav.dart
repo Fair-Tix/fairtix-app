@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../theme/fairtix_palette.dart';
 import 'ft_dark_ui.dart';
 
 /// Bottom navigation bar for the main app shell, dark design.
@@ -8,11 +9,19 @@ import 'ft_dark_ui.dart';
 /// Shows Home / My Tickets / Resale. The shell still has a fourth page,
 /// Profile (index 3); it is opened from the profile circle on the Home
 /// header, and while it is showing no item here is highlighted.
+///
+/// The bar follows the Light / Dark switch only on tabs that have been
+/// converted to it (see [_lightReadyTabs]); every other tab keeps the dark
+/// bar. Add a tab's index to that set when its screen supports Light mode.
 class AppBottomNav extends StatelessWidget {
   const AppBottomNav({super.key, required this.currentIndex, required this.onTap});
 
   final int currentIndex;
   final ValueChanged<int> onTap;
+
+  /// Shell tab indexes whose screens already follow the Light / Dark switch.
+  /// 0 = Home, 3 = Profile.
+  static const Set<int> _lightReadyTabs = {0, 3};
 
   static const _items = [
     (icon: Icons.home_outlined, activeIcon: Icons.home_rounded, label: 'Home'),
@@ -32,11 +41,17 @@ class AppBottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     final reduce = MediaQuery.disableAnimationsOf(context);
     final duration = reduce ? Duration.zero : const Duration(milliseconds: 180);
+    final p = _lightReadyTabs.contains(currentIndex)
+        ? FairTixPalette.of(context)
+        : FairTixPalette.dark;
+    final inactive = p.isDark ? FtColors.hint : p.textSoft;
 
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: FtColors.bgBottom,
-        border: Border(top: BorderSide(color: FtColors.otpBorder)),
+    return AnimatedContainer(
+      duration: duration,
+      decoration: BoxDecoration(
+        // Dark keeps the page color; Light uses a white bar.
+        color: p.isDark ? p.gradientBottom : p.surface,
+        border: Border(top: BorderSide(color: p.border)),
       ),
       child: SafeArea(
         top: false,
@@ -46,7 +61,7 @@ class AppBottomNav extends StatelessWidget {
             children: List.generate(_items.length, (index) {
               final item = _items[index];
               final active = index == currentIndex;
-              final target = active ? FtColors.progressEnd : FtColors.hint;
+              final target = active ? p.tileAccent : inactive;
               return Expanded(
                 child: Semantics(
                   button: true,

@@ -52,9 +52,12 @@ class _IdentityVerificationScreenState extends State<IdentityVerificationScreen>
   /// memory as bytes so the same code path works on mobile and web
   /// (no `dart:io File`, which isn't available on web).
   Future<void> _pickId() async {
+    // The sheet is a separate route, outside the scaffold, so it gets the
+    // theme from the Light / Dark switch directly.
+    final t = FtAuthTheme.live(context);
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
-      backgroundColor: FtColors.otpFill,
+      backgroundColor: t.surfaceFill,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -67,19 +70,19 @@ class _IdentityVerificationScreenState extends State<IdentityVerificationScreen>
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: FtColors.otpBorder,
+                color: t.surfaceBorder,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
             const SizedBox(height: 12),
             ListTile(
-              leading: const Icon(Icons.photo_camera_outlined, color: FtColors.otpActive),
-              title: Text('Take a photo', style: FtText.input().copyWith(fontSize: 15.5)),
+              leading: Icon(Icons.photo_camera_outlined, color: t.activeAccent),
+              title: Text('Take a photo', style: t.input().copyWith(fontSize: 15.5)),
               onTap: () => Navigator.of(sheetContext).pop(ImageSource.camera),
             ),
             ListTile(
-              leading: const Icon(Icons.photo_library_outlined, color: FtColors.otpActive),
-              title: Text('Choose from gallery', style: FtText.input().copyWith(fontSize: 15.5)),
+              leading: Icon(Icons.photo_library_outlined, color: t.activeAccent),
+              title: Text('Choose from gallery', style: t.input().copyWith(fontSize: 15.5)),
               onTap: () => Navigator.of(sheetContext).pop(ImageSource.gallery),
             ),
             const SizedBox(height: 8),
@@ -171,13 +174,15 @@ class _IdentityVerificationScreenState extends State<IdentityVerificationScreen>
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.live(context);
     return FtRegistrationScaffold(
+      followTheme: true,
       step: 3,
       entrance: true,
       title: 'Verify your ID',
       subtitle:
           'Every ticket is tied to a real person, so scalpers can’t bulk-buy and your tickets stay yours.',
-      subtitleColor: FtColors.otpSecondary,
+      subtitleColor: t.secondaryText,
       onBack: _isSubmitting ? null : () => Navigator.of(context).maybePop(),
       headerExtra: const FtProgressCard(
         title: 'You’re almost there',
@@ -211,12 +216,12 @@ class _IdentityVerificationScreenState extends State<IdentityVerificationScreen>
         const SizedBox(height: 18),
         Row(
           children: [
-            const Icon(Icons.lock_outline_rounded, size: 17, color: FtColors.otpSecondary),
+            Icon(Icons.lock_outline_rounded, size: 17, color: t.secondaryText),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
                 'Encrypted, and used only to verify you.',
-                style: FtText.legal().copyWith(fontSize: 13.5, color: FtColors.otpSecondary),
+                style: FtText.legal().copyWith(fontSize: 13.5, color: t.secondaryText),
               ),
             ),
           ],
@@ -238,7 +243,7 @@ class _IdentityVerificationScreenState extends State<IdentityVerificationScreen>
             style: FtText.legal().copyWith(
               fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: FtColors.otpSecondary,
+              color: t.secondaryText,
             ),
           ),
         ),

@@ -20,7 +20,7 @@ import 'registration_screen.dart';
 Widget userHomeFor(AppUser account) => const MainShell();
 
 /// First screen for anyone who is not signed in (shown right after the
-/// loading screen). Dark FairTix design.
+/// loading screen). Follows the Light / Dark switch.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -158,7 +158,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // The scaffold below hands this same theme to the fields, button and
+    // banners; it is read here too for the links this screen builds itself.
+    final t = FtAuthTheme.live(context);
     return FtAuthScaffold(
+      followTheme: true,
       title: 'Log in',
       subtitle: 'Enter your details to continue.',
       body: [
@@ -204,7 +208,7 @@ class _LoginScreenState extends State<LoginScreen> {
             borderRadius: BorderRadius.circular(6),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
-              child: Text('Forgot password?', style: FtText.link()),
+              child: Text('Forgot password?', style: t.link()),
             ),
           ),
         ),
@@ -228,13 +232,13 @@ class _LoginScreenState extends State<LoginScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text('New to FairTix? ', style: FtText.footer()),
+              Text('New to FairTix? ', style: t.footer()),
               InkWell(
                 onTap: _isLoading ? null : _openRegistration,
                 borderRadius: BorderRadius.circular(6),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-                  child: Text('Create account', style: FtText.link()),
+                  child: Text('Create account', style: t.link()),
                 ),
               ),
             ],
@@ -247,9 +251,9 @@ class _LoginScreenState extends State<LoginScreen> {
               padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
               child: Text(
                 'Entry staff? Scan tickets',
-                style: FtText.footer().copyWith(
+                style: t.footer().copyWith(
                   fontSize: 12.5,
-                  color: FtColors.hint,
+                  color: t.hintColor,
                 ),
               ),
             ),

@@ -85,15 +85,15 @@ class _RegistrationPendingScreenState extends State<RegistrationPendingScreen>
 
   @override
   Widget build(BuildContext context) {
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light.copyWith(
-        statusBarColor: Colors.transparent,
-        systemNavigationBarColor: FtColors.bgBottom,
-        systemNavigationBarIconBrightness: Brightness.light,
-      ),
+    final t = FtAuthTheme.live(context);
+    return FtAuthThemeScope(
+      theme: t,
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+      value: t.overlayStyle,
       child: Scaffold(
-        backgroundColor: FtColors.bgBottom,
-        body: FtBackground(
+        backgroundColor: t.bgBottom,
+        body: FtAuthBackground(
+          theme: t,
           child: SafeArea(
             child: Column(
               children: [
@@ -123,6 +123,7 @@ class _RegistrationPendingScreenState extends State<RegistrationPendingScreen>
                               'ID under review',
                               textAlign: TextAlign.center,
                               style: FtText.title().copyWith(
+                                color: t.titleColor,
                                 fontSize: 29,
                                 letterSpacing: -0.4,
                               ),
@@ -145,7 +146,7 @@ class _RegistrationPendingScreenState extends State<RegistrationPendingScreen>
                                 fontSize: 15.5,
                                 height: 23 / 15.5,
                                 fontWeight: FontWeight.w400,
-                                color: FtColors.otpSecondary,
+                                color: t.secondaryText,
                               ),
                             ),
                           ),
@@ -174,9 +175,9 @@ class _RegistrationPendingScreenState extends State<RegistrationPendingScreen>
                   totalMs: _totalMs,
                   slide: 12,
                   child: DecoratedBox(
-                    decoration: const BoxDecoration(
-                      color: FtColors.bgBottom,
-                      border: Border(top: BorderSide(color: FtColors.otpBorder)),
+                    decoration: BoxDecoration(
+                      color: t.bgBottom,
+                      border: Border(top: BorderSide(color: t.surfaceBorder)),
                     ),
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(21, 16, 21, 14),
@@ -191,6 +192,7 @@ class _RegistrationPendingScreenState extends State<RegistrationPendingScreen>
             ),
           ),
         ),
+      ),
       ),
     );
   }

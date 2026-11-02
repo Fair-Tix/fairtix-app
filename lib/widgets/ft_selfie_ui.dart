@@ -23,6 +23,7 @@ class FtSelfieFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     final reduce = MediaQuery.disableAnimationsOf(context);
     final hasPhoto = selfieBytes != null;
 
@@ -43,8 +44,11 @@ class FtSelfieFrame extends StatelessWidget {
             width: double.infinity,
             height: height,
             decoration: BoxDecoration(
-              color: FtColors.otpFill,
+              color: t.surfaceFill,
               borderRadius: BorderRadius.circular(30),
+              // Dark has no outline; on Light the white frame needs one to
+              // stand out from the page.
+              border: t.isDark ? null : Border.all(color: t.surfaceBorder),
             ),
             child: Stack(
               alignment: Alignment.center,
@@ -75,7 +79,7 @@ class FtSelfieFrame extends StatelessWidget {
                               ),
                               CustomPaint(
                                 painter: _OvalOutlinePainter(
-                                  color: FtColors.otpActive,
+                                  color: t.activeAccent,
                                   dashed: false,
                                 ),
                               ),
@@ -105,7 +109,7 @@ class FtSelfieFrame extends StatelessWidget {
                       fontSize: 14,
                       height: 1.3,
                       fontWeight: FontWeight.w500,
-                      color: const Color(0xFFEDE7FF),
+                      color: t.selfieCaption,
                     ),
                   ),
                 ),
@@ -164,11 +168,12 @@ class FtTipsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     final style = GoogleFonts.plusJakartaSans(
       fontSize: 14,
       height: 1.3,
       fontWeight: FontWeight.w500,
-      color: FtColors.otpSecondary,
+      color: t.secondaryText,
     );
     return SizedBox(
       width: double.infinity,

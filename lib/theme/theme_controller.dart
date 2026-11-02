@@ -1,12 +1,14 @@
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Holds the Light / Dark choice for the redesigned (Mahilum) screens and
 /// remembers it between launches.
 ///
-/// First launch follows the device setting; after the person flips the
+/// On the phone app the first launch is always Dark; on web it follows the
+/// device setting. After the person flips the
 /// switch, their explicit choice is saved and used from then on.
 class ThemeController extends ChangeNotifier {
   ThemeController._();
@@ -16,7 +18,7 @@ class ThemeController extends ChangeNotifier {
   static const String _storageKey = 'fairtix_theme_mode';
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
 
-  bool _isDark =
+  bool _isDark = !kIsWeb ||
       ui.PlatformDispatcher.instance.platformBrightness == Brightness.dark;
 
   bool get isDark => _isDark;

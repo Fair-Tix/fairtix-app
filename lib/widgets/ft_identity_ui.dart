@@ -62,6 +62,7 @@ class _FtProgressCardState extends State<FtProgressCard>
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     final total = widget.labels.length;
     final percent = total == 0 ? 0.0 : widget.completed / total;
     final current = widget.current ?? widget.completed;
@@ -93,9 +94,9 @@ class _FtProgressCardState extends State<FtProgressCard>
         child: Container(
           padding: const EdgeInsets.fromLTRB(22, 20, 22, 18),
           decoration: BoxDecoration(
-            color: FtColors.otpFill.withValues(alpha: 0.6),
+            color: t.cardFill,
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: FtColors.otpBorder),
+            border: Border.all(color: t.surfaceBorder),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -111,7 +112,7 @@ class _FtProgressCardState extends State<FtProgressCard>
                         fontSize: 18,
                         height: 1.2,
                         fontWeight: FontWeight.w800,
-                        color: Colors.white,
+                        color: t.titleColor,
                       ),
                     ),
                   ),
@@ -121,7 +122,7 @@ class _FtProgressCardState extends State<FtProgressCard>
                       fontSize: 18,
                       height: 1.2,
                       fontWeight: FontWeight.w800,
-                      color: FtColors.otpActive,
+                      color: t.activeAccent,
                     ),
                   ),
                 ],
@@ -131,7 +132,7 @@ class _FtProgressCardState extends State<FtProgressCard>
                 widget.subtitle,
                 style: FtText.legal().copyWith(
                   fontSize: 14,
-                  color: FtColors.otpSecondary,
+                  color: t.secondaryText,
                 ),
               ),
               const SizedBox(height: 14),
@@ -142,8 +143,8 @@ class _FtProgressCardState extends State<FtProgressCard>
                   width: double.infinity,
                   child: Stack(
                     children: [
-                      const Positioned.fill(
-                        child: ColoredBox(color: FtColors.progressTrack),
+                      Positioned.fill(
+                        child: ColoredBox(color: t.progressTrack),
                       ),
                       AnimatedBuilder(
                         animation: barFill,
@@ -229,6 +230,7 @@ class _Milestone extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     final Widget circle;
     switch (state) {
       case _MilestoneState.done:
@@ -247,8 +249,8 @@ class _Milestone extends StatelessWidget {
           height: 34,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: FtColors.otpFill,
-            border: Border.all(color: FtColors.otpActive, width: 2.2),
+            color: t.surfaceFill,
+            border: Border.all(color: t.activeAccent, width: 2.2),
             boxShadow: [
               BoxShadow(
                 color: FtColors.progressStart.withValues(alpha: 0.55),
@@ -263,8 +265,8 @@ class _Milestone extends StatelessWidget {
           height: 34,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: FtColors.otpFill,
-            border: Border.all(color: FtColors.otpBorder, width: 1.5),
+            color: t.surfaceFill,
+            border: Border.all(color: t.surfaceBorder, width: 1.5),
           ),
         );
     }
@@ -286,7 +288,7 @@ class _Milestone extends StatelessWidget {
                 fontSize: 13,
                 height: 1.2,
                 fontWeight: FontWeight.w700,
-                color: active ? Colors.white : FtColors.hint,
+                color: active ? t.titleColor : t.hintColor,
               ),
             ),
           ],
@@ -340,6 +342,7 @@ class _FtChoicePillState extends State<FtChoicePill>
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     final reduce = MediaQuery.disableAnimationsOf(context);
     final selected = widget.selected;
 
@@ -362,9 +365,9 @@ class _FtChoicePillState extends State<FtChoicePill>
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(999),
-              color: selected ? FtColors.progressStart : FtColors.otpFill,
+              color: selected ? FtColors.progressStart : t.surfaceFill,
               border: Border.all(
-                color: selected ? FtColors.progressStart : FtColors.otpBorder,
+                color: selected ? FtColors.progressStart : t.surfaceBorder,
               ),
               boxShadow: selected
                   ? [
@@ -382,7 +385,7 @@ class _FtChoicePillState extends State<FtChoicePill>
                 fontSize: 15,
                 height: 1.2,
                 fontWeight: FontWeight.w700,
-                color: selected ? Colors.white : FtColors.otpSecondary,
+                color: selected ? Colors.white : t.secondaryText,
               ),
               child: Text(widget.label),
             ),
@@ -419,12 +422,12 @@ class _FtUploadBoxState extends State<FtUploadBox> {
   bool _pressed = false;
 
   Widget _prompt() {
+    final t = FtAuthTheme.of(context);
     return Column(
       key: const ValueKey('prompt'),
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Icon(Icons.photo_camera_outlined,
-            color: FtColors.otpActive, size: 30),
+        Icon(Icons.photo_camera_outlined, color: t.activeAccent, size: 30),
         const SizedBox(height: 14),
         Text(
           'Take a photo or upload',
@@ -433,7 +436,7 @@ class _FtUploadBoxState extends State<FtUploadBox> {
             fontSize: 17,
             height: 1.2,
             fontWeight: FontWeight.w700,
-            color: FtColors.otpActive,
+            color: t.activeAccent,
           ),
         ),
         const SizedBox(height: 6),
@@ -444,7 +447,7 @@ class _FtUploadBoxState extends State<FtUploadBox> {
             fontSize: 13,
             height: 1.3,
             fontWeight: FontWeight.w400,
-            color: FtColors.otpSecondary,
+            color: t.secondaryText,
           ),
         ),
       ],
@@ -495,6 +498,7 @@ class _FtUploadBoxState extends State<FtUploadBox> {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     final reduce = MediaQuery.disableAnimationsOf(context);
     final hasPhoto = widget.previewBytes != null;
 
@@ -513,11 +517,11 @@ class _FtUploadBoxState extends State<FtUploadBox> {
             curve: Curves.easeOut,
             child: CustomPaint(
               foregroundPainter: _DashedRRectPainter(
-                color: FtColors.otpActive,
+                color: t.activeAccent,
                 radius: _radius,
               ),
               child: Material(
-                color: const Color(0xFF291C60),
+                color: t.uploadFill,
                 borderRadius: BorderRadius.circular(_radius),
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(

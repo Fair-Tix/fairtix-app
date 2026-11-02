@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../navigation/main_shell.dart';
+import '../../theme/fairtix_palette.dart';
 import '../../widgets/ft_dark_ui.dart';
 import '../../widgets/ft_otp_field.dart';
 import '../../widgets/ft_pending_ui.dart' show FtReveal;
@@ -76,6 +77,12 @@ class _AccountActivatedScreenState extends State<AccountActivatedScreen>
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.live(context);
+    final p = FairTixPalette.of(context);
+    // Dark keeps the original verified colors; Light uses the palette's.
+    final Color? verifiedBg = t.isDark ? null : p.verifiedSurface;
+    final Color? verifiedFg = t.isDark ? null : p.verified;
+
     // Screen fade (0-450 ms), then circle, check, heading, badge, message
     // and button, each ~130 ms after the previous one.
     final screenFade = _entrance.drive(
@@ -87,17 +94,16 @@ class _AccountActivatedScreenState extends State<AccountActivatedScreen>
       ),
     );
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light.copyWith(
-        statusBarColor: Colors.transparent,
-        systemNavigationBarColor: FtColors.bgBottom,
-        systemNavigationBarIconBrightness: Brightness.light,
-      ),
+    return FtAuthThemeScope(
+      theme: t,
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+      value: t.overlayStyle,
       child: Scaffold(
-        backgroundColor: FtColors.bgBottom,
+        backgroundColor: t.bgBottom,
         body: FadeTransition(
           opacity: screenFade,
-          child: FtBackground(
+          child: FtAuthBackground(
+            theme: t,
             child: SafeArea(
               child: Column(
                 children: [
@@ -117,7 +123,11 @@ class _AccountActivatedScreenState extends State<AccountActivatedScreen>
                                   endMs: 550,
                                   totalMs: _totalMs,
                                   scaleFrom: 0.7,
-                                  child: FtVerifiedCircle(draw: draw),
+                                  child: FtVerifiedCircle(
+                                    draw: draw,
+                                    background: verifiedBg,
+                                    checkColor: verifiedFg,
+                                  ),
                                 ),
                                 const SizedBox(height: 28),
                                 FtReveal(
@@ -132,6 +142,7 @@ class _AccountActivatedScreenState extends State<AccountActivatedScreen>
                                       'You’re verified',
                                       textAlign: TextAlign.center,
                                       style: FtText.title().copyWith(
+                                        color: t.titleColor,
                                         fontSize: 32,
                                         letterSpacing: -0.5,
                                       ),
@@ -145,7 +156,10 @@ class _AccountActivatedScreenState extends State<AccountActivatedScreen>
                                   endMs: 1230,
                                   totalMs: _totalMs,
                                   slide: 8,
-                                  child: const FtVerifiedBadge(),
+                                  child: FtVerifiedBadge(
+                                    background: verifiedBg,
+                                    foreground: verifiedFg,
+                                  ),
                                 ),
                                 const SizedBox(height: 18),
                                 FtReveal(
@@ -163,7 +177,7 @@ class _AccountActivatedScreenState extends State<AccountActivatedScreen>
                                         fontSize: 16,
                                         height: 1.45,
                                         fontWeight: FontWeight.w400,
-                                        color: FtColors.otpSecondary,
+                                        color: t.secondaryText,
                                       ),
                                     ),
                                   ),
@@ -182,9 +196,9 @@ class _AccountActivatedScreenState extends State<AccountActivatedScreen>
                     totalMs: _totalMs,
                     slide: 12,
                     child: DecoratedBox(
-                      decoration: const BoxDecoration(
-                        color: FtColors.bgBottom,
-                        border: Border(top: BorderSide(color: FtColors.otpBorder)),
+                      decoration: BoxDecoration(
+                        color: t.bgBottom,
+                        border: Border(top: BorderSide(color: t.surfaceBorder)),
                       ),
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(20, 16, 20, 14),
@@ -200,6 +214,7 @@ class _AccountActivatedScreenState extends State<AccountActivatedScreen>
             ),
           ),
         ),
+      ),
       ),
     );
   }

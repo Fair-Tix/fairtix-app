@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/event.dart';
+import '../theme/fairtix_palette.dart';
 import 'ft_dark_ui.dart';
 import 'ft_pending_ui.dart' show FtReveal;
 import 'ft_verified_ui.dart' show FtVerifiedColors;
@@ -67,9 +68,10 @@ class FtDashboardHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
     return Row(
       children: [
-        const FtLogo(ticketWidth: 40),
+        FtLogo(ticketWidth: 40, dark: !p.isDark),
         const SizedBox(width: 10),
         Text(
           'FairTix',
@@ -78,7 +80,7 @@ class FtDashboardHeader extends StatelessWidget {
             height: 1.1,
             fontWeight: FontWeight.w800,
             letterSpacing: -0.5,
-            color: Colors.white,
+            color: p.textStrong,
           ),
         ),
         const Spacer(),
@@ -93,16 +95,16 @@ class FtDashboardHeader extends StatelessWidget {
               height: 44,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: FtColors.otpFill,
-                border: Border.all(color: FtColors.otpBorder),
+                color: p.surface,
+                border: Border.all(color: p.border),
               ),
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.notifications_none_rounded,
                     size: 22,
-                    color: FtColors.progressEnd,
+                    color: p.tileAccent,
                   ),
                   if (hasUnread)
                     Positioned(
@@ -112,9 +114,9 @@ class FtDashboardHeader extends StatelessWidget {
                         width: 9,
                         height: 9,
                         decoration: BoxDecoration(
-                          color: FtColors.danger,
+                          color: p.danger,
                           shape: BoxShape.circle,
-                          border: Border.all(color: FtColors.otpFill, width: 1.5),
+                          border: Border.all(color: p.surface, width: 1.5),
                         ),
                       ),
                     ),
@@ -223,7 +225,8 @@ class _PerforationDashes extends CustomPainter {
   bool shouldRepaint(_PerforationDashes old) => false;
 }
 
-/// Round dark back button used in the headers of the pushed screens.
+/// Round back button used in the headers of the pushed screens. Dark unless
+/// it sits inside a scaffold that follows the Light / Dark switch.
 class FtBackButton extends StatelessWidget {
   const FtBackButton({super.key, required this.onTap});
 
@@ -231,6 +234,7 @@ class FtBackButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     return Semantics(
       button: true,
       label: 'Back',
@@ -242,10 +246,10 @@ class FtBackButton extends StatelessWidget {
           height: 48,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: FtColors.otpFill,
-            border: Border.all(color: FtColors.otpBorder),
+            color: t.surfaceFill,
+            border: Border.all(color: t.surfaceBorder),
           ),
-          child: const Icon(Icons.chevron_left_rounded, size: 26, color: Colors.white),
+          child: Icon(Icons.chevron_left_rounded, size: 26, color: t.circleIcon),
         ),
       ),
     );
@@ -320,6 +324,7 @@ class FtWelcome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -329,7 +334,7 @@ class FtWelcome extends StatelessWidget {
             fontSize: 16,
             height: 1.2,
             fontWeight: FontWeight.w400,
-            color: FtColors.otpSecondary,
+            color: p.textSoft,
           ),
         ),
         const SizedBox(height: 4),
@@ -339,7 +344,11 @@ class FtWelcome extends StatelessWidget {
             name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: FtText.title().copyWith(fontSize: 36, letterSpacing: -0.6),
+            style: FtText.title().copyWith(
+              fontSize: 36,
+              letterSpacing: -0.6,
+              color: p.textStrong,
+            ),
           ),
         ),
       ],
@@ -356,6 +365,7 @@ class FtSearchField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
     OutlineInputBorder border(Color c) => OutlineInputBorder(
           borderRadius: BorderRadius.circular(999),
           borderSide: BorderSide(color: c),
@@ -363,21 +373,21 @@ class FtSearchField extends StatelessWidget {
     return TextField(
       onChanged: onChanged,
       textInputAction: TextInputAction.search,
-      style: FtText.input(),
-      cursorColor: FtColors.progressEnd,
+      style: FtText.input().copyWith(color: p.textStrong),
+      cursorColor: p.tileAccent,
       decoration: InputDecoration(
         hintText: 'Search events...',
-        hintStyle: FtText.input().copyWith(color: FtColors.otpSecondary),
-        prefixIcon: const Icon(
+        hintStyle: FtText.input().copyWith(color: p.textSoft),
+        prefixIcon: Icon(
           Icons.search_rounded,
-          color: FtColors.progressEnd,
+          color: p.tileAccent,
           size: 22,
         ),
         filled: true,
-        fillColor: FtColors.otpFill,
+        fillColor: p.surface,
         contentPadding: const EdgeInsets.symmetric(vertical: 17, horizontal: 8),
-        border: border(FtColors.otpBorder),
-        enabledBorder: border(FtColors.otpBorder),
+        border: border(p.border),
+        enabledBorder: border(p.border),
         focusedBorder: border(FtColors.fieldBorderFocused),
       ),
     );
@@ -671,13 +681,14 @@ class _EmptyTicketsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(18, 18, 16, 18),
       decoration: BoxDecoration(
-        color: FtColors.otpFill.withValues(alpha: 0.75),
+        color: p.card,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: FtColors.otpBorder),
+        border: Border.all(color: p.border),
       ),
       child: Row(
         children: [
@@ -691,7 +702,7 @@ class _EmptyTicketsCard extends StatelessWidget {
                     fontSize: 17,
                     height: 1.2,
                     fontWeight: FontWeight.w800,
-                    color: Colors.white,
+                    color: p.textStrong,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -701,7 +712,7 @@ class _EmptyTicketsCard extends StatelessWidget {
                     fontSize: 14,
                     height: 1.35,
                     fontWeight: FontWeight.w400,
-                    color: FtColors.otpSecondary,
+                    color: p.textSoft,
                   ),
                 ),
               ],
@@ -717,7 +728,7 @@ class _EmptyTicketsCard extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
                 decoration: BoxDecoration(
-                  color: FtColors.progressStart.withValues(alpha: 0.3),
+                  color: p.tileFill,
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Text(
@@ -726,7 +737,7 @@ class _EmptyTicketsCard extends StatelessWidget {
                     fontSize: 15,
                     height: 1.2,
                     fontWeight: FontWeight.w800,
-                    color: FtColors.progressEnd,
+                    color: p.tileAccent,
                   ),
                 ),
               ),
@@ -846,6 +857,7 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
     final reduce = MediaQuery.disableAnimationsOf(context);
     return Semantics(
       button: true,
@@ -856,9 +868,9 @@ class _StatCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: FtColors.otpFill.withValues(alpha: 0.75),
+            color: p.card,
             borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: FtColors.otpBorder),
+            border: Border.all(color: p.border),
           ),
           child: Row(
             children: [
@@ -866,10 +878,10 @@ class _StatCard extends StatelessWidget {
                 width: 46,
                 height: 46,
                 decoration: BoxDecoration(
-                  color: FtColors.progressStart.withValues(alpha: 0.22),
+                  color: p.tileFill,
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: Icon(icon, size: 22, color: FtColors.progressEnd),
+                child: Icon(icon, size: 22, color: p.tileAccent),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -883,7 +895,7 @@ class _StatCard extends StatelessWidget {
                         fontSize: 13,
                         height: 1.2,
                         fontWeight: FontWeight.w500,
-                        color: FtColors.otpSecondary,
+                        color: p.textSoft,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -897,7 +909,7 @@ class _StatCard extends StatelessWidget {
                           fontSize: 28,
                           height: 1.1,
                           fontWeight: FontWeight.w800,
-                          color: Colors.white,
+                          color: p.textStrong,
                         ),
                       ),
                     ),
@@ -927,6 +939,7 @@ class FtSectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
     return Row(
       children: [
         Expanded(
@@ -939,7 +952,7 @@ class FtSectionHeader extends StatelessWidget {
                 height: 1.2,
                 fontWeight: FontWeight.w800,
                 letterSpacing: -0.3,
-                color: Colors.white,
+                color: p.textStrong,
               ),
             ),
           ),
@@ -954,7 +967,7 @@ class FtSectionHeader extends StatelessWidget {
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 14.5,
                 fontWeight: FontWeight.w700,
-                color: FtColors.progressEnd,
+                color: p.tileAccent,
               ),
             ),
           ),
@@ -974,6 +987,7 @@ class FtUpcomingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
     return Semantics(
       button: true,
       label: '${event.title}, ${event.dateLabel}, ${event.venue}, ${event.startingPriceLabel}',
@@ -983,9 +997,9 @@ class FtUpcomingCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: FtColors.otpFill.withValues(alpha: 0.75),
+            color: p.card,
             borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: FtColors.otpBorder),
+            border: Border.all(color: p.border),
           ),
           child: Row(
             children: [
@@ -1024,7 +1038,7 @@ class FtUpcomingCard extends StatelessWidget {
                         fontSize: 16.5,
                         height: 1.2,
                         fontWeight: FontWeight.w800,
-                        color: Colors.white,
+                        color: p.textStrong,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -1035,16 +1049,16 @@ class FtUpcomingCard extends StatelessWidget {
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 13.5,
                         height: 1.2,
-                        color: FtColors.otpSecondary,
+                        color: p.textSoft,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.location_on_outlined,
                           size: 15,
-                          color: FtColors.otpSecondary,
+                          color: p.textSoft,
                         ),
                         const SizedBox(width: 4),
                         Expanded(
@@ -1055,7 +1069,7 @@ class FtUpcomingCard extends StatelessWidget {
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 13.5,
                               height: 1.2,
-                              color: FtColors.otpSecondary,
+                              color: p.textSoft,
                             ),
                           ),
                         ),
@@ -1070,7 +1084,7 @@ class FtUpcomingCard extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
                   decoration: BoxDecoration(
-                    color: FtColors.progressStart.withValues(alpha: 0.25),
+                    color: p.tileFill,
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Text(
@@ -1081,7 +1095,7 @@ class FtUpcomingCard extends StatelessWidget {
                       fontSize: 13.5,
                       height: 1.2,
                       fontWeight: FontWeight.w800,
-                      color: FtColors.progressEnd,
+                      color: p.tileAccent,
                     ),
                   ),
                 ),

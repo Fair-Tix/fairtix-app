@@ -154,12 +154,13 @@ class _OtpBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final reduce = MediaQuery.disableAnimationsOf(context);
+    final t = FtAuthTheme.of(context);
     final lit = (active || highlight) && !error;
     final border = error
-        ? FtColors.danger
+        ? t.danger
         : lit
-            ? FtColors.otpActive
-            : FtColors.otpBorder;
+            ? t.activeAccent
+            : t.surfaceBorder;
 
     return AnimatedContainer(
       duration: reduce ? Duration.zero : const Duration(milliseconds: 180),
@@ -168,13 +169,14 @@ class _OtpBox extends StatelessWidget {
       height: height,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: FtColors.otpFill,
+        color: t.surfaceFill,
         borderRadius: BorderRadius.circular(15),
         border: Border.all(color: border, width: 1),
         boxShadow: lit
             ? [
                 BoxShadow(
-                  color: FtColors.progressStart.withValues(alpha: 0.38),
+                  color: FtColors.progressStart
+                      .withValues(alpha: t.isDark ? 0.38 : 0.22),
                   blurRadius: 16,
                 ),
               ]
@@ -196,6 +198,7 @@ class _PopDigit extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(begin: animate ? 0.95 : 1, end: 1),
       duration: animate ? const Duration(milliseconds: 170) : Duration.zero,
@@ -208,7 +211,7 @@ class _PopDigit extends StatelessWidget {
           fontSize: 26,
           height: 1.1,
           fontWeight: FontWeight.w800,
-          color: Colors.white,
+          color: t.titleColor,
         ),
       ),
     );
@@ -243,6 +246,7 @@ class _FtVerifyButtonState extends State<FtVerifyButton> {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     final reduce = MediaQuery.disableAnimationsOf(context);
     final busy = widget.loading || widget.success;
     final canTap = widget.enabled && !busy;
@@ -291,7 +295,7 @@ class _FtVerifyButtonState extends State<FtVerifyButton> {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: FtColors.glow.withValues(alpha: 0.35),
+                  color: FtColors.glow.withValues(alpha: t.glowAlpha),
                   blurRadius: 24,
                   offset: const Offset(0, 8),
                 ),

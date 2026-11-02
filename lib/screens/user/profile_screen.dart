@@ -7,11 +7,13 @@ import '../../models/app_user.dart';
 import '../../navigation/tab_index_notifier.dart';
 import '../../services/user_auth_service.dart';
 import '../../services/user_session.dart';
-import '../../widgets/ft_dark_ui.dart';
+import '../../theme/fairtix_palette.dart';
+import '../../widgets/ft_dark_ui.dart' show FtText;
 import '../../widgets/ft_dashboard_ui.dart' show FtProfileAvatar;
 import '../../widgets/ft_pending_ui.dart' show FtReveal;
 import '../../widgets/ft_profile_ui.dart';
 import '../../widgets/ft_verified_ui.dart' show FtVerifiedBadge;
+import 'appearance_screen.dart';
 import 'change_password_screen.dart';
 import 'help_support_screen.dart';
 import 'login_screen.dart';
@@ -19,7 +21,8 @@ import 'notification_preferences_screen.dart';
 import 'transactions_screen.dart';
 
 /// "My Profile" tab: account details, ID verification status, settings, and
-/// log out. Dark design.
+/// log out. Dark by default; follows the Light / Dark choice made in
+/// Settings > Appearance.
 /// [UserSession.instance.account] is populated by [UserAuthService.login]
 /// from the real signed-in Supabase user + their `public.users` row.
 class ProfileScreen extends StatefulWidget {
@@ -94,15 +97,16 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   /// Profile photo is optional (Event Goer only): tap the avatar to take or
   /// choose a photo, or remove the current one.
   void _showPhotoOptions() {
+    final p = FairTixPalette.of(context);
     final hasPhoto = UserSession.instance.account?.profilePhotoUrl != null;
     final tileStyle = GoogleFonts.plusJakartaSans(
       fontSize: 15.5,
       fontWeight: FontWeight.w600,
-      color: Colors.white,
+      color: p.textStrong,
     );
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: FtColors.otpFill,
+      backgroundColor: p.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -115,13 +119,13 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: FtColors.otpBorder,
+                color: p.border,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
             const SizedBox(height: 12),
             ListTile(
-              leading: const Icon(Icons.photo_camera_outlined, color: FtColors.otpActive),
+              leading: Icon(Icons.photo_camera_outlined, color: p.tileAccent),
               title: Text('Take a photo', style: tileStyle),
               onTap: () {
                 Navigator.pop(sheetContext);
@@ -129,7 +133,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               },
             ),
             ListTile(
-              leading: const Icon(Icons.photo_library_outlined, color: FtColors.otpActive),
+              leading: Icon(Icons.photo_library_outlined, color: p.tileAccent),
               title: Text('Choose from gallery', style: tileStyle),
               onTap: () {
                 Navigator.pop(sheetContext);
@@ -138,8 +142,8 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
             ),
             if (hasPhoto)
               ListTile(
-                leading: const Icon(Icons.delete_outline_rounded, color: FtColors.danger),
-                title: Text('Remove photo', style: tileStyle.copyWith(color: FtColors.danger)),
+                leading: Icon(Icons.delete_outline_rounded, color: p.danger),
+                title: Text('Remove photo', style: tileStyle.copyWith(color: p.danger)),
                 onTap: () {
                   Navigator.pop(sheetContext);
                   _removePhoto();
@@ -210,6 +214,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
   @override
   Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
     final user = UserSession.instance.account ??
         const AppUser(
           fullName: 'Guest',
@@ -224,14 +229,10 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     final photoAction = _isUploadingPhoto ? null : _showPhotoOptions;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light.copyWith(
-        statusBarColor: Colors.transparent,
-        systemNavigationBarColor: FtColors.bgBottom,
-        systemNavigationBarIconBrightness: Brightness.light,
-      ),
+      value: ftOverlayStyle(p),
       child: Scaffold(
-        backgroundColor: FtColors.bgBottom,
-        body: FtBackground(
+        backgroundColor: p.gradientBottom,
+        body: FtPaletteBackground(
           child: SafeArea(
             bottom: false,
             child: SingleChildScrollView(
@@ -247,7 +248,11 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                             header: true,
                             child: Text(
                               'My Profile',
-                              style: FtText.title().copyWith(fontSize: 33, letterSpacing: -0.6),
+                              style: FtText.title().copyWith(
+                                fontSize: 33,
+                                letterSpacing: -0.6,
+                                color: p.textStrong,
+                              ),
                             ),
                           ),
                         ),
@@ -275,7 +280,11 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                         Text(
                           user.fullName,
                           textAlign: TextAlign.center,
-                          style: FtText.title().copyWith(fontSize: 26, letterSpacing: -0.4),
+                          style: FtText.title().copyWith(
+                            fontSize: 26,
+                            letterSpacing: -0.4,
+                            color: p.textStrong,
+                          ),
                         ),
                         if (user.username.isNotEmpty) ...[
                           const SizedBox(height: 4),
@@ -283,13 +292,16 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                             user.username,
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 15,
-                              color: FtColors.otpSecondary,
+                              color: p.textSoft,
                             ),
                           ),
                         ],
                         if (user.isVerified) ...[
                           const SizedBox(height: 12),
-                          const FtVerifiedBadge(),
+                          FtVerifiedBadge(
+                            background: p.verifiedSurface,
+                            foreground: p.verified,
+                          ),
                         ],
                       ],
                     ),
@@ -310,7 +322,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                             fontSize: 13.5,
                             height: 1.3,
                             fontStyle: FontStyle.italic,
-                            color: FtColors.otpSecondary,
+                            color: p.textSoft,
                           ),
                         ),
                       ],
@@ -348,6 +360,13 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                           icon: Icons.notifications_none_rounded,
                           label: 'Notification Preferences',
                           onTap: () => _push(const NotificationPreferencesScreen()),
+                        ),
+                        const FtRowDivider(),
+                        FtSettingsRow(
+                          icon: Icons.contrast_rounded,
+                          label: 'Appearance',
+                          value: p.isDark ? 'Dark' : 'Light',
+                          onTap: () => _push(const AppearanceScreen()),
                         ),
                         const FtRowDivider(),
                         FtSettingsRow(

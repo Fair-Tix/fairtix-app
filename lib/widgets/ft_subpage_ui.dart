@@ -18,6 +18,7 @@ class FtSubpageScaffold extends StatelessWidget {
     required this.body,
     this.bottomButton,
     this.bottomFooter,
+    this.followTheme = false,
   });
 
   final String title;
@@ -30,56 +31,61 @@ class FtSubpageScaffold extends StatelessWidget {
   /// Optional quiet line under the button.
   final Widget? bottomFooter;
 
+  /// True = follow the Light / Dark switch. False = always Dark, for pages
+  /// that have not been reworked for Light yet.
+  final bool followTheme;
+
   @override
   Widget build(BuildContext context) {
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light.copyWith(
-        statusBarColor: Colors.transparent,
-        systemNavigationBarColor: FtColors.bgBottom,
-        systemNavigationBarIconBrightness: Brightness.light,
-      ),
-      child: Scaffold(
-        backgroundColor: FtColors.bgBottom,
-        body: FtBackground(
-          child: SafeArea(
-            child: Column(
-              children: [
-                Expanded(
-                  child: FtEntrance(
-                    child: SingleChildScrollView(
-                      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                      padding: const EdgeInsets.fromLTRB(22, 14, 22, 24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          FtPageHeader(title: title, onBack: onBack),
-                          const SizedBox(height: 22),
-                          ...body,
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                if (bottomButton != null)
-                  DecoratedBox(
-                    decoration: const BoxDecoration(
-                      border: Border(top: BorderSide(color: FtColors.divider)),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(22, 16, 22, 14),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          bottomButton!,
-                          if (bottomFooter != null) ...[
-                            const SizedBox(height: 14),
-                            bottomFooter!,
+    final t = followTheme ? FtAuthTheme.live(context) : FtAuthTheme.dark;
+    return FtAuthThemeScope(
+      theme: t,
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: t.overlayStyle,
+        child: Scaffold(
+          backgroundColor: t.bgBottom,
+          body: FtAuthBackground(
+            theme: t,
+            child: SafeArea(
+              child: Column(
+                children: [
+                  Expanded(
+                    child: FtEntrance(
+                      child: SingleChildScrollView(
+                        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                        padding: const EdgeInsets.fromLTRB(22, 14, 22, 24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            FtPageHeader(title: title, onBack: onBack),
+                            const SizedBox(height: 22),
+                            ...body,
                           ],
-                        ],
+                        ),
                       ),
                     ),
                   ),
-              ],
+                  if (bottomButton != null)
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        border: Border(top: BorderSide(color: t.divider)),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(22, 16, 22, 14),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            bottomButton!,
+                            if (bottomFooter != null) ...[
+                              const SizedBox(height: 14),
+                              bottomFooter!,
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
@@ -97,6 +103,7 @@ class FtPageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     return SizedBox(
       height: 48,
       child: Stack(
@@ -116,7 +123,7 @@ class FtPageHeader extends StatelessWidget {
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 19,
                 fontWeight: FontWeight.w800,
-                color: Colors.white,
+                color: t.titleColor,
               ),
             ),
           ),

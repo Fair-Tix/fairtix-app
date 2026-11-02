@@ -1,55 +1,69 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
-import '../../theme/app_theme.dart';
-import '../../widgets/gradient_background.dart';
-import '../../widgets/pill_button.dart';
+import '../../widgets/ft_dark_ui.dart';
 import 'login_screen.dart';
 
-/// First screen shown on app launch — logo, tagline, "Get Started" CTA.
+/// Welcome screen: logo, tagline and a "Get Started" button.
+///
+/// Uses the same background, logo and button as the login screen, and follows
+/// the Light / Dark switch (purple logo on the light background, white logo on
+/// the dark one).
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: GradientBackground(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Column(
-            children: [
-              const Spacer(flex: 4),
-              Text('FairTix', style: AppTextStyles.logo.copyWith(fontSize: 44)),
-              const SizedBox(height: 12),
-              Text('Fair tickets. Real fans.', style: AppTextStyles.tagline),
-              const Spacer(flex: 6),
-              PillButton(
-                label: 'Get Started',
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const LoginScreen()),
-                  );
-                },
+    final t = FtAuthTheme.live(context);
+
+    return FtAuthThemeScope(
+      theme: t,
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: t.overlayStyle,
+        child: Scaffold(
+          backgroundColor: t.bgBottom,
+          body: FtAuthBackground(
+            theme: t,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 22),
+                child: Column(
+                  children: [
+                    const Spacer(flex: 4),
+                    FtLogo(ticketWidth: 110, dark: !t.isDark),
+                    const SizedBox(height: 22),
+                    Text(
+                      'FairTix',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 44,
+                        height: 1.0,
+                        fontWeight: FontWeight.w800,
+                        fontStyle: FontStyle.italic,
+                        color: t.titleColor,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Fair tickets. Real fans.',
+                      textAlign: TextAlign.center,
+                      style: t.subtitle().copyWith(fontSize: 15),
+                    ),
+                    const Spacer(flex: 6),
+                    FtGradientButton(
+                      label: 'Get Started',
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const LoginScreen()),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                ),
               ),
-              const SizedBox(height: 24),
-              _HomeIndicator(),
-              const SizedBox(height: 12),
-            ],
+            ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _HomeIndicator extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 120,
-      height: 4,
-      decoration: BoxDecoration(
-        color: AppColors.faintWhite,
-        borderRadius: BorderRadius.circular(2),
       ),
     );
   }

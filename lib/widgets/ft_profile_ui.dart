@@ -1,13 +1,53 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../theme/fairtix_palette.dart';
 import 'ft_dark_ui.dart';
 import 'ft_dashboard_ui.dart' show FtPressScale;
-import 'ft_verified_ui.dart' show FtVerifiedColors;
 
-/// Building blocks for the redesigned "My Profile" tab (dark design).
+/// Building blocks for the redesigned "My Profile" tab. They follow the
+/// Light / Dark switch through [FairTixPalette]; in Dark they look the same
+/// as the original dark design.
 /// Presentation only: every action and every value is handed in by
 /// ProfileScreen, which keeps its existing handlers and session data.
+
+/// Page background gradient for screens that follow the Light / Dark switch.
+/// Fades between the two looks when the switch is flipped.
+class FtPaletteBackground extends StatelessWidget {
+  const FtPaletteBackground({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
+    final reduce = MediaQuery.disableAnimationsOf(context);
+    return AnimatedContainer(
+      duration: reduce ? Duration.zero : const Duration(milliseconds: 250),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          stops: const [0.0, 0.6],
+          colors: [p.gradientTop, p.gradientBottom],
+        ),
+      ),
+      child: SizedBox.expand(child: child),
+    );
+  }
+}
+
+/// Status bar + system navigation bar styling for the current mode.
+SystemUiOverlayStyle ftOverlayStyle(FairTixPalette p) {
+  return (p.isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark)
+      .copyWith(
+    statusBarColor: Colors.transparent,
+    systemNavigationBarColor: p.gradientBottom,
+    systemNavigationBarIconBrightness:
+        p.isDark ? Brightness.light : Brightness.dark,
+  );
+}
 
 /// The large rounded-square avatar with the camera badge. Shows the photo if
 /// there is one, otherwise the initials, and a spinner while a photo is
@@ -28,20 +68,21 @@ class FtProfileHero extends StatelessWidget {
   final VoidCallback? onTap;
   final double size;
 
-  Widget _initials() => Center(
+  Widget _initials(FairTixPalette p) => Center(
         child: Text(
           initials,
           style: GoogleFonts.plusJakartaSans(
             fontSize: size * 0.36,
             height: 1,
             fontWeight: FontWeight.w800,
-            color: Colors.white,
+            color: p.textStrong,
           ),
         ),
       );
 
   @override
   Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
     return Semantics(
       button: true,
       enabled: onTap != null,
@@ -69,25 +110,26 @@ class FtProfileHero extends StatelessWidget {
                       end: Alignment.bottomRight,
                       colors: [
                         FtColors.progressStart.withValues(alpha: 0.4),
-                        FtColors.otpFill,
+                        p.surface,
                       ],
                     ),
                     border: Border.all(color: FtColors.progressStart, width: 2),
                     boxShadow: [
                       BoxShadow(
-                        color: FtColors.glow.withValues(alpha: 0.35),
+                        color: FtColors.glow
+                            .withValues(alpha: p.isDark ? 0.35 : 0.2),
                         blurRadius: 26,
                       ),
                     ],
                   ),
                   child: busy
-                      ? const Center(
+                      ? Center(
                           child: SizedBox(
                             width: 26,
                             height: 26,
                             child: CircularProgressIndicator(
                               strokeWidth: 2.6,
-                              color: Colors.white,
+                              color: p.textStrong,
                             ),
                           ),
                         )
@@ -97,9 +139,9 @@ class FtProfileHero extends StatelessWidget {
                               width: size,
                               height: size,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, _, _) => _initials(),
+                              errorBuilder: (_, _, _) => _initials(p),
                             )
-                          : _initials(),
+                          : _initials(p),
                 ),
               ),
               Positioned(
@@ -111,7 +153,7 @@ class FtProfileHero extends StatelessWidget {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: FtColors.progressStart,
-                    border: Border.all(color: FtColors.bgBottom, width: 3),
+                    border: Border.all(color: p.gradientBottom, width: 3),
                   ),
                   child: const Icon(
                     Icons.camera_alt_rounded,
@@ -128,7 +170,7 @@ class FtProfileHero extends StatelessWidget {
   }
 }
 
-/// A titled dark card that holds one group of rows.
+/// A titled card that holds one group of rows.
 class FtInfoCard extends StatelessWidget {
   const FtInfoCard({super.key, required this.title, required this.children});
 
@@ -137,13 +179,14 @@ class FtInfoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
       decoration: BoxDecoration(
-        color: FtColors.otpFill.withValues(alpha: 0.75),
+        color: p.card,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: FtColors.otpBorder),
+        border: Border.all(color: p.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -156,7 +199,7 @@ class FtInfoCard extends StatelessWidget {
                 fontSize: 19,
                 height: 1.2,
                 fontWeight: FontWeight.w800,
-                color: Colors.white,
+                color: p.textStrong,
               ),
             ),
           ),
@@ -176,9 +219,10 @@ class FtRowDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
     return Padding(
       padding: EdgeInsets.symmetric(vertical: vertical),
-      child: const Divider(height: 1, thickness: 1, color: FtColors.otpBorder),
+      child: Divider(height: 1, thickness: 1, color: p.border),
     );
   }
 }
@@ -192,6 +236,7 @@ class FtLockedField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
     return Semantics(
       label: '$label: $value. Locked, cannot be changed.',
       excludeSemantics: true,
@@ -209,7 +254,7 @@ class FtLockedField extends StatelessWidget {
                     height: 1.2,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 1,
-                    color: FtColors.otpSecondary,
+                    color: p.textSoft,
                   ),
                 ),
                 const SizedBox(height: 5),
@@ -219,16 +264,16 @@ class FtLockedField extends StatelessWidget {
                     fontSize: 17,
                     height: 1.25,
                     fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                    color: p.textStrong,
                   ),
                 ),
               ],
             ),
           ),
           const SizedBox(width: 12),
-          const Padding(
-            padding: EdgeInsets.only(top: 8),
-            child: Icon(Icons.lock_outline_rounded, size: 18, color: FtColors.otpSecondary),
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Icon(Icons.lock_outline_rounded, size: 18, color: p.textSoft),
           ),
         ],
       ),
@@ -249,8 +294,8 @@ class FtIdStatusRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final green = FtVerifiedColors.green;
-    final accent = verified ? green : FtColors.otpSecondary;
+    final p = FairTixPalette.of(context);
+    final accent = verified ? p.verified : p.textSoft;
 
     return Row(
       children: [
@@ -258,9 +303,7 @@ class FtIdStatusRow extends StatelessWidget {
           width: 48,
           height: 48,
           decoration: BoxDecoration(
-            color: verified
-                ? FtVerifiedColors.badge
-                : FtColors.progressStart.withValues(alpha: 0.18),
+            color: verified ? p.verifiedSurface : p.tileFill,
             borderRadius: BorderRadius.circular(14),
           ),
           child: Icon(
@@ -282,7 +325,7 @@ class FtIdStatusRow extends StatelessWidget {
                   fontSize: 17,
                   height: 1.2,
                   fontWeight: FontWeight.w800,
-                  color: Colors.white,
+                  color: p.textStrong,
                 ),
               ),
               const SizedBox(height: 3),
@@ -293,7 +336,7 @@ class FtIdStatusRow extends StatelessWidget {
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 13.5,
                   height: 1.3,
-                  color: FtColors.otpSecondary,
+                  color: p.textSoft,
                 ),
               ),
             ],
@@ -303,9 +346,7 @@ class FtIdStatusRow extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
           decoration: BoxDecoration(
-            color: verified
-                ? FtVerifiedColors.badge
-                : FtColors.progressTrack.withValues(alpha: 0.6),
+            color: verified ? p.verifiedSurface : p.tileFill,
             borderRadius: BorderRadius.circular(999),
           ),
           child: Row(
@@ -323,7 +364,7 @@ class FtIdStatusRow extends StatelessWidget {
                   fontSize: 12.5,
                   height: 1.2,
                   fontWeight: FontWeight.w700,
-                  color: verified ? Colors.white : FtColors.otpSecondary,
+                  color: verified ? p.textStrong : p.textSoft,
                 ),
               ),
             ],
@@ -334,24 +375,28 @@ class FtIdStatusRow extends StatelessWidget {
   }
 }
 
-/// One tappable settings line: tinted icon tile, label, chevron.
+/// One tappable settings line: tinted icon tile, label, optional current
+/// [value] (e.g. "Dark"), chevron.
 class FtSettingsRow extends StatelessWidget {
   const FtSettingsRow({
     super.key,
     required this.icon,
     required this.label,
     required this.onTap,
+    this.value,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final String? value;
 
   @override
   Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
     return Semantics(
       button: true,
-      label: label,
+      label: value == null ? label : '$label, $value',
       excludeSemantics: true,
       child: FtPressScale(
         onTap: onTap,
@@ -363,10 +408,10 @@ class FtSettingsRow extends StatelessWidget {
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  color: FtColors.progressStart.withValues(alpha: 0.2),
+                  color: p.tileFill,
                   borderRadius: BorderRadius.circular(13),
                 ),
-                child: Icon(icon, size: 21, color: FtColors.progressEnd),
+                child: Icon(icon, size: 21, color: p.tileAccent),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -376,14 +421,26 @@ class FtSettingsRow extends StatelessWidget {
                     fontSize: 16.5,
                     height: 1.2,
                     fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                    color: p.textStrong,
                   ),
                 ),
               ),
-              const Icon(
+              if (value != null) ...[
+                Text(
+                  value!,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 14.5,
+                    height: 1.2,
+                    fontWeight: FontWeight.w600,
+                    color: p.textSoft,
+                  ),
+                ),
+                const SizedBox(width: 4),
+              ],
+              Icon(
                 Icons.chevron_right_rounded,
                 size: 24,
-                color: FtColors.otpSecondary,
+                color: p.textSoft,
               ),
             ],
           ),
@@ -401,6 +458,7 @@ class FtLogoutButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
     return Semantics(
       button: true,
       label: 'Log Out',
@@ -412,12 +470,12 @@ class FtLogoutButton extends StatelessWidget {
           width: double.infinity,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: FtColors.danger, width: 1.5),
+            border: Border.all(color: p.danger, width: 1.5),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.logout_rounded, size: 20, color: FtColors.danger),
+              Icon(Icons.logout_rounded, size: 20, color: p.danger),
               const SizedBox(width: 10),
               Text(
                 'Log Out',
@@ -425,7 +483,7 @@ class FtLogoutButton extends StatelessWidget {
                   fontSize: 17,
                   height: 1.2,
                   fontWeight: FontWeight.w700,
-                  color: FtColors.danger,
+                  color: p.danger,
                 ),
               ),
             ],

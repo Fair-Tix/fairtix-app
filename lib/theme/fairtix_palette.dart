@@ -33,6 +33,15 @@ class FairTixPalette {
     required this.successIcon,
     required this.dangerCard,
     required this.dangerIcon,
+    required this.gradientTop,
+    required this.gradientBottom,
+    required this.card,
+    required this.tileFill,
+    required this.tileAccent,
+    required this.textStrong,
+    required this.textSoft,
+    required this.verified,
+    required this.verifiedSurface,
   });
 
   final bool isDark;
@@ -97,6 +106,27 @@ class FairTixPalette {
   final Color dangerCard;
   final Color dangerIcon;
 
+  /// Eventgoer (phone app) screens: the page gradient runs from
+  /// [gradientTop] to [gradientBottom] over the first 60% of the screen.
+  /// In Dark these equal the old FtColors.bgTop / bgBottom.
+  final Color gradientTop;
+  final Color gradientBottom;
+
+  /// Translucent card fill on the gradient (profile cards, stat cards).
+  final Color card;
+
+  /// Rounded icon tile behind settings icons, and the color of the icon on it.
+  final Color tileFill;
+  final Color tileAccent;
+
+  /// Headings / values, and the softer subtitle + label text.
+  final Color textStrong;
+  final Color textSoft;
+
+  /// "Verified" green and the soft pill behind it.
+  final Color verified;
+  final Color verifiedSurface;
+
   /// Primary call-to-action gradient. Identical in Light and Dark.
   static const LinearGradient buttonGradient = LinearGradient(
     begin: Alignment.topLeft,
@@ -130,6 +160,15 @@ class FairTixPalette {
     successIcon: Color(0xFFBBF7D0),
     dangerCard: Color(0xFFFEE2E2),
     dangerIcon: Color(0xFFFECACA),
+    gradientTop: Color(0xFFE4DBFB),
+    gradientBottom: Color(0xFFF6F3FF),
+    card: Color(0xFFFFFFFF),
+    tileFill: Color(0xFFEDE7FF),
+    tileAccent: Color(0xFF7C3AED),
+    textStrong: Color(0xFF1A1033),
+    textSoft: Color(0xFF6B5A9E),
+    verified: Color(0xFF15803D),
+    verifiedSurface: Color(0xFFDCFCE7),
   );
 
   static const FairTixPalette dark = FairTixPalette(
@@ -156,6 +195,17 @@ class FairTixPalette {
     successIcon: Color(0xFF1C423A),
     dangerCard: Color(0xFF29152E),
     dangerIcon: Color(0xFF4B263F),
+    // Eventgoer tokens: sampled from the existing FtColors so Dark looks
+    // the same as before.
+    gradientTop: Color(0xFF241354),
+    gradientBottom: Color(0xFF08051B),
+    card: Color(0xBF15102D),
+    tileFill: Color(0x338138ED),
+    tileAccent: Color(0xFFC69AFF),
+    textStrong: Color(0xFFFFFFFF),
+    textSoft: Color(0xFFB7A5E8),
+    verified: Color(0xFF36E88B),
+    verifiedSurface: Color(0xFF142D2B),
   );
 
   /// The palette for the current mode. Registers the caller so it rebuilds

@@ -123,13 +123,15 @@ class _SelfieVerificationScreenState extends State<SelfieVerificationScreen> {
   Widget build(BuildContext context) {
     final hasSelfie = _selfieBytes != null;
     final busy = _isCapturing || _isSubmitting;
+    final t = FtAuthTheme.live(context);
 
     return FtRegistrationScaffold(
+      followTheme: true,
       step: 4,
       entrance: true,
       title: 'Take a quick selfie',
       subtitle: 'We’ll compare it with the photo on your ID.',
-      subtitleColor: FtColors.otpSecondary,
+      subtitleColor: t.secondaryText,
       onBack: busy ? null : () => Navigator.of(context).maybePop(),
       body: [
         FtSelfieFrame(
@@ -147,12 +149,12 @@ class _SelfieVerificationScreenState extends State<SelfieVerificationScreen> {
         const SizedBox(height: 20),
         Row(
           children: [
-            const Icon(Icons.lock_outline_rounded, size: 17, color: FtColors.otpSecondary),
+            Icon(Icons.lock_outline_rounded, size: 17, color: t.secondaryText),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
                 'Encrypted, and used only to verify you.',
-                style: FtText.legal().copyWith(fontSize: 13.5, color: FtColors.otpSecondary),
+                style: FtText.legal().copyWith(fontSize: 13.5, color: t.secondaryText),
               ),
             ),
           ],
@@ -174,7 +176,7 @@ class _SelfieVerificationScreenState extends State<SelfieVerificationScreen> {
                   style: FtText.legal().copyWith(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: FtColors.otpSecondary,
+                    color: t.secondaryText,
                   ),
                 ),
               ),

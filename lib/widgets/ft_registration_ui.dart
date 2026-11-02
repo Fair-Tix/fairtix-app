@@ -4,11 +4,13 @@ import 'package:flutter/services.dart';
 
 import 'ft_dark_ui.dart';
 
-/// Building blocks for the 5-step eventgoer registration flow (dark design).
+/// Building blocks for the 5-step eventgoer registration flow. They follow
+/// the Light / Dark switch only on screens whose scaffold sets
+/// `followTheme: true` (see [FtAuthTheme]); otherwise they stay Dark.
 /// Step 1 uses them first; Steps 2-5 should reuse [FtRegistrationScaffold]
 /// with their own `step` number so the header and progress bar stay identical.
 
-/// 48px round back button: dark purple fill, subtle border, white chevron.
+/// 48px round back button: surface fill, subtle border, chevron.
 class FtCircleBackButton extends StatelessWidget {
   const FtCircleBackButton({super.key, required this.onPressed});
 
@@ -17,6 +19,7 @@ class FtCircleBackButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     final enabled = onPressed != null;
     return Semantics(
       button: true,
@@ -32,16 +35,16 @@ class FtCircleBackButton extends StatelessWidget {
             height: 48,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: FtColors.circleButtonFill,
-              border: Border.all(color: FtColors.circleButtonBorder),
+              color: t.circleFill,
+              border: Border.all(color: t.circleBorder),
             ),
             child: InkWell(
               customBorder: const CircleBorder(),
               onTap: onPressed,
-              child: const Center(
+              child: Center(
                 child: Icon(
                   Icons.chevron_left_rounded,
-                  color: Colors.white,
+                  color: t.circleIcon,
                   size: 30,
                 ),
               ),
@@ -66,6 +69,7 @@ class FtProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     final target = value.clamp(0.0, 1.0);
     final start = (from ?? value).clamp(0.0, 1.0);
     final duration = MediaQuery.disableAnimationsOf(context)
@@ -83,8 +87,8 @@ class FtProgressBar extends StatelessWidget {
           width: double.infinity,
           child: Stack(
             children: [
-              const Positioned.fill(
-                child: ColoredBox(color: FtColors.progressTrack),
+              Positioned.fill(
+                child: ColoredBox(color: t.progressTrack),
               ),
               TweenAnimationBuilder<double>(
                 tween: Tween<double>(begin: start, end: target),
@@ -133,6 +137,7 @@ class FtRegistrationScaffold extends StatelessWidget {
     this.entrance = false,
     this.subtitleColor,
     this.headerExtra,
+    this.followTheme = false,
   });
 
   /// 1-based current step.
@@ -155,82 +160,87 @@ class FtRegistrationScaffold extends StatelessWidget {
   /// bar (e.g. Step 3's "You're almost there" card).
   final Widget? headerExtra;
 
+  /// True = follow the Light / Dark switch. False = always Dark, for steps
+  /// that have not been reworked for Light yet.
+  final bool followTheme;
+
   @override
   Widget build(BuildContext context) {
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light.copyWith(
-        statusBarColor: Colors.transparent,
-        systemNavigationBarColor: FtColors.bgBottom,
-        systemNavigationBarIconBrightness: Brightness.light,
-      ),
-      child: Scaffold(
-        backgroundColor: FtColors.bgBottom,
-        body: FtBackground(
-          child: SafeArea(
-            child: Column(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    keyboardDismissBehavior:
-                        ScrollViewKeyboardDismissBehavior.onDrag,
-                    padding: const EdgeInsets.fromLTRB(22, 14, 22, 24),
-                    child: FtEntrance(
-                      enabled: entrance,
-                      child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+    final t = followTheme ? FtAuthTheme.live(context) : FtAuthTheme.dark;
+    return FtAuthThemeScope(
+      theme: t,
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: t.overlayStyle,
+        child: Scaffold(
+          backgroundColor: t.bgBottom,
+          body: FtAuthBackground(
+            theme: t,
+            child: SafeArea(
+              child: Column(
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      padding: const EdgeInsets.fromLTRB(22, 14, 22, 24),
+                      child: FtEntrance(
+                        enabled: entrance,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            FtCircleBackButton(onPressed: onBack),
-                            const Spacer(),
-                            Text(
-                              'Step $step of $totalSteps',
-                              style: FtText.stepLabel(),
+                            Row(
+                              children: [
+                                FtCircleBackButton(onPressed: onBack),
+                                const Spacer(),
+                                Text(
+                                  'Step $step of $totalSteps',
+                                  style: t.stepLabel(),
+                                ),
+                              ],
                             ),
+                            const SizedBox(height: 22),
+                            headerExtra ??
+                                FtProgressBar(
+                                  from: (step - 1) / totalSteps,
+                                  value: step / totalSteps,
+                                ),
+                            const SizedBox(height: 26),
+                            Semantics(
+                              header: true,
+                              child: Text(title, style: t.title()),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              subtitle,
+                              style: t.subtitle().copyWith(color: subtitleColor),
+                            ),
+                            const SizedBox(height: 28),
+                            ...body,
                           ],
                         ),
-                        const SizedBox(height: 22),
-                        headerExtra ??
-                            FtProgressBar(
-                          from: (step - 1) / totalSteps,
-                          value: step / totalSteps,
-                        ),
-                        const SizedBox(height: 26),
-                        Semantics(
-                          header: true,
-                          child: Text(title, style: FtText.title()),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          subtitle,
-                          style: FtText.subtitle().copyWith(color: subtitleColor),
-                        ),
-                        const SizedBox(height: 28),
-                        ...body,
-                      ],
-                    ),
+                      ),
                     ),
                   ),
-                ),
-                DecoratedBox(
-                  decoration: const BoxDecoration(
-                    border: Border(top: BorderSide(color: FtColors.divider)),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(22, 16, 22, 14),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        button,
-                        if (footer != null) ...[
-                          const SizedBox(height: 14),
-                          footer!,
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      border: Border(top: BorderSide(color: t.divider)),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(22, 16, 22, 14),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          button,
+                          if (footer != null) ...[
+                            const SizedBox(height: 14),
+                            footer!,
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -326,20 +336,21 @@ class _FtLegalTextState extends State<FtLegalText> {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     return Text.rich(
       TextSpan(
-        style: FtText.legal(),
+        style: t.legal(),
         children: [
           const TextSpan(text: 'By continuing you agree to the '),
           TextSpan(
             text: 'Terms',
-            style: FtText.legalLink(),
+            style: t.legalLink(),
             recognizer: _terms,
           ),
           const TextSpan(text: ' and '),
           TextSpan(
             text: 'Privacy Policy',
-            style: FtText.legalLink(),
+            style: t.legalLink(),
             recognizer: _privacy,
           ),
           const TextSpan(text: '.'),

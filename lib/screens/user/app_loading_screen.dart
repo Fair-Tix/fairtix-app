@@ -5,22 +5,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../theme/fairtix_palette.dart';
 import '../../widgets/ft_dark_ui.dart' show FtLogo, FtText;
+import '../../widgets/ft_profile_ui.dart' show ftOverlayStyle;
 
 /// FairTix launch splash / loading screen.
 ///
-/// Always dark (it is the brand moment, not a themed page). It stays on screen
-/// until [ready] completes — the app's real startup work — and the loading bar
-/// is tied to that: it cruises toward ~88% while startup runs, then snaps to
-/// 100% the moment [ready] completes, and only then calls [onFinished].
+/// Dark by default; follows the Light / Dark choice saved from Settings >
+/// Appearance (main() loads it before the first frame, so there is no flash of
+/// the wrong mode). Dark uses `assets/logo/ft_lightlogo.png`, Light uses
+/// `assets/logo/ft_darklogo.png` (the purple logo for light backgrounds).
+///
+/// It stays on screen until [ready] completes — the app's real startup work —
+/// and the loading bar is tied to that: it cruises toward ~88% while startup
+/// runs, then snaps to 100% the moment [ready] completes, and only then calls
+/// [onFinished].
 ///
 /// A short minimum display (the intro animation) stops a very fast startup
 /// from flashing the screen for a split second. There is no fixed "wait N
 /// seconds" timer deciding when loading is done.
 ///
-/// Uses the existing local asset `assets/logo/ft_lightlogo.png`; nothing here
-/// needs the network except the Plus Jakarta Sans font, which is fetched once
-/// by google_fonts and cached (same font the organizer splash already uses).
+/// Nothing here needs the network except the Plus Jakarta Sans font, which is
+/// fetched once by google_fonts and cached (same font the organizer splash
+/// already uses).
 class AppLoadingScreen extends StatefulWidget {
   const AppLoadingScreen({
     super.key,
@@ -41,12 +48,7 @@ class AppLoadingScreen extends StatefulWidget {
 
 class _AppLoadingScreenState extends State<AppLoadingScreen>
     with TickerProviderStateMixin {
-  static const String _logoAsset = FtLogo.asset;
-
-  // Colors from the spec.
-  static const Color _bgTop = Color(0xFF241354);
-  static const Color _bgBottom = Color(0xFF08051B);
-  static const Color _taglineColor = Color(0xFFB7A5E8);
+  // Dark-mode bar track from the original spec (Light uses the palette's).
   static const Color _track = Color(0xFF302064);
   static const Color _fillStart = Color(0xFF8138ED);
   static const Color _fillEnd = Color(0xFFC69AFF);
@@ -91,21 +93,23 @@ class _AppLoadingScreenState extends State<AppLoadingScreen>
 
   bool _started = false;
 
-  TextStyle _brandStyle(double size) => GoogleFonts.plusJakartaSans(
-    fontSize: size,
-    height: 1.0,
-    fontWeight: FontWeight.w800,
-    fontStyle: FontStyle.italic,
-    color: Colors.white,
-  );
+  TextStyle _brandStyle(double size, [Color color = Colors.white]) =>
+      GoogleFonts.plusJakartaSans(
+        fontSize: size,
+        height: 1.0,
+        fontWeight: FontWeight.w800,
+        fontStyle: FontStyle.italic,
+        color: color,
+      );
 
-  TextStyle _taglineStyle(double size) => GoogleFonts.plusJakartaSans(
-    fontSize: size,
-    height: 1.2,
-    fontWeight: FontWeight.w400,
-    letterSpacing: 0.15,
-    color: _taglineColor,
-  );
+  TextStyle _taglineStyle(double size, [Color color = const Color(0xFFB7A5E8)]) =>
+      GoogleFonts.plusJakartaSans(
+        fontSize: size,
+        height: 1.2,
+        fontWeight: FontWeight.w400,
+        letterSpacing: 0.15,
+        color: color,
+      );
 
   @override
   void didChangeDependencies() {
@@ -126,8 +130,11 @@ class _AppLoadingScreenState extends State<AppLoadingScreen>
     // Warm the logo and fonts first so nothing pops in or swaps font while the
     // fade-in plays. The logo is a local asset (near-instant); the font wait
     // is capped so a first offline launch is never held up.
+    // (The palette is read before the first await, while the context is
+    // still safe to depend on.)
+    final isDark = FairTixPalette.of(context).isDark;
     final logo = precacheImage(
-      const AssetImage(_logoAsset),
+      AssetImage(isDark ? FtLogo.asset : FtLogo.darkAsset),
       context,
     ).catchError((Object _) {});
     final fonts = GoogleFonts.pendingFonts([
@@ -170,21 +177,21 @@ class _AppLoadingScreenState extends State<AppLoadingScreen>
 
   @override
   Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
+
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light.copyWith(
-        statusBarColor: Colors.transparent,
-        systemNavigationBarColor: _bgBottom,
-        systemNavigationBarIconBrightness: Brightness.light,
-      ),
+      value: ftOverlayStyle(p),
       child: Scaffold(
-        backgroundColor: _bgBottom,
+        backgroundColor: p.gradientBottom,
         resizeToAvoidBottomInset: false,
         body: DecoratedBox(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [_bgTop, _bgBottom],
+              // Light fades out sooner, like the reference; Dark is unchanged.
+              stops: p.isDark ? null : const [0.0, 0.5],
+              colors: [p.gradientTop, p.gradientBottom],
             ),
           ),
           child: LayoutBuilder(
@@ -198,14 +205,14 @@ class _AppLoadingScreenState extends State<AppLoadingScreen>
                   // Branding group, a little above the vertical midpoint.
                   Align(
                     alignment: const Alignment(0, -0.16),
-                    child: _branding(w),
+                    child: _branding(w, p),
                   ),
                   // Loading bar, bottom center, clear of the safe area.
                   Positioned(
                     left: 0,
                     right: 0,
                     bottom: safeBottom + h * 0.07,
-                    child: Center(child: _loadingBar(w)),
+                    child: Center(child: _loadingBar(w, p)),
                   ),
                 ],
               );
@@ -216,13 +223,16 @@ class _AppLoadingScreenState extends State<AppLoadingScreen>
     );
   }
 
-  Widget _branding(double w) {
+  Widget _branding(double w, FairTixPalette p) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         FadeTransition(
           opacity: _logoFade,
-          child: ScaleTransition(scale: _logoScale, child: _logo(w * _logoSide)),
+          child: ScaleTransition(
+            scale: _logoScale,
+            child: _logo(w * _logoSide, p.isDark ? FtLogo.asset : FtLogo.darkAsset),
+          ),
         ),
         SizedBox(height: w * _gap),
         FadeTransition(
@@ -230,7 +240,7 @@ class _AppLoadingScreenState extends State<AppLoadingScreen>
           child: Text(
             'FairTix',
             textAlign: TextAlign.center,
-            style: _brandStyle(w * _brandFont),
+            style: _brandStyle(w * _brandFont, p.textStrong),
           ),
         ),
         SizedBox(height: w * _gap),
@@ -239,19 +249,19 @@ class _AppLoadingScreenState extends State<AppLoadingScreen>
           child: Text(
             'Discover. Book. Be There.',
             textAlign: TextAlign.center,
-            style: _taglineStyle(w * _taglineFont),
+            style: _taglineStyle(w * _taglineFont, p.textSoft),
           ),
         ),
       ],
     );
   }
 
-  Widget _logo(double side) {
+  Widget _logo(double side, String asset) {
     return Align(
       heightFactor: _logoBand,
       alignment: const Alignment(0, _logoBandCenter),
       child: Image.asset(
-        _logoAsset,
+        asset,
         width: side,
         height: side,
         fit: BoxFit.contain,
@@ -262,7 +272,7 @@ class _AppLoadingScreenState extends State<AppLoadingScreen>
     );
   }
 
-  Widget _loadingBar(double w) {
+  Widget _loadingBar(double w, FairTixPalette p) {
     return Semantics(
       label: 'Loading',
       child: RepaintBoundary(
@@ -273,7 +283,9 @@ class _AppLoadingScreenState extends State<AppLoadingScreen>
             borderRadius: BorderRadius.circular(_barHeight),
             child: Stack(
               children: [
-                const Positioned.fill(child: ColoredBox(color: _track)),
+                Positioned.fill(
+                  child: ColoredBox(color: p.isDark ? _track : p.progressTrack),
+                ),
                 AnimatedBuilder(
                   animation: _progress,
                   builder: (context, _) => FractionallySizedBox(

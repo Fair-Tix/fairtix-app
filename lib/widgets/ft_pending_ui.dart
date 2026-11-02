@@ -73,15 +73,16 @@ class FtPendingClock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = FtAuthTheme.of(context);
     return Semantics(
       label: 'Review pending',
       excludeSemantics: true,
       child: AnimatedBuilder(
         animation: pulse,
-        child: const Icon(
+        child: Icon(
           Icons.schedule_outlined,
           size: 38,
-          color: FtColors.progressEnd,
+          color: theme.activeAccent,
         ),
         builder: (context, icon) {
           final t = Curves.easeInOut.transform(pulse.value);
@@ -129,13 +130,14 @@ class FtVerificationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
       decoration: BoxDecoration(
-        color: FtColors.otpFill,
+        color: t.surfaceFill,
         borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: FtColors.otpBorder),
+        border: Border.all(color: t.surfaceBorder),
       ),
       child: Column(
         children: [
@@ -201,21 +203,21 @@ class _StageRow extends StatelessWidget {
         FtStageState.pending => 'pending',
       };
 
-  TextStyle get _style {
+  TextStyle _style(FtAuthTheme t) {
     final base = GoogleFonts.plusJakartaSans(
       fontSize: 16,
       height: 1.2,
       fontWeight: FontWeight.w500,
-      color: Colors.white,
+      color: t.titleColor,
     );
     return switch (state) {
       FtStageState.done => base,
       FtStageState.active => base.copyWith(fontWeight: FontWeight.w800),
-      FtStageState.pending => base.copyWith(color: FtColors.otpSecondary),
+      FtStageState.pending => base.copyWith(color: t.secondaryText),
     };
   }
 
-  Widget _icon() {
+  Widget _icon(FtAuthTheme t) {
     switch (state) {
       case FtStageState.done:
         // Scales in once (about 300 ms), after the card has appeared.
@@ -245,7 +247,7 @@ class _StageRow extends StatelessWidget {
           child: AnimatedBuilder(
             animation: spin,
             builder: (context, _) => CustomPaint(
-              painter: _SpinnerPainter(spin.value),
+              painter: _SpinnerPainter(spin.value, t.progressTrack),
             ),
           ),
         );
@@ -253,7 +255,7 @@ class _StageRow extends StatelessWidget {
         return Container(
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: FtColors.otpBorder, width: 2),
+            border: Border.all(color: t.surfaceBorder, width: 2),
           ),
         );
     }
@@ -261,6 +263,7 @@ class _StageRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     return Semantics(
       label: '$label, $_status',
       excludeSemantics: true,
@@ -268,9 +271,9 @@ class _StageRow extends StatelessWidget {
         height: _rowHeight,
         child: Row(
           children: [
-            SizedBox(width: _iconSize, height: _iconSize, child: _icon()),
+            SizedBox(width: _iconSize, height: _iconSize, child: _icon(t)),
             const SizedBox(width: 16),
-            Expanded(child: Text(label, style: _style)),
+            Expanded(child: Text(label, style: _style(t))),
           ],
         ),
       ),
@@ -281,9 +284,10 @@ class _StageRow extends StatelessWidget {
 /// Active "review in progress" indicator: a dim track, a soft outer halo and
 /// a purple arc (fading from #8138ED to #C69AFF at its head) that rotates.
 class _SpinnerPainter extends CustomPainter {
-  _SpinnerPainter(this.turns);
+  _SpinnerPainter(this.turns, this.trackColor);
 
   final double turns;
+  final Color trackColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -307,7 +311,7 @@ class _SpinnerPainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = stroke
-        ..color = FtColors.progressTrack,
+        ..color = trackColor,
     );
 
     canvas.save();
@@ -336,5 +340,6 @@ class _SpinnerPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_SpinnerPainter old) => old.turns != turns;
+  bool shouldRepaint(_SpinnerPainter old) =>
+      old.turns != turns || old.trackColor != trackColor;
 }

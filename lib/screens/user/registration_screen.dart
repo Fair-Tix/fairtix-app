@@ -177,6 +177,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   @override
   Widget build(BuildContext context) {
     return FtRegistrationScaffold(
+      followTheme: true,
       step: 1,
       title: 'Create your account',
       subtitle: 'Your name and email must match your ID.',

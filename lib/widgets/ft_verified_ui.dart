@@ -15,10 +15,19 @@ class FtVerifiedColors {
 }
 
 /// 100px circle with a green check that draws itself as [draw] runs 0 -> 1.
+/// [background] and [checkColor] let it follow Light mode; the defaults are
+/// the original dark colors.
 class FtVerifiedCircle extends StatelessWidget {
-  const FtVerifiedCircle({super.key, required this.draw});
+  const FtVerifiedCircle({
+    super.key,
+    required this.draw,
+    this.background,
+    this.checkColor,
+  });
 
   final Animation<double> draw;
+  final Color? background;
+  final Color? checkColor;
 
   @override
   Widget build(BuildContext context) {
@@ -28,16 +37,19 @@ class FtVerifiedCircle extends StatelessWidget {
       child: Container(
         width: 100,
         height: 100,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: FtVerifiedColors.circle,
+          color: background ?? FtVerifiedColors.circle,
         ),
         child: Center(
           child: AnimatedBuilder(
             animation: draw,
             builder: (context, _) => CustomPaint(
               size: const Size.square(40),
-              painter: _CheckPainter(draw.value),
+              painter: _CheckPainter(
+                draw.value,
+                checkColor ?? FtVerifiedColors.green,
+              ),
             ),
           ),
         ),
@@ -47,9 +59,10 @@ class FtVerifiedCircle extends StatelessWidget {
 }
 
 class _CheckPainter extends CustomPainter {
-  _CheckPainter(this.t);
+  _CheckPainter(this.t, this.color);
 
   final double t;
+  final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -62,7 +75,7 @@ class _CheckPainter extends CustomPainter {
     canvas.drawPath(
       metric.extractPath(0, metric.length * t.clamp(0.0, 1.0)),
       Paint()
-        ..color = FtVerifiedColors.green
+        ..color = color
         ..style = PaintingStyle.stroke
         ..strokeWidth = 4
         ..strokeCap = StrokeCap.round
@@ -71,28 +84,34 @@ class _CheckPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_CheckPainter old) => old.t != t;
+  bool shouldRepaint(_CheckPainter old) => old.t != t || old.color != color;
 }
 
 /// Small green pill: shield icon + "FairTix Verified".
 class FtVerifiedBadge extends StatelessWidget {
-  const FtVerifiedBadge({super.key});
+  const FtVerifiedBadge({super.key, this.background, this.foreground});
+
+  /// Optional overrides so the badge can follow Light mode (Profile passes
+  /// the palette's verified colors). Defaults are the original dark colors.
+  final Color? background;
+  final Color? foreground;
 
   @override
   Widget build(BuildContext context) {
+    final fg = foreground ?? FtVerifiedColors.green;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: FtVerifiedColors.badge,
+        color: background ?? FtVerifiedColors.badge,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
+          Icon(
             Icons.verified_user_outlined,
             size: 16,
-            color: FtVerifiedColors.green,
+            color: fg,
           ),
           const SizedBox(width: 8),
           Text(
@@ -101,7 +120,7 @@ class FtVerifiedBadge extends StatelessWidget {
               fontSize: 13.5,
               height: 1.2,
               fontWeight: FontWeight.w700,
-              color: FtVerifiedColors.green,
+              color: fg,
             ),
           ),
         ],

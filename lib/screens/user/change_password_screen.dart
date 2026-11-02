@@ -9,7 +9,7 @@ import '../../widgets/ft_subpage_ui.dart';
 /// Lets the signed-in eventgoer change their password via Supabase Auth.
 /// This is the only self-service edit on [ProfileScreen]: full name and
 /// email stay locked to the verified ID document per the capstone's
-/// Account Verification rules. Dark design; the password change itself still
+/// Account Verification rules. Follows the Light / Dark switch; the password change itself still
 /// goes through [PasswordService] (current password re-checked first).
 class ChangePasswordScreen extends StatefulWidget {
   const ChangePasswordScreen({super.key});
@@ -35,21 +35,23 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   }
 
   void _toast(String message, {bool error = false}) {
+    // The snackbar lives above the scaffold, so read the theme directly.
+    final t = FtAuthTheme.live(context);
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
-          backgroundColor: error ? FtColors.dangerSurface : FtColors.otpFill,
+          backgroundColor: error ? t.dangerSurface : t.surfaceFill,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
             side: BorderSide(
-              color: (error ? FtColors.danger : FtColors.success).withValues(alpha: 0.5),
+              color: (error ? t.danger : t.success).withValues(alpha: 0.5),
             ),
           ),
           content: Text(
             message,
-            style: FtText.banner().copyWith(color: error ? FtColors.danger : Colors.white),
+            style: t.banner().copyWith(color: error ? t.danger : t.titleColor),
           ),
         ),
       );
@@ -77,6 +79,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   }
 
   Widget _requirement(String text) {
+    final t = FtAuthTheme.live(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -84,9 +87,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
           Container(
             width: 5,
             height: 5,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: FtColors.otpSecondary,
+              color: t.secondaryText,
             ),
           ),
           const SizedBox(width: 12),
@@ -95,7 +98,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
             style: GoogleFonts.plusJakartaSans(
               fontSize: 14,
               height: 1.3,
-              color: FtColors.otpSecondary,
+              color: t.secondaryText,
             ),
           ),
         ],
@@ -106,6 +109,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   @override
   Widget build(BuildContext context) {
     return FtSubpageScaffold(
+      followTheme: true,
       title: 'Change Password',
       onBack: _isSaving ? null : () => Navigator.of(context).maybePop(),
       body: [

@@ -20,6 +20,7 @@ class ThemeController extends ChangeNotifier {
 
   bool _isDark = !kIsWeb ||
       ui.PlatformDispatcher.instance.platformBrightness == Brightness.dark;
+  Future<void> _pendingWrite = Future<void>.value();
 
   bool get isDark => _isDark;
 
@@ -30,8 +31,15 @@ class ThemeController extends ChangeNotifier {
       final saved = await _storage.read(key: _storageKey);
       if (saved == 'dark') _isDark = true;
       if (saved == 'light') _isDark = false;
-    } catch (_) {
-      // Storage unavailable (private browsing, etc.): keep the device default.
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'FairTix theme controller',
+          context: ErrorDescription('while restoring the saved theme mode'),
+        ),
+      );
     }
   }
 
@@ -39,11 +47,21 @@ class ThemeController extends ChangeNotifier {
     if (value == _isDark) return;
     _isDark = value;
     notifyListeners();
-    try {
-      await _storage.write(key: _storageKey, value: value ? 'dark' : 'light');
-    } catch (_) {
-      // The switch still works for this session even if saving fails.
-    }
+    _pendingWrite = _pendingWrite.then((_) async {
+      try {
+        await _storage.write(key: _storageKey, value: value ? 'dark' : 'light');
+      } catch (error, stackTrace) {
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: error,
+            stack: stackTrace,
+            library: 'FairTix theme controller',
+            context: ErrorDescription('while saving the selected theme mode'),
+          ),
+        );
+      }
+    });
+    await _pendingWrite;
   }
 
   Future<void> toggle() => setDark(!_isDark);

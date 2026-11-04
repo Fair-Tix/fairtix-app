@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/admin_resale_service.dart';
 import '../../services/csv_export.dart';
+import '../../theme/fairtix_palette.dart';
 import '../../widgets/admin_shell.dart';
 import '../../widgets/admin_widgets.dart';
 import '../organizer/app_colors.dart';
@@ -20,11 +21,19 @@ class AdminResaleMonitoringScreen extends StatefulWidget {
   const AdminResaleMonitoringScreen({super.key});
 
   @override
-  State<AdminResaleMonitoringScreen> createState() => _AdminResaleMonitoringScreenState();
+  State<AdminResaleMonitoringScreen> createState() =>
+      _AdminResaleMonitoringScreenState();
 }
 
-class _AdminResaleMonitoringScreenState extends State<AdminResaleMonitoringScreen> {
-  static const _statusFilters = ['All', 'Active', 'Sold', 'Canceled', 'Expired'];
+class _AdminResaleMonitoringScreenState
+    extends State<AdminResaleMonitoringScreen> {
+  static const _statusFilters = [
+    'All',
+    'Active',
+    'Sold',
+    'Canceled',
+    'Expired',
+  ];
 
   final _searchController = TextEditingController();
   List<ResaleListingEntry> _listings = const [];
@@ -73,16 +82,21 @@ class _AdminResaleMonitoringScreenState extends State<AdminResaleMonitoringScree
   List<ResaleListingEntry> get _filtered {
     final query = _searchController.text.trim().toLowerCase();
     return _listings.where((l) {
-      if (_statusFilter != 'All' && l.statusLabel != _statusFilter) return false;
+      if (_statusFilter != 'All' && l.statusLabel != _statusFilter)
+        return false;
       if (_nearFloorOnly && !l.isNearFloor) return false;
       if (query.isEmpty) return true;
-      return '${l.sellerName} ${l.sellerEmail} ${l.eventTitle}'.toLowerCase().contains(query);
+      return '${l.sellerName} ${l.sellerEmail} ${l.eventTitle}'
+          .toLowerCase()
+          .contains(query);
     }).toList();
   }
 
   void _toast(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _removeListing(ResaleListingEntry listing) async {
@@ -166,10 +180,14 @@ class _AdminResaleMonitoringScreenState extends State<AdminResaleMonitoringScree
 
   Widget _buildBody() {
     final active = _listings.where((l) => l.isActive).toList();
-    final activeValue = active.fold<double>(0, (sum, l) => sum + l.listingPrice);
+    final activeValue = active.fold<double>(
+      0,
+      (sum, l) => sum + l.listingPrice,
+    );
     final avgFraction = active.isEmpty
         ? 0.0
-        : active.fold<double>(0, (sum, l) => sum + l.fractionOfOriginal) / active.length;
+        : active.fold<double>(0, (sum, l) => sum + l.fractionOfOriginal) /
+              active.length;
     final nearFloor = active.where((l) => l.isNearFloor).length;
 
     return Column(
@@ -177,7 +195,9 @@ class _AdminResaleMonitoringScreenState extends State<AdminResaleMonitoringScree
       children: [
         Row(
           children: [
-            const Expanded(child: Text('Resale Monitoring', style: AppTextStyles.h2)),
+            const Expanded(
+              child: Text('Resale Monitoring', style: AppTextStyles.h2),
+            ),
             IconButton(
               onPressed: _isLoading ? null : _load,
               icon: const Icon(Icons.refresh, size: 18),
@@ -216,7 +236,9 @@ class _AdminResaleMonitoringScreenState extends State<AdminResaleMonitoringScree
               icon: Icons.percent_outlined,
               color: AppColors.infoBlue,
               label: 'Avg Price vs Original',
-              value: active.isEmpty ? '\u2014' : '${(avgFraction * 100).round()}%',
+              value: active.isEmpty
+                  ? '\u2014'
+                  : '${(avgFraction * 100).round()}%',
               caption: 'Allowed range is 50%\u2013100%',
             ),
             AdminSummaryCard(
@@ -244,7 +266,11 @@ class _AdminResaleMonitoringScreenState extends State<AdminResaleMonitoringScree
             }
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [_buildListings(), const SizedBox(height: 18), _buildActivity()],
+              children: [
+                _buildListings(),
+                const SizedBox(height: 18),
+                _buildActivity(),
+              ],
             );
           },
         ),
@@ -253,6 +279,7 @@ class _AdminResaleMonitoringScreenState extends State<AdminResaleMonitoringScree
   }
 
   Widget _buildListings() {
+    final palette = FairTixPalette.of(context);
     final filtered = _filtered;
     return AdminCard(
       child: Column(
@@ -272,13 +299,17 @@ class _AdminResaleMonitoringScreenState extends State<AdminResaleMonitoringScree
                     decoration: InputDecoration(
                       hintText: 'Search seller or event...',
                       hintStyle: const TextStyle(fontSize: 11),
-                      prefixIcon: const Icon(Icons.search, size: 17, color: AppColors.textGray),
+                      prefixIcon: Icon(
+                        Icons.search,
+                        size: 17,
+                        color: palette.textSecondary,
+                      ),
                       isDense: true,
                       filled: true,
-                      fillColor: const Color(0xFFF8F7FC),
+                      fillColor: palette.surface,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(7),
-                        borderSide: const BorderSide(color: AppColors.borderLight),
+                        borderSide: BorderSide(color: palette.border),
                       ),
                     ),
                   ),
@@ -288,16 +319,23 @@ class _AdminResaleMonitoringScreenState extends State<AdminResaleMonitoringScree
                   underline: const SizedBox.shrink(),
                   items: [
                     for (final f in _statusFilters)
-                      DropdownMenuItem(value: f, child: Text(f, style: const TextStyle(fontSize: 12))),
+                      DropdownMenuItem(
+                        value: f,
+                        child: Text(f, style: const TextStyle(fontSize: 12)),
+                      ),
                   ],
-                  onChanged: (value) => setState(() => _statusFilter = value ?? 'All'),
+                  onChanged: (value) =>
+                      setState(() => _statusFilter = value ?? 'All'),
                 ),
                 FilterChip(
-                  label: const Text('Near floor only', style: TextStyle(fontSize: 11)),
+                  label: const Text(
+                    'Near floor only',
+                    style: TextStyle(fontSize: 11),
+                  ),
                   selected: _nearFloorOnly,
                   onSelected: (value) => setState(() => _nearFloorOnly = value),
-                  selectedColor: AppColors.dangerRedBg,
-                  checkmarkColor: AppColors.dangerRed,
+                  selectedColor: palette.dangerSurface,
+                  checkmarkColor: palette.danger,
                 ),
               ],
             ),
@@ -313,7 +351,9 @@ class _AdminResaleMonitoringScreenState extends State<AdminResaleMonitoringScree
           else if (filtered.isEmpty)
             AdminEmptyState(
               icon: Icons.swap_vert_rounded,
-              title: _listings.isEmpty ? 'No resale listings yet' : 'No listings match your filters',
+              title: _listings.isEmpty
+                  ? 'No resale listings yet'
+                  : 'No listings match your filters',
               hint: _listings.isEmpty
                   ? 'Listings will appear here when eventgoers put tickets up for resale.'
                   : 'Try a different search or status.',
@@ -329,12 +369,33 @@ class _AdminResaleMonitoringScreenState extends State<AdminResaleMonitoringScree
                         padding: EdgeInsets.fromLTRB(16, 12, 16, 10),
                         child: Row(
                           children: [
-                            Expanded(flex: 3, child: Text('SELLER', style: adminHeaderStyle)),
-                            Expanded(flex: 3, child: Text('EVENT', style: adminHeaderStyle)),
-                            Expanded(flex: 2, child: Text('ORIGINAL', style: adminHeaderStyle)),
-                            Expanded(flex: 2, child: Text('RESALE', style: adminHeaderStyle)),
-                            Expanded(flex: 2, child: Text('% OF ORIG.', style: adminHeaderStyle)),
-                            Expanded(flex: 2, child: Text('STATUS', style: adminHeaderStyle)),
+                            Expanded(
+                              flex: 3,
+                              child: Text('SELLER', style: adminHeaderStyle),
+                            ),
+                            Expanded(
+                              flex: 3,
+                              child: Text('EVENT', style: adminHeaderStyle),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Text('ORIGINAL', style: adminHeaderStyle),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Text('RESALE', style: adminHeaderStyle),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                '% OF ORIG.',
+                                style: adminHeaderStyle,
+                              ),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Text('STATUS', style: adminHeaderStyle),
+                            ),
                             SizedBox(width: 70),
                           ],
                         ),
@@ -353,7 +414,10 @@ class _AdminResaleMonitoringScreenState extends State<AdminResaleMonitoringScree
                         alignment: Alignment.centerLeft,
                         child: Text(
                           'Showing ${filtered.length} of ${_listings.length} listings',
-                          style: const TextStyle(color: AppColors.textGray, fontSize: 10),
+                          style: const TextStyle(
+                            color: AppColors.textGray,
+                            fontSize: 10,
+                          ),
                         ),
                       ),
                     ),
@@ -374,13 +438,15 @@ class _AdminResaleMonitoringScreenState extends State<AdminResaleMonitoringScree
     for (final l in _listings) {
       events.add((
         at: l.listedAt,
-        text: '${l.sellerName} listed ${l.tierName} \u2013 ${l.eventTitle} at ${formatPeso(l.listingPrice)}',
+        text:
+            '${l.sellerName} listed ${l.tierName} \u2013 ${l.eventTitle} at ${formatPeso(l.listingPrice)}',
       ));
       final soldAt = l.soldAt;
       if (soldAt != null) {
         events.add((
           at: soldAt,
-          text: '${l.tierName} \u2013 ${l.eventTitle} sold for ${formatPeso(l.listingPrice)}',
+          text:
+              '${l.tierName} \u2013 ${l.eventTitle} sold for ${formatPeso(l.listingPrice)}',
         ));
       }
     }
@@ -416,7 +482,10 @@ class _AdminResaleMonitoringScreenState extends State<AdminResaleMonitoringScree
                     const SizedBox(height: 2),
                     Text(
                       formatAdminDateTime(item.at),
-                      style: const TextStyle(fontSize: 10, color: AppColors.textGray),
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: AppColors.textGray,
+                      ),
                     ),
                   ],
                 ),
@@ -447,18 +516,26 @@ class _ListingRow extends StatelessWidget {
   final bool busy;
   final VoidCallback onRemove;
 
-  Widget _percent() {
+  Widget _percent(BuildContext context) {
+    final palette = FairTixPalette.of(context);
     final pct = '${(listing.fractionOfOriginal * 100).round()}%';
-    final color = listing.isNearFloor ? AppColors.dangerRed : AppColors.textDark;
+    final color = listing.isNearFloor ? palette.danger : palette.textPrimary;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(pct, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+        Text(
+          pct,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
         if (listing.isNearFloor) ...[
           const SizedBox(width: 4),
-          const Tooltip(
+          Tooltip(
             message: 'Near the 50% floor',
-            child: Icon(Icons.flag, size: 13, color: AppColors.dangerRed),
+            child: Icon(Icons.flag, size: 13, color: palette.danger),
           ),
         ],
       ],
@@ -473,12 +550,16 @@ class _ListingRow extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 6),
             minimumSize: Size.zero,
           ),
-          child: Text(busy ? 'Working...' : 'Remove', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+          child: Text(
+            busy ? 'Working...' : 'Remove',
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+          ),
         )
       : const SizedBox.shrink();
 
   @override
   Widget build(BuildContext context) {
+    final palette = FairTixPalette.of(context);
     final content = wide
         ? Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -489,8 +570,21 @@ class _ListingRow extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(listing.sellerName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-                      Text(listing.sellerEmail, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, color: AppColors.textGray)),
+                      Text(
+                        listing.sellerName,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        listing.sellerEmail,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: palette.textSecondary,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -499,15 +593,51 @@ class _ListingRow extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(listing.eventTitle, style: const TextStyle(fontSize: 11.5)),
-                      Text(listing.tierName, style: const TextStyle(fontSize: 10, color: AppColors.textGray)),
+                      Text(
+                        listing.eventTitle,
+                        style: const TextStyle(fontSize: 11.5),
+                      ),
+                      Text(
+                        listing.tierName,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: AppColors.textGray,
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                Expanded(flex: 2, child: Text(formatPeso(listing.originalPrice), style: const TextStyle(fontSize: 11))),
-                Expanded(flex: 2, child: Text(formatPeso(listing.listingPrice), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700))),
-                Expanded(flex: 2, child: Align(alignment: Alignment.centerLeft, child: _percent())),
-                Expanded(flex: 2, child: Align(alignment: Alignment.centerLeft, child: _listingStatusBadge(listing))),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    formatPeso(listing.originalPrice),
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    formatPeso(listing.listingPrice),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: _percent(context),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: _listingStatusBadge(listing),
+                  ),
+                ),
                 SizedBox(width: 70, child: _removeButton()),
               ],
             ),
@@ -519,17 +649,31 @@ class _ListingRow extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Expanded(child: Text(listing.sellerName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                    Expanded(
+                      child: Text(
+                        listing.sellerName,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
                     _listingStatusBadge(listing),
                   ],
                 ),
                 const SizedBox(height: 2),
-                Text('${listing.eventTitle} \u2022 ${listing.tierName}', style: const TextStyle(fontSize: 11)),
+                Text(
+                  '${listing.eventTitle} \u2022 ${listing.tierName}',
+                  style: const TextStyle(fontSize: 11),
+                ),
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    Text('${formatPeso(listing.listingPrice)} of ${formatPeso(listing.originalPrice)}  ', style: const TextStyle(fontSize: 11)),
-                    _percent(),
+                    Text(
+                      '${formatPeso(listing.listingPrice)} of ${formatPeso(listing.originalPrice)}  ',
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                    _percent(context),
                   ],
                 ),
                 _removeButton(),
@@ -537,7 +681,9 @@ class _ListingRow extends StatelessWidget {
             ),
           );
     return Container(
-      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.borderLight))),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
+      ),
       child: content,
     );
   }

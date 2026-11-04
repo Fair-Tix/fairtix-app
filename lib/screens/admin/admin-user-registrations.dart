@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/admin_user_summary.dart';
+import '../../theme/fairtix_palette.dart';
 import '../../services/admin_user_service.dart';
 import '../../widgets/admin_document_viewer.dart';
 import '../../widgets/admin_shell.dart';
@@ -41,7 +42,13 @@ _Stage _stageOf(AdminUserSummary user) {
 
 class _AdminUserRegistrationsScreenState
     extends State<AdminUserRegistrationsScreen> {
-  static const _filters = ['Pending', 'Approved', 'Rejected', 'Incomplete', 'All'];
+  static const _filters = [
+    'Pending',
+    'Approved',
+    'Rejected',
+    'Incomplete',
+    'All',
+  ];
 
   String _filter = 'Pending'; // the actionable queue
   String _search = '';
@@ -77,7 +84,8 @@ class _AdminUserRegistrationsScreenState
     }
   }
 
-  int _countFor(String filter) => _users.where((u) => _matches(u, filter)).length;
+  int _countFor(String filter) =>
+      _users.where((u) => _matches(u, filter)).length;
 
   bool _matches(AdminUserSummary user, String filter) {
     final stage = _stageOf(user);
@@ -143,6 +151,7 @@ class _AdminUserRegistrationsScreenState
 
   @override
   Widget build(BuildContext context) {
+    final palette = FairTixPalette.of(context);
     final isWide = MediaQuery.of(context).size.width >= 900;
     final visible = _visible;
     return AdminShell(
@@ -153,8 +162,11 @@ class _AdminUserRegistrationsScreenState
         children: [
           Row(
             children: [
-              const Expanded(
-                child: Text('User Registrations', style: AppTextStyles.h2),
+              Expanded(
+                child: Text(
+                  'User Registrations',
+                  style: AppTextStyles.h2.copyWith(color: palette.textPrimary),
+                ),
               ),
               IconButton(
                 onPressed: _isLoading ? null : _load,
@@ -164,9 +176,9 @@ class _AdminUserRegistrationsScreenState
             ],
           ),
           const SizedBox(height: 3),
-          const Text(
+          Text(
             'Review the ID and selfie of new eventgoers before their accounts are activated.',
-            style: TextStyle(color: AppColors.textGray, fontSize: 10),
+            style: TextStyle(color: palette.textSecondary, fontSize: 10),
           ),
           const SizedBox(height: 18),
           Wrap(
@@ -183,11 +195,13 @@ class _AdminUserRegistrationsScreenState
                   onSelected: (_) => setState(() => _filter = filter),
                   labelStyle: TextStyle(
                     fontSize: 11,
-                    color: _filter == filter ? Colors.white : AppColors.textGray,
+                    color: _filter == filter
+                        ? Colors.white
+                        : palette.textSecondary,
                     fontWeight: FontWeight.w600,
                   ),
                   selectedColor: AppColors.primaryPurple,
-                  backgroundColor: const Color(0xFFF0EEFA),
+                  backgroundColor: palette.progressTrack,
                   side: BorderSide.none,
                   showCheckmark: false,
                 ),
@@ -199,17 +213,17 @@ class _AdminUserRegistrationsScreenState
                   style: const TextStyle(fontSize: 11),
                   decoration: InputDecoration(
                     hintText: 'Search name or email',
-                    hintStyle: const TextStyle(
-                      color: Color(0xFFA6A9B7),
+                    hintStyle: TextStyle(
+                      color: palette.textSecondary,
                       fontSize: 10,
                     ),
-                    prefixIcon: const Icon(
+                    prefixIcon: Icon(
                       Icons.search,
                       size: 16,
-                      color: Color(0xFFA6A9B7),
+                      color: palette.textSecondary,
                     ),
                     filled: true,
-                    fillColor: const Color(0xFFF3F3F6),
+                    fillColor: palette.surface,
                     contentPadding: EdgeInsets.zero,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(20),
@@ -224,9 +238,9 @@ class _AdminUserRegistrationsScreenState
           Container(
             constraints: const BoxConstraints(minHeight: 200),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: palette.surface,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.borderLight),
+              border: Border.all(color: palette.border),
             ),
             child: _isLoading
                 ? const Padding(
@@ -236,53 +250,50 @@ class _AdminUserRegistrationsScreenState
                     ),
                   )
                 : _loadError != null
-                    ? Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          children: [
-                            Text(
-                              _loadError!,
-                              style: const TextStyle(
-                                color: AppColors.dangerRed,
-                                fontSize: 12,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            OutlinedButton(
-                              onPressed: _load,
-                              child: const Text('Retry'),
-                            ),
-                          ],
+                ? Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      children: [
+                        Text(
+                          _loadError!,
+                          style: TextStyle(color: palette.danger, fontSize: 12),
                         ),
-                      )
-                    : Column(
-                        children: [
-                          if (isWide) const _TableHeader(),
-                          if (visible.isEmpty)
-                            const _EmptyState()
-                          else
-                            for (final user in visible)
-                              _RegistrationRow(
-                                user: user,
-                                isWide: isWide,
-                                onReview: () => _review(user),
-                              ),
-                          const Divider(height: 1),
-                          Padding(
-                            padding: const EdgeInsets.all(14),
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                'Showing ${visible.length} of ${_users.length} registrations',
-                                style: const TextStyle(
-                                  color: AppColors.textGray,
-                                  fontSize: 10,
-                                ),
-                              ),
+                        const SizedBox(height: 10),
+                        OutlinedButton(
+                          onPressed: _load,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  )
+                : Column(
+                    children: [
+                      if (isWide) const _TableHeader(),
+                      if (visible.isEmpty)
+                        const _EmptyState()
+                      else
+                        for (final user in visible)
+                          _RegistrationRow(
+                            user: user,
+                            isWide: isWide,
+                            onReview: () => _review(user),
+                          ),
+                      const Divider(height: 1),
+                      Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'Showing ${visible.length} of ${_users.length} registrations',
+                            style: TextStyle(
+                              color: palette.textSecondary,
+                              fontSize: 10,
                             ),
                           ),
-                        ],
+                        ),
                       ),
+                    ],
+                  ),
           ),
         ],
       ),
@@ -300,25 +311,61 @@ class _TableHeader extends StatelessWidget {
   const _TableHeader();
 
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        color: const Color(0xFFFBFBFD),
-        child: const Row(
-          children: [
-            Expanded(flex: 2, child: Text('NAME', style: _headerStyle)),
-            Expanded(flex: 2, child: Text('EMAIL', style: _headerStyle)),
-            Expanded(child: Text('ID TYPE', style: _headerStyle)),
-            Expanded(child: Text('REGISTERED', style: _headerStyle)),
-            Expanded(child: Text('STATUS', style: _headerStyle)),
-            SizedBox(width: 90, child: Text('ACTION', style: _headerStyle)),
-          ],
+  Widget build(BuildContext context) {
+    final palette = FairTixPalette.of(context);
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          color: palette.progressTrack,
+          child: Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: Text(
+                  'NAME',
+                  style: _headerStyle.copyWith(color: palette.textSecondary),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Text(
+                  'EMAIL',
+                  style: _headerStyle.copyWith(color: palette.textSecondary),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  'ID TYPE',
+                  style: _headerStyle.copyWith(color: palette.textSecondary),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  'REGISTERED',
+                  style: _headerStyle.copyWith(color: palette.textSecondary),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  'STATUS',
+                  style: _headerStyle.copyWith(color: palette.textSecondary),
+                ),
+              ),
+              SizedBox(
+                width: 90,
+                child: Text(
+                  'ACTION',
+                  style: _headerStyle.copyWith(color: palette.textSecondary),
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
-      const Divider(height: 1),
-    ],
-  );
+        const Divider(height: 1),
+      ],
+    );
+  }
 }
 
 class _RegistrationRow extends StatelessWidget {
@@ -338,7 +385,9 @@ class _RegistrationRow extends StatelessWidget {
     final registered = user.createdAt != null
         ? formatFriendlyDate(user.createdAt!)
         : '\u2014';
-    final idType = user.idType?.trim().isNotEmpty == true ? user.idType! : '\u2014';
+    final idType = user.idType?.trim().isNotEmpty == true
+        ? user.idType!
+        : '\u2014';
 
     final action = TextButton(
       // Nothing to look at until an ID has been uploaded.
@@ -412,7 +461,10 @@ class _RegistrationRow extends StatelessWidget {
             flex: 2,
             child: Text(
               user.fullName,
-              style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+              ),
               overflow: TextOverflow.ellipsis,
             ),
           ),

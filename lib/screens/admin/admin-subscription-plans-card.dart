@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/subscription_plan.dart';
 import '../../services/subscription_plan_service.dart';
+import '../../theme/fairtix_palette.dart';
 import '../organizer/app_colors.dart';
 
 /// Admin > Platform Settings > Subscription Plans.
@@ -95,7 +96,9 @@ class _AdminSubscriptionPlansCardState
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   /// Checks every field (the server checks again) and builds the plans in
@@ -134,7 +137,11 @@ class _AdminSubscriptionPlansCardState
           name: name,
           monthlyFee: fee,
           feeRate: double.parse((ratePercent / 100).toStringAsFixed(4)),
-          maxEventsPerMonth: _parseLimit(d.events.text, name, 'events per month'),
+          maxEventsPerMonth: _parseLimit(
+            d.events.text,
+            name,
+            'events per month',
+          ),
           maxTicketsPerDay: _parseLimit(
             d.tickets.text,
             name,
@@ -193,11 +200,12 @@ class _AdminSubscriptionPlansCardState
 
   @override
   Widget build(BuildContext context) {
+    final palette = FairTixPalette.of(context);
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: palette.surface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.borderLight),
+        border: Border.all(color: palette.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -220,45 +228,44 @@ class _AdminSubscriptionPlansCardState
                   ),
                 ),
                 const SizedBox(width: 8),
-                const Text(
+                Text(
                   'Subscription Plans',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                  style: TextStyle(
+                    color: palette.textPrimary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ],
             ),
           ),
-          const Divider(
-            height: 1,
-            indent: 12,
-            endIndent: 12,
-            color: Color(0xFFE9D5FF),
-          ),
+          Divider(height: 1, indent: 12, endIndent: 12, color: palette.border),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 9, 12, 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
+                Text(
                   'The plans organizers can buy through PayMongo. Price, fee '
                   'rate and limits here are what is charged and enforced. '
                   'Leave a limit blank for unlimited.',
-                  style: TextStyle(color: AppColors.textGray, fontSize: 9),
+                  style: TextStyle(color: palette.textSecondary, fontSize: 9),
                 ),
                 const SizedBox(height: 14),
                 _buildBody(),
               ],
             ),
           ),
-          const Divider(height: 1, color: AppColors.borderLight),
+          Divider(height: 1, color: palette.border),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
             child: Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Price changes apply to new purchases. Switched-off plans '
                     'stay with current subscribers.',
-                    style: TextStyle(color: AppColors.textGray, fontSize: 8),
+                    style: TextStyle(color: palette.textSecondary, fontSize: 8),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -315,16 +322,17 @@ class _AdminSubscriptionPlansCardState
   }
 
   Widget _buildBody() {
+    final palette = FairTixPalette.of(context);
     if (_loading) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 24),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
         child: Center(
           child: SizedBox(
             width: 22,
             height: 22,
             child: CircularProgressIndicator(
               strokeWidth: 2.2,
-              color: AppColors.primaryPurple,
+              color: palette.primary,
             ),
           ),
         ),
@@ -336,7 +344,7 @@ class _AdminSubscriptionPlansCardState
           Text(
             _loadError!,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.dangerRed, fontSize: 10),
+            style: TextStyle(color: palette.danger, fontSize: 10),
           ),
           const SizedBox(height: 8),
           TextButton(onPressed: _load, child: const Text('Try again')),
@@ -344,12 +352,12 @@ class _AdminSubscriptionPlansCardState
       );
     }
     if (_drafts.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 16),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
         child: Text(
           'No plans yet. Use "Add Plan" to create one.',
           textAlign: TextAlign.center,
-          style: TextStyle(color: AppColors.textGray, fontSize: 10),
+          style: TextStyle(color: palette.textSecondary, fontSize: 10),
         ),
       );
     }
@@ -365,13 +373,14 @@ class _AdminSubscriptionPlansCardState
   }
 
   Widget _planEditor(int index, _PlanDraft d) {
+    final palette = FairTixPalette.of(context);
     final title = d.name.text.trim().isEmpty ? 'New plan' : d.name.text.trim();
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: d.isActive ? const Color(0xFFFAFAFD) : const Color(0xFFF3F3F6),
+        color: d.isActive ? palette.progressTrack : palette.background,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.borderLight),
+        border: Border.all(color: palette.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -381,7 +390,8 @@ class _AdminSubscriptionPlansCardState
               Expanded(
                 child: Text(
                   d.id == null ? '$title (not saved yet)' : title,
-                  style: const TextStyle(
+                  style: TextStyle(
+                    color: palette.textPrimary,
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
                   ),
@@ -419,8 +429,8 @@ class _AdminSubscriptionPlansCardState
                   fontSize: 9,
                   fontWeight: FontWeight.w700,
                   color: d.isActive
-                      ? AppColors.primaryPurple
-                      : AppColors.textGray,
+                      ? palette.accentLabel
+                      : palette.textSecondary,
                 ),
               ),
               Switch(
@@ -442,18 +452,8 @@ class _AdminSubscriptionPlansCardState
                 width: 200,
                 onChanged: (_) => setState(() {}),
               ),
-              _field(
-                'Monthly price',
-                d.fee,
-                prefix: '₱ ',
-                number: true,
-              ),
-              _field(
-                'Platform fee',
-                d.rate,
-                suffix: ' %',
-                number: true,
-              ),
+              _field('Monthly price', d.fee, prefix: '₱ ', number: true),
+              _field('Platform fee', d.rate, suffix: ' %', number: true),
               _field(
                 'Events / month',
                 d.events,
@@ -519,6 +519,7 @@ class _AdminSubscriptionPlansCardState
     double width = 150,
     ValueChanged<String>? onChanged,
   }) {
+    final palette = FairTixPalette.of(context);
     return SizedBox(
       width: width,
       child: TextField(
@@ -527,7 +528,11 @@ class _AdminSubscriptionPlansCardState
         keyboardType: (number || whole)
             ? TextInputType.numberWithOptions(decimal: number)
             : TextInputType.text,
-        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+        style: TextStyle(
+          color: palette.textPrimary,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+        ),
         decoration: _decoration(
           label,
           hint: hint,
@@ -544,24 +549,25 @@ class _AdminSubscriptionPlansCardState
     String? prefix,
     String? suffix,
   }) {
+    final palette = FairTixPalette.of(context);
     return InputDecoration(
       isDense: true,
       labelText: label,
-      labelStyle: const TextStyle(color: AppColors.textGray, fontSize: 10),
+      labelStyle: TextStyle(color: palette.textSecondary, fontSize: 10),
       hintText: hint,
-      hintStyle: const TextStyle(color: Color(0xFFA6A9B7), fontSize: 10),
+      hintStyle: TextStyle(color: palette.textSecondary, fontSize: 10),
       prefixText: prefix,
       suffixText: suffix,
       filled: true,
-      fillColor: Colors.white,
+      fillColor: palette.surface,
       contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(5),
-        borderSide: const BorderSide(color: AppColors.borderLight),
+        borderSide: BorderSide(color: palette.border),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(5),
-        borderSide: const BorderSide(color: AppColors.borderLight),
+        borderSide: BorderSide(color: palette.border),
       ),
     );
   }

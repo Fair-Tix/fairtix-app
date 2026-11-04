@@ -4,7 +4,9 @@ import '../../models/admin_user_summary.dart';
 import '../../services/admin_auth_service.dart';
 import '../../services/admin_session.dart';
 import '../../services/admin_user_service.dart';
+import '../../theme/fairtix_palette.dart';
 import '../../widgets/admin_document_viewer.dart';
+import '../../widgets/admin_shell.dart';
 import '../organizer/app_colors.dart';
 import 'admin-dashboard.dart';
 import 'admin-login.dart';
@@ -53,7 +55,9 @@ class _AdminOrganizerApplicationsScreenState
       _loadError = null;
     });
     try {
-      final users = await AdminUserService.instance.fetchUsers(role: 'organizer');
+      final users = await AdminUserService.instance.fetchUsers(
+        role: 'organizer',
+      );
       if (!mounted) return;
       setState(() {
         _applications = users;
@@ -76,7 +80,9 @@ class _AdminOrganizerApplicationsScreenState
       _ => null,
     };
     if (filterStatus == null) return _applications;
-    return _applications.where((a) => a.idVerificationStatus == filterStatus).toList();
+    return _applications
+        .where((a) => a.idVerificationStatus == filterStatus)
+        .toList();
   }
 
   Future<void> _reviewApplication(AdminUserSummary applicant) async {
@@ -118,7 +124,9 @@ class _AdminOrganizerApplicationsScreenState
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          status == 'verified' ? '$label has been approved.' : '$label\'s application was rejected.',
+          status == 'verified'
+              ? '$label has been approved.'
+              : '$label\'s application was rejected.',
         ),
       ),
     );
@@ -127,32 +135,16 @@ class _AdminOrganizerApplicationsScreenState
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width >= 900;
-    return Scaffold(
-      backgroundColor: const Color(0xFFF9F9FC),
-      drawer: isWide ? null : Drawer(child: _buildSidebar()),
-      body: Row(
-        children: [
-          if (isWide) SizedBox(width: 180, child: _buildSidebar()),
-          Expanded(
-            child: Column(
-              children: [
-                _buildTopBar(isWide),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.all(isWide ? 18 : 14),
-                    child: _buildContent(isWide),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return AdminShell(
+      active: AdminNavItem.organizerApplications,
+      title: 'Applications',
+      body: _buildContent(isWide),
     );
   }
 
   Widget _buildSidebar() {
-    final currentEmail = AdminSession.instance.currentEmail ?? 'admin@fairtix.com';
+    final currentEmail =
+        AdminSession.instance.currentEmail ?? 'admin@fairtix.com';
     final items = [
       (Icons.grid_view_rounded, 'Dashboard'),
       (Icons.business_outlined, 'Organizer Applications'),
@@ -209,7 +201,11 @@ class _AdminOrganizerApplicationsScreenState
                   const CircleAvatar(
                     radius: 15,
                     backgroundColor: Color(0xFFE8E6F1),
-                    child: Icon(Icons.person, size: 17, color: AppColors.textGray),
+                    child: Icon(
+                      Icons.person,
+                      size: 17,
+                      color: AppColors.textGray,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -217,13 +213,23 @@ class _AdminOrganizerApplicationsScreenState
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text('Admin', style: AppTextStyles.label),
-                        Text(currentEmail, style: const TextStyle(color: AppColors.textGray, fontSize: 9)),
+                        Text(
+                          currentEmail,
+                          style: const TextStyle(
+                            color: AppColors.textGray,
+                            fontSize: 9,
+                          ),
+                        ),
                       ],
                     ),
                   ),
                   IconButton(
                     onPressed: _confirmLogout,
-                    icon: const Icon(Icons.logout, size: 17, color: AppColors.textGray),
+                    icon: const Icon(
+                      Icons.logout,
+                      size: 17,
+                      color: AppColors.textGray,
+                    ),
                     tooltip: 'Log out',
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
@@ -256,7 +262,11 @@ class _AdminOrganizerApplicationsScreenState
             ),
           Text('Organizer Applications', style: AppTextStyles.label),
           const Spacer(),
-          const Icon(Icons.notifications_none, size: 19, color: AppColors.textGray),
+          const Icon(
+            Icons.notifications_none,
+            size: 19,
+            color: AppColors.textGray,
+          ),
           const SizedBox(width: 14),
           const CircleAvatar(
             radius: 14,
@@ -277,13 +287,19 @@ class _AdminOrganizerApplicationsScreenState
   }
 
   Widget _buildContent(bool isWide) {
+    final palette = FairTixPalette.of(context);
     final filtered = _filtered;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
           children: [
-            const Expanded(child: Text('Organizer Applications', style: AppTextStyles.h2)),
+            Expanded(
+              child: Text(
+                'Organizer Applications',
+                style: AppTextStyles.h2.copyWith(color: palette.textPrimary),
+              ),
+            ),
             IconButton(
               onPressed: _isLoading ? null : _loadApplications,
               icon: const Icon(Icons.refresh, size: 18),
@@ -303,11 +319,13 @@ class _AdminOrganizerApplicationsScreenState
                 onSelected: (_) => setState(() => _filterIndex = index),
                 labelStyle: TextStyle(
                   fontSize: 11,
-                  color: _filterIndex == index ? Colors.white : AppColors.textGray,
+                  color: _filterIndex == index
+                      ? Colors.white
+                      : palette.textSecondary,
                   fontWeight: FontWeight.w600,
                 ),
                 selectedColor: AppColors.primaryPurple,
-                backgroundColor: const Color(0xFFF0EEFA),
+                backgroundColor: palette.progressTrack,
                 side: BorderSide.none,
                 showCheckmark: false,
               ),
@@ -317,44 +335,70 @@ class _AdminOrganizerApplicationsScreenState
         Container(
           constraints: const BoxConstraints(minHeight: 200),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: palette.surface,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.borderLight),
+            border: Border.all(color: palette.border),
           ),
           child: _isLoading
               ? const Padding(
                   padding: EdgeInsets.all(32),
-                  child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+                  child: Center(
+                    child: CircularProgressIndicator(strokeWidth: 2.4),
+                  ),
                 )
               : _loadError != null
-                  ? Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        children: [
-                          Text(_loadError!, style: const TextStyle(color: AppColors.dangerRed, fontSize: 12)),
-                          const SizedBox(height: 10),
-                          OutlinedButton(onPressed: _loadApplications, child: const Text('Retry')),
-                        ],
+              ? Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      Text(
+                        _loadError!,
+                        style: const TextStyle(
+                          color: AppColors.dangerRed,
+                          fontSize: 12,
+                        ),
                       ),
-                    )
-                  : isWide
-                      ? _buildWideTable(filtered)
-                      : _buildCompactList(filtered),
+                      const SizedBox(height: 10),
+                      OutlinedButton(
+                        onPressed: _loadApplications,
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                )
+              : isWide
+              ? _buildWideTable(filtered)
+              : _buildCompactList(filtered),
         ),
       ],
     );
   }
 
   Widget _buildWideTable(List<AdminUserSummary> filtered) {
-    const headers = ['Applicant Name', 'Email', 'Organization', 'Submitted', 'Documents', 'Status', ''];
+    final palette = FairTixPalette.of(context);
+    const headers = [
+      'Applicant Name',
+      'Email',
+      'Organization',
+      'Submitted',
+      'Documents',
+      'Status',
+      '',
+    ];
     return Column(
       children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          color: const Color(0xFFFBFBFD),
+          color: palette.progressTrack,
           child: Row(
             children: [
-              for (final header in headers) Expanded(child: Text(header, style: _headerStyle)),
+              for (final header in headers)
+                Expanded(
+                  child: Text(
+                    header,
+                    style: _headerStyle.copyWith(color: palette.textSecondary),
+                  ),
+                ),
             ],
           ),
         ),
@@ -362,13 +406,14 @@ class _AdminOrganizerApplicationsScreenState
         if (filtered.isEmpty)
           const _EmptyApplications()
         else
-          for (final applicant in filtered) _ApplicationRowWide(applicant: applicant, screen: this),
+          for (final applicant in filtered)
+            _ApplicationRowWide(applicant: applicant, screen: this),
         const Divider(height: 1),
         Padding(
           padding: const EdgeInsets.all(14),
           child: Text(
             'Showing ${filtered.length} of ${_applications.length} applications',
-            style: const TextStyle(color: AppColors.textGray, fontSize: 10),
+            style: TextStyle(color: palette.textSecondary, fontSize: 10),
           ),
         ),
       ],
@@ -377,10 +422,16 @@ class _AdminOrganizerApplicationsScreenState
 
   Widget _buildCompactList(List<AdminUserSummary> filtered) {
     if (filtered.isEmpty) {
-      return const Padding(padding: EdgeInsets.all(18), child: _EmptyApplications());
+      return const Padding(
+        padding: EdgeInsets.all(18),
+        child: _EmptyApplications(),
+      );
     }
     return Column(
-      children: [for (final applicant in filtered) _ApplicationRowCompact(applicant: applicant, screen: this)],
+      children: [
+        for (final applicant in filtered)
+          _ApplicationRowCompact(applicant: applicant, screen: this),
+      ],
     );
   }
 
@@ -391,8 +442,14 @@ class _AdminOrganizerApplicationsScreenState
         title: const Text('Log out?'),
         content: const Text('Are you sure you want to Log Out?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Log out')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Log out'),
+          ),
         ],
       ),
     );
@@ -402,7 +459,11 @@ class _AdminOrganizerApplicationsScreenState
   }
 }
 
-const _headerStyle = TextStyle(color: AppColors.textGray, fontSize: 9, fontWeight: FontWeight.w700);
+const _headerStyle = TextStyle(
+  color: AppColors.textGray,
+  fontSize: 9,
+  fontWeight: FontWeight.w700,
+);
 
 class _ApplicationStatusBadge extends StatelessWidget {
   const _ApplicationStatusBadge({required this.status});
@@ -410,15 +471,26 @@ class _ApplicationStatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = FairTixPalette.of(context);
     final (label, color, bg) = switch (status) {
-      'verified' => ('Approved', AppColors.successGreen, AppColors.successGreenBg),
-      'rejected' => ('Rejected', AppColors.dangerRed, AppColors.dangerRedBg),
-      _ => ('Pending', AppColors.warningOrange, AppColors.warningOrangeBg),
+      'verified' => ('Approved', palette.success, palette.successSurface),
+      'rejected' => ('Rejected', palette.danger, palette.dangerSurface),
+      _ => ('Pending', palette.warning, palette.warningSurface),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999)),
-      child: Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w700)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
     );
   }
 }
@@ -430,33 +502,71 @@ class _ApplicationRowWide extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final submitted = applicant.createdAt != null ? formatFriendlyDate(applicant.createdAt!) : '\u2014';
+    final submitted = applicant.createdAt != null
+        ? formatFriendlyDate(applicant.createdAt!)
+        : '\u2014';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.borderLight))),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
+      ),
       child: Row(
         children: [
-          Expanded(child: Text(applicant.fullName, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700))),
-          Expanded(child: Text(applicant.email, style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis)),
           Expanded(
             child: Text(
-              applicant.organizationName?.trim().isNotEmpty == true ? applicant.organizationName! : '\u2014',
+              applicant.fullName,
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              applicant.email,
               style: const TextStyle(fontSize: 11),
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          Expanded(child: Text(submitted, style: const TextStyle(fontSize: 10.5, color: AppColors.textGray))),
+          Expanded(
+            child: Text(
+              applicant.organizationName?.trim().isNotEmpty == true
+                  ? applicant.organizationName!
+                  : '\u2014',
+              style: const TextStyle(fontSize: 11),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              submitted,
+              style: const TextStyle(fontSize: 10.5, color: AppColors.textGray),
+            ),
+          ),
           Expanded(
             child: TextButton(
-              onPressed: applicant.canReview ? () => screen._reviewApplication(applicant) : null,
-              style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero, alignment: Alignment.centerLeft),
+              onPressed: applicant.canReview
+                  ? () => screen._reviewApplication(applicant)
+                  : null,
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                alignment: Alignment.centerLeft,
+              ),
               child: Text(
                 applicant.idVerificationStatus == 'pending' ? 'Review' : 'View',
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ),
-          Expanded(child: _ApplicationStatusBadge(status: applicant.idVerificationStatus)),
+          Expanded(
+            child: _ApplicationStatusBadge(
+              status: applicant.idVerificationStatus,
+            ),
+          ),
           const SizedBox(width: 12),
         ],
       ),
@@ -471,10 +581,14 @@ class _ApplicationRowCompact extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final submitted = applicant.createdAt != null ? formatFriendlyDate(applicant.createdAt!) : '\u2014';
+    final submitted = applicant.createdAt != null
+        ? formatFriendlyDate(applicant.createdAt!)
+        : '\u2014';
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.borderLight))),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -484,8 +598,20 @@ class _ApplicationRowCompact extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(applicant.fullName, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
-                    Text(applicant.email, style: const TextStyle(fontSize: 10.5, color: AppColors.textGray)),
+                    Text(
+                      applicant.fullName,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      applicant.email,
+                      style: const TextStyle(
+                        fontSize: 10.5,
+                        color: AppColors.textGray,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -494,18 +620,34 @@ class _ApplicationRowCompact extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            applicant.organizationName?.trim().isNotEmpty == true ? applicant.organizationName! : 'No organization on file',
+            applicant.organizationName?.trim().isNotEmpty == true
+                ? applicant.organizationName!
+                : 'No organization on file',
             style: const TextStyle(fontSize: 11),
           ),
           const SizedBox(height: 4),
-          Text('Applied $submitted', style: const TextStyle(fontSize: 10, color: AppColors.textGray)),
+          Text(
+            'Applied $submitted',
+            style: const TextStyle(fontSize: 10, color: AppColors.textGray),
+          ),
           const SizedBox(height: 8),
           TextButton(
-            onPressed: applicant.canReview ? () => screen._reviewApplication(applicant) : null,
-            style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero, alignment: Alignment.centerLeft),
+            onPressed: applicant.canReview
+                ? () => screen._reviewApplication(applicant)
+                : null,
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              alignment: Alignment.centerLeft,
+            ),
             child: Text(
-              applicant.idVerificationStatus == 'pending' ? 'Review Application' : 'View Documents',
-              style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
+              applicant.idVerificationStatus == 'pending'
+                  ? 'Review Application'
+                  : 'View Documents',
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],
@@ -518,44 +660,64 @@ class _EmptyApplications extends StatelessWidget {
   const _EmptyApplications();
   @override
   Widget build(BuildContext context) => const Padding(
-        padding: EdgeInsets.all(32),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.inbox_outlined, size: 34, color: Color(0xFFD9D7E4)),
-              SizedBox(height: 10),
-              Text('No matching applications', style: TextStyle(color: AppColors.textGray, fontSize: 12)),
-              SizedBox(height: 4),
-              Text(
-                'Try a different filter or check back once organizers apply.',
-                style: TextStyle(color: Color(0xFFA6A9B7), fontSize: 10),
-              ),
-            ],
+    padding: EdgeInsets.all(32),
+    child: Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.inbox_outlined, size: 34, color: Color(0xFFD9D7E4)),
+          SizedBox(height: 10),
+          Text(
+            'No matching applications',
+            style: TextStyle(color: AppColors.textGray, fontSize: 12),
           ),
-        ),
-      );
+          SizedBox(height: 4),
+          Text(
+            'Try a different filter or check back once organizers apply.',
+            style: TextStyle(color: Color(0xFFA6A9B7), fontSize: 10),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _AdminLogo extends StatelessWidget {
   const _AdminLogo();
   @override
   Widget build(BuildContext context) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 22,
-            height: 22,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(color: AppColors.primaryPurple, borderRadius: BorderRadius.circular(5)),
-            child: const Icon(Icons.confirmation_number_outlined, color: Colors.white, size: 14),
-          ),
-          const SizedBox(width: 6),
-          const Text('FairTix', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, fontStyle: FontStyle.italic)),
-          const SizedBox(width: 3),
-          const Text('ADMIN', style: TextStyle(fontSize: 8, color: AppColors.textGray)),
-        ],
-      );
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        width: 22,
+        height: 22,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: AppColors.primaryPurple,
+          borderRadius: BorderRadius.circular(5),
+        ),
+        child: const Icon(
+          Icons.confirmation_number_outlined,
+          color: Colors.white,
+          size: 14,
+        ),
+      ),
+      const SizedBox(width: 6),
+      const Text(
+        'FairTix',
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w800,
+          fontStyle: FontStyle.italic,
+        ),
+      ),
+      const SizedBox(width: 3),
+      const Text(
+        'ADMIN',
+        style: TextStyle(fontSize: 8, color: AppColors.textGray),
+      ),
+    ],
+  );
 }
 
 class _SidebarItem extends StatelessWidget {
@@ -563,7 +725,12 @@ class _SidebarItem extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
-  const _SidebarItem({required this.icon, required this.label, required this.selected, required this.onTap});
+  const _SidebarItem({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -578,7 +745,11 @@ class _SidebarItem extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
             child: Row(
               children: [
-                Icon(icon, size: 16, color: selected ? Colors.white : AppColors.textDark),
+                Icon(
+                  icon,
+                  size: 16,
+                  color: selected ? Colors.white : AppColors.textDark,
+                ),
                 const SizedBox(width: 9),
                 Expanded(
                   child: Text(

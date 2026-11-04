@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../services/admin_session.dart';
 import '../../services/admin_user_service.dart';
+import '../../theme/fairtix_palette.dart';
+import '../../widgets/admin_shell.dart';
 import '../organizer/app_colors.dart';
 import 'admin-accounts.dart';
 import 'admin-events-tickets.dart';
@@ -82,27 +84,10 @@ class _AdminAnnouncementScreenState extends State<AdminAnnouncementScreen> {
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width >= 900;
-    return Scaffold(
-      backgroundColor: const Color(0xFFF9F9FC),
-      drawer: isWide ? null : Drawer(child: _buildSidebar()),
-      body: Row(
-        children: [
-          if (isWide) SizedBox(width: 180, child: _buildSidebar()),
-          Expanded(
-            child: Column(
-              children: [
-                _buildTopBar(isWide),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.all(isWide ? 18 : 14),
-                    child: _buildContent(isWide),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return AdminShell(
+      active: AdminNavItem.dashboard,
+      title: 'Platform Announcement',
+      body: _buildContent(isWide),
     );
   }
 
@@ -139,10 +124,8 @@ class _AdminAnnouncementScreenState extends State<AdminAnnouncementScreen> {
             _SidebarItem(
               icon: Icons.people_outline,
               label: 'Accounts',
-              onTap: () => adminPushReplacement(
-                context,
-                const AdminAccountsScreen(),
-              ),
+              onTap: () =>
+                  adminPushReplacement(context, const AdminAccountsScreen()),
             ),
             _SidebarItem(
               icon: Icons.calendar_today_outlined,
@@ -163,10 +146,8 @@ class _AdminAnnouncementScreenState extends State<AdminAnnouncementScreen> {
             _SidebarItem(
               icon: Icons.shield_outlined,
               label: 'Fraud Alerts',
-              onTap: () => adminPushReplacement(
-                context,
-                const AdminFraudAlertsScreen(),
-              ),
+              onTap: () =>
+                  adminPushReplacement(context, const AdminFraudAlertsScreen()),
             ),
             _SidebarItem(
               icon: Icons.bar_chart_rounded,
@@ -187,10 +168,8 @@ class _AdminAnnouncementScreenState extends State<AdminAnnouncementScreen> {
             _SidebarItem(
               icon: Icons.person_outline,
               label: 'Profile',
-              onTap: () => adminPushReplacement(
-                context,
-                const AdminProfileScreen(),
-              ),
+              onTap: () =>
+                  adminPushReplacement(context, const AdminProfileScreen()),
             ),
             const Spacer(),
             const Divider(height: 1, color: AppColors.borderLight),
@@ -313,35 +292,43 @@ class _AdminAnnouncementScreenState extends State<AdminAnnouncementScreen> {
   }
 
   Widget _buildContent(bool isWide) {
+    final palette = FairTixPalette.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Platform Announcement', style: AppTextStyles.h2),
+        Text(
+          'Platform Announcement',
+          style: AppTextStyles.h2.copyWith(color: palette.textPrimary),
+        ),
         const SizedBox(height: 3),
-        const Text('', style: AppTextStyles.bodyGray),
         const SizedBox(height: 18),
         ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 585),
           child: Container(
             padding: EdgeInsets.all(isWide ? 26 : 18),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: palette.surface,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.borderLight),
+              border: Border.all(color: palette.border),
             ),
             child: Form(
               key: _formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
+                  Text(
                     'New Platform Announcement',
-                    style: AppTextStyles.h3,
+                    style: AppTextStyles.h3.copyWith(
+                      color: palette.textPrimary,
+                    ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     'Broadcast a message to all FairTix users and organizers',
-                    style: TextStyle(color: AppColors.textGray, fontSize: 10),
+                    style: TextStyle(
+                      color: palette.textSecondary,
+                      fontSize: 10,
+                    ),
                   ),
                   const SizedBox(height: 22),
                   _label('SUBJECT'),
@@ -380,19 +367,19 @@ class _AdminAnnouncementScreenState extends State<AdminAnnouncementScreen> {
                     spacing: 14,
                     runSpacing: 12,
                     children: [
-                      const Row(
+                      Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
                             Icons.people_alt_outlined,
                             size: 14,
-                            color: AppColors.textGray,
+                            color: palette.textSecondary,
                           ),
                           SizedBox(width: 6),
                           Text(
                             'Audience: All verified users & organizers',
                             style: TextStyle(
-                              color: AppColors.textGray,
+                              color: palette.textSecondary,
                               fontSize: 10,
                             ),
                           ),
@@ -438,22 +425,22 @@ class _AdminAnnouncementScreenState extends State<AdminAnnouncementScreen> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: const Color(0xFFFFFBEB),
-              border: Border.all(color: const Color(0xFFFCD34D)),
+              color: palette.warningSurface,
+              border: Border.all(color: palette.warningBorder),
               borderRadius: BorderRadius.circular(7),
             ),
-            child: const Row(
+            child: Row(
               children: [
                 Icon(
                   Icons.volume_off_outlined,
                   size: 16,
-                  color: Color(0xFFD97706),
+                  color: palette.warning,
                 ),
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'This will be sent platform-wide to all verified users and organizers.',
-                    style: TextStyle(color: Color(0xFF92400E), fontSize: 10),
+                    style: TextStyle(color: palette.warning, fontSize: 10),
                   ),
                 ),
               ],
@@ -466,30 +453,35 @@ class _AdminAnnouncementScreenState extends State<AdminAnnouncementScreen> {
 
   Widget _label(String text) => Text(
     text,
-    style: const TextStyle(
-      color: AppColors.textGray,
+    style: TextStyle(
+      color: FairTixPalette.of(context).textSecondary,
       fontSize: 10,
       fontWeight: FontWeight.w700,
     ),
   );
 
-  InputDecoration _inputDecoration(String hint) => InputDecoration(
-    hintText: hint,
-    hintStyle: const TextStyle(color: Color(0xFFA6A9B7), fontSize: 11),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(7),
-      borderSide: const BorderSide(color: AppColors.borderLight),
-    ),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(7),
-      borderSide: const BorderSide(color: AppColors.borderLight),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(7),
-      borderSide: const BorderSide(color: AppColors.primaryPurple),
-    ),
-  );
+  InputDecoration _inputDecoration(String hint) {
+    final palette = FairTixPalette.of(context);
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: TextStyle(color: palette.textSecondary, fontSize: 11),
+      filled: true,
+      fillColor: palette.surface,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(7),
+        borderSide: BorderSide(color: palette.border),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(7),
+        borderSide: BorderSide(color: palette.border),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(7),
+        borderSide: BorderSide(color: palette.primary),
+      ),
+    );
+  }
 
   Future<void> _confirmLogout() async {
     final shouldLogout = await showDialog<bool>(

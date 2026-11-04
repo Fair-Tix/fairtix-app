@@ -14,6 +14,9 @@ import '../screens/admin/admin-user-registrations.dart';
 import 'notification_bell.dart';
 import '../screens/admin/admin-route.dart';
 import '../screens/organizer/app_colors.dart';
+import '../theme/fairtix_palette.dart';
+import '../theme/theme_controller.dart';
+import 'top_glow_background.dart';
 import '../services/admin_auth_service.dart';
 import '../services/admin_session.dart';
 
@@ -49,6 +52,40 @@ Widget _pageFor(AdminNavItem item) => switch (item) {
   AdminNavItem.profile => const AdminProfileScreen(),
 };
 
+Future<void> _logoutAdmin(BuildContext context) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Log out?'),
+      content: const Text('Are you sure you want to log out?'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Log out'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) return;
+  AdminAuthService.instance.logout();
+  adminPushAndRemoveUntil(context, const AdminLoginScreen());
+}
+
+String _adminNavLabel(AdminNavItem item) => switch (item) {
+  AdminNavItem.organizerApplications => 'Applications',
+  AdminNavItem.userRegistrations => 'Registrations',
+  AdminNavItem.eventsTickets => 'Events',
+  AdminNavItem.resaleMonitoring => 'Resale',
+  AdminNavItem.fraudAlerts => 'Alerts',
+  AdminNavItem.revenueReports => 'Reports',
+  AdminNavItem.platformSettings => 'Settings',
+  _ => item.label,
+};
+
 /// The frame every admin screen shares: a sidebar on wide windows (a drawer
 /// on narrow ones), a top bar with the page [title], and a scrolling
 /// [body]. Replaces the ~200 lines of sidebar / top bar / logout code that
@@ -71,25 +108,47 @@ class AdminShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width >= 900;
+    final width = MediaQuery.of(context).size.width;
+    final isWide = width >= 900;
+    final fullNav = width >= 1200;
+    final palette = FairTixPalette.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFFF9F9FC),
+      backgroundColor: palette.background,
       drawer: isWide ? null : Drawer(child: _Sidebar(active: active)),
-      body: Row(
+      body: Stack(
         children: [
-          if (isWide) SizedBox(width: 180, child: _Sidebar(active: active)),
-          Expanded(
-            child: Column(
-              children: [
-                _TopBar(title: title, isWide: isWide),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.all(isWide ? 18 : 14),
-                    child: body,
-                  ),
+          const TopGlowBackground(),
+          Row(
+            children: [
+              if (isWide && !fullNav)
+                SizedBox(width: 220, child: _Sidebar(active: active)),
+              Expanded(
+                child: Column(
+                  children: [
+                    _TopBar(
+                      title: title,
+                      isWide: isWide,
+                      fullNav: fullNav,
+                      active: active,
+                    ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: width >= 1200 ? 32 : (isWide ? 20 : 14),
+                          vertical: width >= 1200 ? 28 : 18,
+                        ),
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 1900),
+                            child: body,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ],
       ),
@@ -98,52 +157,163 @@ class AdminShell extends StatelessWidget {
 }
 
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.title, required this.isWide});
+  const _TopBar({
+    required this.title,
+    required this.isWide,
+    required this.fullNav,
+    required this.active,
+  });
 
   final String title;
   final bool isWide;
+  final bool fullNav;
+  final AdminNavItem active;
 
   @override
   Widget build(BuildContext context) {
     final email = AdminSession.instance.currentEmail ?? 'admin';
+    final palette = FairTixPalette.of(context);
     return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 18),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
+      height: fullNav ? 88 : 64,
+      padding: EdgeInsets.symmetric(horizontal: fullNav ? 32 : 18),
+      decoration: BoxDecoration(
+        color: palette.surface.withValues(alpha: 0.9),
+        border: Border(bottom: BorderSide(color: palette.border)),
       ),
       child: Row(
         children: [
           if (!isWide)
             Builder(
               builder: (context) => IconButton(
-                icon: const Icon(Icons.menu, size: 20),
+                icon: Icon(Icons.menu, color: palette.accentLabel),
                 onPressed: () => Scaffold.of(context).openDrawer(),
               ),
             ),
-          Expanded(
-            child: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.label,
+          const _AdminLogo(),
+          if (fullNav) ...[
+            const SizedBox(width: 28),
+            Expanded(child: _AdminNavPill(active: active)),
+            const SizedBox(width: 28),
+          ] else ...[
+            const Spacer(),
+            Flexible(
+              child: Text(
+                title,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: palette.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
-          ),
-          const NotificationBell(size: 19, color: AppColors.textGray),
-          const SizedBox(width: 8),
-          const CircleAvatar(
-            radius: 14,
-            backgroundColor: Color(0xFFE8E6F1),
-            child: Icon(Icons.person, size: 16, color: AppColors.textGray),
-          ),
-          if (isWide) ...[
-            const SizedBox(width: 8),
-            Text(
-              email,
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-            ),
+            const Spacer(),
           ],
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: palette.surface,
+              border: Border.all(color: palette.border),
+            ),
+            alignment: Alignment.center,
+            child: NotificationBell(
+              size: 20,
+              color: palette.accentLabel,
+              badgeBorderColor: palette.surface,
+            ),
+          ),
+          const SizedBox(width: 12),
+          PopupMenuButton<String>(
+            tooltip: 'Account menu',
+            onSelected: (value) {
+              if (value == 'profile') {
+                adminPushReplacement(context, const AdminProfileScreen());
+              } else if (value == 'theme') {
+                ThemeController.instance.toggle();
+              } else {
+                _logoutAdmin(context);
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: 'profile', child: Text('Profile')),
+              PopupMenuItem(
+                value: 'theme',
+                child: Row(
+                  children: [
+                    Icon(
+                      palette.isDark
+                          ? Icons.light_mode_outlined
+                          : Icons.dark_mode_outlined,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(palette.isDark ? 'Light mode' : 'Dark mode'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(value: 'logout', child: Text('Log out')),
+            ],
+            child: _AdminAvatar(email: email, color: palette.primary),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AdminAvatar extends StatelessWidget {
+  const _AdminAvatar({required this.email, required this.color});
+
+  final String email;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => CircleAvatar(
+    radius: 22,
+    backgroundColor: color,
+    child: Text(
+      email.isEmpty ? 'A' : email[0].toUpperCase(),
+      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+    ),
+  );
+}
+
+class _AdminNavPill extends StatelessWidget {
+  const _AdminNavPill({required this.active});
+
+  final AdminNavItem active;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = FairTixPalette.of(context);
+    return Container(
+      padding: const EdgeInsets.all(5),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: palette.border),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          for (final item in AdminNavItem.values.where(
+            (item) => item != AdminNavItem.profile,
+          ))
+            Flexible(
+              child: _SidebarItem(
+                icon: item.icon,
+                label: _adminNavLabel(item),
+                selected: item == active,
+                horizontal: true,
+                onTap: () {
+                  if (item != active) {
+                    adminPushReplacement(context, _pageFor(item));
+                  }
+                },
+              ),
+            ),
         ],
       ),
     );
@@ -156,33 +326,15 @@ class _Sidebar extends StatelessWidget {
   final AdminNavItem active;
 
   Future<void> _logout(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Log out?'),
-        content: const Text('Are you sure you want to Log Out?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Log out'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
-    AdminAuthService.instance.logout();
-    adminPushAndRemoveUntil(context, const AdminLoginScreen());
+    await _logoutAdmin(context);
   }
 
   @override
   Widget build(BuildContext context) {
     final email = AdminSession.instance.currentEmail ?? 'admin';
+    final palette = FairTixPalette.of(context);
     return Container(
-      color: const Color(0xFFF3F1FD),
+      color: palette.surface.withValues(alpha: 0.78),
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -191,7 +343,7 @@ class _Sidebar extends StatelessWidget {
               padding: EdgeInsets.fromLTRB(20, 18, 12, 18),
               child: _AdminLogo(),
             ),
-            const Divider(height: 1, color: AppColors.borderLight),
+            Divider(height: 1, color: palette.border),
             const SizedBox(height: 14),
             // Scrolls on short screens (landscape phones, small windows) so the
             // list can never overflow; the account footer stays pinned below.
@@ -213,18 +365,18 @@ class _Sidebar extends StatelessWidget {
                 ),
               ),
             ),
-            const Divider(height: 1, color: AppColors.borderLight),
+            Divider(height: 1, color: palette.border),
             Padding(
               padding: const EdgeInsets.all(14),
               child: Row(
                 children: [
-                  const CircleAvatar(
+                  CircleAvatar(
                     radius: 15,
-                    backgroundColor: Color(0xFFE8E6F1),
+                    backgroundColor: palette.progressTrack,
                     child: Icon(
                       Icons.person,
                       size: 17,
-                      color: AppColors.textGray,
+                      color: palette.textSecondary,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -232,12 +384,17 @@ class _Sidebar extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Admin', style: AppTextStyles.label),
+                        Text(
+                          'Admin',
+                          style: AppTextStyles.label.copyWith(
+                            color: palette.textPrimary,
+                          ),
+                        ),
                         Text(
                           email,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: AppColors.textGray,
+                          style: TextStyle(
+                            color: palette.textSecondary,
                             fontSize: 9,
                           ),
                         ),
@@ -246,10 +403,10 @@ class _Sidebar extends StatelessWidget {
                   ),
                   IconButton(
                     onPressed: () => _logout(context),
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.logout,
                       size: 17,
-                      color: AppColors.textGray,
+                      color: palette.textSecondary,
                     ),
                     tooltip: 'Log out',
                     padding: EdgeInsets.zero,
@@ -277,7 +434,7 @@ class _AdminLogo extends StatelessWidget {
         height: 22,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: AppColors.primaryPurple,
+          color: FairTixPalette.of(context).primary,
           borderRadius: BorderRadius.circular(5),
         ),
         child: const Icon(
@@ -287,18 +444,22 @@ class _AdminLogo extends StatelessWidget {
         ),
       ),
       const SizedBox(width: 6),
-      const Text(
+      Text(
         'FairTix',
         style: TextStyle(
+          color: FairTixPalette.of(context).textPrimary,
           fontSize: 16,
           fontWeight: FontWeight.w800,
           fontStyle: FontStyle.italic,
         ),
       ),
       const SizedBox(width: 3),
-      const Text(
+      Text(
         'ADMIN',
-        style: TextStyle(fontSize: 8, color: AppColors.textGray),
+        style: TextStyle(
+          fontSize: 8,
+          color: FairTixPalette.of(context).textSecondary,
+        ),
       ),
     ],
   );
@@ -310,46 +471,59 @@ class _SidebarItem extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.horizontal = false,
   });
 
   final IconData icon;
   final String label;
   final bool selected;
   final VoidCallback onTap;
+  final bool horizontal;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-    child: Material(
-      color: selected ? AppColors.primaryPurple : Colors.transparent,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                size: 16,
-                color: selected ? Colors.white : AppColors.textDark,
-              ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    color: selected ? Colors.white : AppColors.textDark,
-                    fontSize: 10,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+  Widget build(BuildContext context) {
+    final palette = FairTixPalette.of(context);
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: horizontal ? 2 : 10,
+        vertical: horizontal ? 0 : 3,
+      ),
+      child: Material(
+        color: selected ? palette.primary : Colors.transparent,
+        borderRadius: BorderRadius.circular(horizontal ? 999 : 12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(horizontal ? 999 : 12),
+          onTap: onTap,
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: horizontal ? 10 : 12,
+              vertical: horizontal ? 12 : 11,
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  size: 16,
+                  color: selected ? Colors.white : palette.textSecondary,
+                ),
+                SizedBox(width: horizontal ? 6 : 9),
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: selected ? Colors.white : palette.textSecondary,
+                      fontSize: horizontal ? 11 : 12,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }

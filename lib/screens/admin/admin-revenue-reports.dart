@@ -6,6 +6,7 @@ import '../../services/admin_report_service.dart';
 import '../../services/admin_resale_service.dart';
 import '../../services/admin_revenue_service.dart';
 import '../../services/csv_export.dart';
+import '../../theme/fairtix_palette.dart';
 import '../../services/pdf_export.dart';
 import '../../widgets/admin_shell.dart';
 import '../../widgets/admin_widgets.dart';
@@ -24,13 +25,24 @@ class AdminRevenueReportsScreen extends StatefulWidget {
   const AdminRevenueReportsScreen({super.key});
 
   @override
-  State<AdminRevenueReportsScreen> createState() => _AdminRevenueReportsScreenState();
+  State<AdminRevenueReportsScreen> createState() =>
+      _AdminRevenueReportsScreenState();
 }
 
 class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
   static const _monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
   ];
 
   String _range = 'This Month';
@@ -69,7 +81,10 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
         final monday = today.subtract(Duration(days: now.weekday - 1));
         return (monday, monday.add(const Duration(days: 7)));
       case 'This Month':
-        return (DateTime(now.year, now.month), DateTime(now.year, now.month + 1));
+        return (
+          DateTime(now.year, now.month),
+          DateTime(now.year, now.month + 1),
+        );
       default:
         final custom = _customRange;
         if (custom == null) return (null, null);
@@ -117,7 +132,10 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
     });
     try {
       final (from, to) = _rangeBounds();
-      final plans = await AdminRevenueService.instance.fetchByPlan(from: from, to: to);
+      final plans = await AdminRevenueService.instance.fetchByPlan(
+        from: from,
+        to: to,
+      );
       if (!mounted) return;
       setState(() => _plans = plans);
     } on AdminRevenueException catch (e) {
@@ -152,7 +170,9 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
     });
     try {
       final daily = await AdminOverviewService.instance.fetchDaily(days: 30);
-      final monthly = await AdminOverviewService.instance.fetchMonthly(DateTime.now().year);
+      final monthly = await AdminOverviewService.instance.fetchMonthly(
+        DateTime.now().year,
+      );
       if (!mounted) return;
       setState(() {
         _daily = daily;
@@ -166,7 +186,8 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
     }
   }
 
-  Future<void> _refreshAll() => Future.wait([_loadRevenue(), _loadRefunds(), _loadCharts()]);
+  Future<void> _refreshAll() =>
+      Future.wait([_loadRevenue(), _loadRefunds(), _loadCharts()]);
 
   // ── refunds ──────────────────────────────────────────────────────────
 
@@ -256,14 +277,16 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
   Future<void> _exportTransactions({required bool pdf}) => _exportReport(
     'transactions',
     'Transaction Report',
-    (from, to) => AdminReportService.instance.transactionReportRows(from: from, to: to),
+    (from, to) =>
+        AdminReportService.instance.transactionReportRows(from: from, to: to),
     pdf: pdf,
   );
 
   Future<void> _exportRevenue({required bool pdf}) => _exportReport(
     'revenue',
     'Revenue Report',
-    (from, to) => AdminReportService.instance.revenueReportRows(from: from, to: to),
+    (from, to) =>
+        AdminReportService.instance.revenueReportRows(from: from, to: to),
     pdf: pdf,
     showTotals: true,
   );
@@ -271,7 +294,8 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
   Future<void> _exportRefunds({required bool pdf}) => _exportReport(
     'refunds',
     'Refund Report',
-    (from, to) => AdminReportService.instance.refundReportRows(from: from, to: to),
+    (from, to) =>
+        AdminReportService.instance.refundReportRows(from: from, to: to),
     pdf: pdf,
     showTotals: true,
   );
@@ -293,7 +317,9 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
 
   void _showMessage(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   // ── build ────────────────────────────────────────────────────────────
@@ -308,6 +334,7 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
   }
 
   Widget _buildContent(bool isWide) {
+    final palette = FairTixPalette.of(context);
     final revenue = _plans.fold<double>(0, (sum, p) => sum + p.gross);
     final fees = _plans.fold<double>(0, (sum, p) => sum + p.fees);
     final payouts = _plans.fold<double>(0, (sum, p) => sum + p.net);
@@ -319,15 +346,23 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Expanded(
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Revenue & Reports', style: AppTextStyles.h2),
+                  Text(
+                    'Revenue & Reports',
+                    style: AppTextStyles.h2.copyWith(
+                      color: palette.textPrimary,
+                    ),
+                  ),
                   SizedBox(height: 3),
                   Text(
                     'Track platform earnings and export financial data',
-                    style: AppTextStyles.bodyGray,
+                    style: TextStyle(
+                      color: palette.textSecondary,
+                      fontSize: 14,
+                    ),
                   ),
                 ],
               ),
@@ -347,10 +382,15 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
                 PopupMenuItem(value: true, child: Text('Export as PDF')),
               ],
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 9,
+                ),
                 decoration: BoxDecoration(
                   border: Border.all(
-                    color: _isExporting ? AppColors.borderLight : AppColors.primaryPurple,
+                    color: _isExporting
+                        ? AppColors.borderLight
+                        : AppColors.primaryPurple,
                   ),
                   borderRadius: BorderRadius.circular(20),
                 ),
@@ -360,7 +400,9 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
                     Icon(
                       Icons.download_outlined,
                       size: 14,
-                      color: _isExporting ? AppColors.textGray : AppColors.primaryPurple,
+                      color: _isExporting
+                          ? AppColors.textGray
+                          : AppColors.primaryPurple,
                     ),
                     const SizedBox(width: 6),
                     Text(
@@ -368,13 +410,17 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
-                        color: _isExporting ? AppColors.textGray : AppColors.primaryPurple,
+                        color: _isExporting
+                            ? AppColors.textGray
+                            : AppColors.primaryPurple,
                       ),
                     ),
                     Icon(
                       Icons.arrow_drop_down,
                       size: 16,
-                      color: _isExporting ? AppColors.textGray : AppColors.primaryPurple,
+                      color: _isExporting
+                          ? AppColors.textGray
+                          : AppColors.primaryPurple,
                     ),
                   ],
                 ),
@@ -395,14 +441,18 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
               color: AppColors.primaryPurple,
               label: 'Total Revenue',
               value: formatPeso(revenue),
-              caption: hasData ? 'From recorded ticket sales' : 'No sales data yet',
+              caption: hasData
+                  ? 'From recorded ticket sales'
+                  : 'No sales data yet',
             ),
             AdminSummaryCard(
               icon: Icons.percent_outlined,
               color: const Color(0xFFB05BFF),
               label: 'Platform Fees',
               value: formatPeso(fees),
-              caption: hasData ? 'Per plan: ${_feeRatesCaption()}' : 'No fee data yet',
+              caption: hasData
+                  ? 'Per plan: ${_feeRatesCaption()}'
+                  : 'No fee data yet',
             ),
             AdminSummaryCard(
               icon: Icons.sell_outlined,
@@ -441,12 +491,13 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
   }
 
   Widget _buildRangeControls() {
+    final palette = FairTixPalette.of(context);
     return Container(
       height: 34,
       margin: const EdgeInsets.only(right: 6),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: AppColors.borderLight),
+        color: palette.surface,
+        border: Border.all(color: palette.border),
         borderRadius: BorderRadius.circular(7),
       ),
       child: Row(
@@ -459,7 +510,9 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 11),
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: _range == range ? AppColors.primaryPurple : Colors.transparent,
+                  color: _range == range
+                      ? AppColors.primaryPurple
+                      : Colors.transparent,
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Row(
@@ -468,14 +521,18 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
                       Icon(
                         Icons.calendar_today_outlined,
                         size: 12,
-                        color: _range == range ? Colors.white : AppColors.textGray,
+                        color: _range == range
+                            ? Colors.white
+                            : palette.textSecondary,
                       ),
                       const SizedBox(width: 4),
                     ],
                     Text(
                       range,
                       style: TextStyle(
-                        color: _range == range ? Colors.white : AppColors.textGray,
+                        color: _range == range
+                            ? Colors.white
+                            : palette.textSecondary,
                         fontSize: 9,
                         fontWeight: FontWeight.w600,
                       ),
@@ -490,19 +547,20 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
   }
 
   Widget _buildErrorBanner() {
+    final palette = FairTixPalette.of(context);
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFFEF2F2),
+        color: palette.dangerSurface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFFECACA)),
+        border: Border.all(color: palette.danger),
       ),
       child: Row(
         children: [
           Expanded(
             child: Text(
               _errorMessage!,
-              style: const TextStyle(color: Color(0xFFB91C1C), fontSize: 11),
+              style: TextStyle(color: palette.danger, fontSize: 11),
             ),
           ),
           TextButton(onPressed: _loadRevenue, child: const Text('Retry')),
@@ -534,7 +592,9 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
                 Expanded(child: Text('PLAN', style: adminHeaderStyle)),
                 Expanded(child: Text('FEE RATE', style: adminHeaderStyle)),
                 Expanded(child: Text('TICKETS', style: adminHeaderStyle)),
-                Expanded(child: Text('TICKET REVENUE', style: adminHeaderStyle)),
+                Expanded(
+                  child: Text('TICKET REVENUE', style: adminHeaderStyle),
+                ),
                 Expanded(child: Text('PLATFORM FEES', style: adminHeaderStyle)),
               ],
             ),
@@ -545,16 +605,43 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
               child: Row(
                 children: [
-                  Expanded(child: Text(plan.plan, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700))),
+                  Expanded(
+                    child: Text(
+                      plan.plan,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
                   Expanded(
                     child: Text(
                       plan.rateLabel,
-                      style: const TextStyle(color: AppColors.primaryPurple, fontSize: 11, fontWeight: FontWeight.w700),
+                      style: const TextStyle(
+                        color: AppColors.primaryPurple,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
-                  Expanded(child: Text('${plan.tickets}', style: const TextStyle(fontSize: 11))),
-                  Expanded(child: Text(formatPeso(plan.gross), style: const TextStyle(fontSize: 11))),
-                  Expanded(child: Text(formatPeso(plan.fees), style: const TextStyle(fontSize: 11))),
+                  Expanded(
+                    child: Text(
+                      '${plan.tickets}',
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      formatPeso(plan.gross),
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      formatPeso(plan.fees),
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -570,7 +657,10 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
 
   Widget _buildDailyRevenue() {
     final total = _daily.fold<double>(0, (sum, d) => sum + d.gross);
-    final maxGross = _daily.fold<double>(0, (m, d) => d.gross > m ? d.gross : m);
+    final maxGross = _daily.fold<double>(
+      0,
+      (m, d) => d.gross > m ? d.gross : m,
+    );
 
     final Widget body;
     if (_isLoadingCharts) {
@@ -607,12 +697,20 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
                             child: Align(
                               alignment: Alignment.bottomCenter,
                               child: FractionallySizedBox(
-                                heightFactor: d.gross <= 0 ? 0.012 : (d.gross / maxGross).clamp(0.03, 1.0).toDouble(),
+                                heightFactor: d.gross <= 0
+                                    ? 0.012
+                                    : (d.gross / maxGross)
+                                          .clamp(0.03, 1.0)
+                                          .toDouble(),
                                 widthFactor: 1,
                                 child: Container(
                                   decoration: BoxDecoration(
-                                    color: d.gross > 0 ? AppColors.primaryPurple : AppColors.borderLight,
-                                    borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
+                                    color: d.gross > 0
+                                        ? AppColors.primaryPurple
+                                        : AppColors.borderLight,
+                                    borderRadius: const BorderRadius.vertical(
+                                      top: Radius.circular(2),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -626,9 +724,21 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
               const SizedBox(height: 6),
               Row(
                 children: [
-                  Text(formatAdminDate(_daily.first.day), style: const TextStyle(color: AppColors.textGray, fontSize: 9)),
+                  Text(
+                    formatAdminDate(_daily.first.day),
+                    style: const TextStyle(
+                      color: AppColors.textGray,
+                      fontSize: 9,
+                    ),
+                  ),
                   const Spacer(),
-                  Text(formatAdminDate(_daily.last.day), style: const TextStyle(color: AppColors.textGray, fontSize: 9)),
+                  Text(
+                    formatAdminDate(_daily.last.day),
+                    style: const TextStyle(
+                      color: AppColors.textGray,
+                      fontSize: 9,
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -639,7 +749,9 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
 
     return _panel(
       title: 'Daily Revenue \u2013 Last 30 Days',
-      trailing: (_isLoadingCharts || _chartsError != null) ? null : '${formatPeso(total)} total',
+      trailing: (_isLoadingCharts || _chartsError != null)
+          ? null
+          : '${formatPeso(total)} total',
       child: body,
     );
   }
@@ -674,12 +786,18 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
                               Expanded(
                                 child: Text(
                                   '${plan.plan} (${plan.rateLabel} fee)',
-                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                               ),
                               Text(
                                 '${(plan.gross / revenue * 100).round()}%',
-                                style: const TextStyle(fontSize: 11, color: AppColors.textGray),
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textGray,
+                                ),
                               ),
                             ],
                           ),
@@ -696,7 +814,10 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
                           const SizedBox(height: 4),
                           Text(
                             '${formatPeso(plan.gross)} \u2022 ${plan.tickets} ticket${plan.tickets == 1 ? '' : 's'}',
-                            style: const TextStyle(color: AppColors.textGray, fontSize: 10),
+                            style: const TextStyle(
+                              color: AppColors.textGray,
+                              fontSize: 10,
+                            ),
                           ),
                         ],
                       ),
@@ -745,10 +866,22 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
             padding: EdgeInsets.fromLTRB(16, 10, 16, 10),
             child: Row(
               children: [
-                Expanded(flex: 2, child: Text('MONTH', style: adminHeaderStyle)),
-                Expanded(flex: 2, child: Text('TICKET REVENUE', style: adminHeaderStyle)),
-                Expanded(flex: 2, child: Text('PLATFORM FEES', style: adminHeaderStyle)),
-                Expanded(flex: 2, child: Text('NET PAYOUTS', style: adminHeaderStyle)),
+                Expanded(
+                  flex: 2,
+                  child: Text('MONTH', style: adminHeaderStyle),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text('TICKET REVENUE', style: adminHeaderStyle),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text('PLATFORM FEES', style: adminHeaderStyle),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text('NET PAYOUTS', style: adminHeaderStyle),
+                ),
                 Expanded(child: Text('GROWTH', style: adminHeaderStyle)),
               ],
             ),
@@ -763,16 +896,41 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
                     flex: 2,
                     child: Text(
                       _monthNames[months[i].month - 1],
-                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
-                  Expanded(flex: 2, child: Text(formatPeso(months[i].gross), style: const TextStyle(fontSize: 11))),
-                  Expanded(flex: 2, child: Text(formatPeso(months[i].fees), style: const TextStyle(fontSize: 11))),
-                  Expanded(flex: 2, child: Text(formatPeso(months[i].net), style: const TextStyle(fontSize: 11))),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      formatPeso(months[i].gross),
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      formatPeso(months[i].fees),
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      formatPeso(months[i].net),
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  ),
                   Expanded(
                     child: Text(
                       growth(i),
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: growthColor(growth(i))),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: growthColor(growth(i)),
+                      ),
                     ),
                   ),
                 ],
@@ -809,8 +967,14 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
             child: Row(
               children: [
                 Expanded(flex: 2, child: Text('DATE', style: adminHeaderStyle)),
-                Expanded(flex: 2, child: Text('EVENT', style: adminHeaderStyle)),
-                Expanded(flex: 2, child: Text('BUYER', style: adminHeaderStyle)),
+                Expanded(
+                  flex: 2,
+                  child: Text('EVENT', style: adminHeaderStyle),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text('BUYER', style: adminHeaderStyle),
+                ),
                 Expanded(child: Text('AMOUNT', style: adminHeaderStyle)),
                 Expanded(child: Text('STATUS', style: adminHeaderStyle)),
                 SizedBox(width: 96),
@@ -823,10 +987,36 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
               child: Row(
                 children: [
-                  Expanded(flex: 2, child: Text(formatAdminDateTime(refund.createdAt), style: const TextStyle(fontSize: 10))),
-                  Expanded(flex: 2, child: Text(refund.eventTitle, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600))),
-                  Expanded(flex: 2, child: Text(refund.buyerName, style: const TextStyle(fontSize: 10))),
-                  Expanded(child: Text(formatPeso(refund.amount), style: const TextStyle(fontSize: 10))),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      formatAdminDateTime(refund.createdAt),
+                      style: const TextStyle(fontSize: 10),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      refund.eventTitle,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      refund.buyerName,
+                      style: const TextStyle(fontSize: 10),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      formatPeso(refund.amount),
+                      style: const TextStyle(fontSize: 10),
+                    ),
+                  ),
                   Expanded(
                     child: Align(
                       alignment: Alignment.centerLeft,
@@ -841,7 +1031,10 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
                         ? const SizedBox.shrink()
                         : TextButton(
                             onPressed: () => _processRefund(refund),
-                            child: const Text('Mark Processed', style: TextStyle(fontSize: 9)),
+                            child: const Text(
+                              'Mark Processed',
+                              style: TextStyle(fontSize: 9),
+                            ),
                           ),
                   ),
                 ],
@@ -855,7 +1048,9 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
 
     return _panel(
       title: 'Refund Log',
-      trailing: _isLoadingRefunds ? 'Loading...' : '${_refunds.length} total \u2022 $pending pending',
+      trailing: _isLoadingRefunds
+          ? 'Loading...'
+          : '${_refunds.length} total \u2022 $pending pending',
       child: body,
     );
   }
@@ -863,38 +1058,46 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
   Widget _buildExportReports() {
     // The last field is the export action (pdf: true/false), or null when
     // the report isn't available yet.
-    final reports = <(IconData, String, String, Future<void> Function({required bool pdf})?)>[
-      (
-        Icons.receipt_long_outlined,
-        'Transaction Report',
-        'Every purchase and resale with buyer, event, tier, amount, fee, and status.',
-        _exportTransactions,
-      ),
-      (
-        Icons.payments_outlined,
-        'Revenue Report',
-        'Platform fees per organizer plan with gross, fee, and net totals.',
-        _exportRevenue,
-      ),
-      (
-        Icons.assignment_return_outlined,
-        'Refund Report',
-        'Every refund with its event, buyer, amount, and processed status.',
-        _exportRefunds,
-      ),
-      (
-        Icons.sync_outlined,
-        'Resale Activity Report',
-        'Every resale listing with seller, event, price versus original, and status.',
-        _exportResale,
-      ),
-      (
-        Icons.check_circle_outline,
-        'Attendance Report',
-        'QR scan logs and attendance rates by event and gate.',
-        null,
-      ),
-    ];
+    final reports =
+        <
+          (
+            IconData,
+            String,
+            String,
+            Future<void> Function({required bool pdf})?,
+          )
+        >[
+          (
+            Icons.receipt_long_outlined,
+            'Transaction Report',
+            'Every purchase and resale with buyer, event, tier, amount, fee, and status.',
+            _exportTransactions,
+          ),
+          (
+            Icons.payments_outlined,
+            'Revenue Report',
+            'Platform fees per organizer plan with gross, fee, and net totals.',
+            _exportRevenue,
+          ),
+          (
+            Icons.assignment_return_outlined,
+            'Refund Report',
+            'Every refund with its event, buyer, amount, and processed status.',
+            _exportRefunds,
+          ),
+          (
+            Icons.sync_outlined,
+            'Resale Activity Report',
+            'Every resale listing with seller, event, price versus original, and status.',
+            _exportResale,
+          ),
+          (
+            Icons.check_circle_outline,
+            'Attendance Report',
+            'QR scan logs and attendance rates by event and gate.',
+            null,
+          ),
+        ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -925,16 +1128,30 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
                           CircleAvatar(
                             radius: 20,
                             backgroundColor: const Color(0xFFEDE7FF),
-                            child: Icon(report.$1, color: AppColors.primaryPurple, size: 19),
+                            child: Icon(
+                              report.$1,
+                              color: AppColors.primaryPurple,
+                              size: 19,
+                            ),
                           ),
                           const SizedBox(height: 10),
-                          Text(report.$2, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                          Text(
+                            report.$2,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                           const SizedBox(height: 5),
                           Text(
                             report.$3,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: AppColors.textGray, fontSize: 9, height: 1.3),
+                            style: const TextStyle(
+                              color: AppColors.textGray,
+                              fontSize: 9,
+                              height: 1.3,
+                            ),
                           ),
                           const Spacer(),
                           Row(
@@ -945,10 +1162,14 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
                                   onPressed: _isExporting
                                       ? null
                                       : report.$4 == null
-                                      ? () => _showMessage('${report.$2} is not available yet.')
+                                      ? () => _showMessage(
+                                          '${report.$2} is not available yet.',
+                                        )
                                       : () => report.$4!(pdf: pdf),
                                   icon: Icon(
-                                    pdf ? Icons.picture_as_pdf_outlined : Icons.download_outlined,
+                                    pdf
+                                        ? Icons.picture_as_pdf_outlined
+                                        : Icons.download_outlined,
                                     size: 13,
                                   ),
                                   label: Text(
@@ -957,8 +1178,13 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
                                   ),
                                   style: OutlinedButton.styleFrom(
                                     foregroundColor: AppColors.primaryPurple,
-                                    side: const BorderSide(color: AppColors.primaryPurple),
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                    side: const BorderSide(
+                                      color: AppColors.primaryPurple,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 8,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -976,7 +1202,11 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
     );
   }
 
-  Widget _panel({required String title, String? trailing, required Widget child}) {
+  Widget _panel({
+    required String title,
+    String? trailing,
+    required Widget child,
+  }) {
     return AdminCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -987,7 +1217,13 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
               children: [
                 Expanded(child: Text(title, style: AppTextStyles.h3)),
                 if (trailing != null)
-                  Text(trailing, style: const TextStyle(color: AppColors.textGray, fontSize: 10)),
+                  Text(
+                    trailing,
+                    style: const TextStyle(
+                      color: AppColors.textGray,
+                      fontSize: 10,
+                    ),
+                  ),
               ],
             ),
           ),

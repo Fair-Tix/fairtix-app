@@ -4,7 +4,9 @@ import '../../models/admin_user_summary.dart';
 import '../../services/admin_auth_service.dart';
 import '../../services/admin_session.dart';
 import '../../services/admin_user_service.dart';
+import '../../theme/fairtix_palette.dart';
 import '../../widgets/admin_document_viewer.dart';
+import '../../widgets/admin_shell.dart';
 import '../organizer/app_colors.dart';
 import 'admin-dashboard.dart';
 import 'admin-login.dart';
@@ -186,8 +188,9 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
       );
     } on AdminUserServiceException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -200,27 +203,10 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width >= 900;
-    return Scaffold(
-      backgroundColor: const Color(0xFFF9F9FC),
-      drawer: isWide ? null : Drawer(child: _buildSidebar(context)),
-      body: Row(
-        children: [
-          if (isWide) SizedBox(width: 180, child: _buildSidebar(context)),
-          Expanded(
-            child: Column(
-              children: [
-                _buildTopBar(context, isWide),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.all(isWide ? 18 : 14),
-                    child: _buildContent(context, isWide),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return AdminShell(
+      active: AdminNavItem.accounts,
+      title: 'Accounts',
+      body: _buildContent(context, isWide),
     );
   }
 
@@ -387,14 +373,18 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
   }
 
   Widget _buildContent(BuildContext context, bool isWide) {
+    final palette = FairTixPalette.of(context);
     final filtered = _filteredUsers;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
           children: [
-            const Expanded(
-              child: Text('User Accounts', style: AppTextStyles.h2),
+            Expanded(
+              child: Text(
+                'User Accounts',
+                style: AppTextStyles.h2.copyWith(color: palette.textPrimary),
+              ),
             ),
             IconButton(
               onPressed: _isLoading ? null : _loadUsers,
@@ -407,33 +397,36 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: palette.surface,
             borderRadius: BorderRadius.circular(9),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x08000000),
-                blurRadius: 8,
-                offset: Offset(0, 3),
-              ),
-            ],
+            border: Border.all(color: palette.border),
+            boxShadow: palette.isDark
+                ? null
+                : const [
+                    BoxShadow(
+                      color: Color(0x08000000),
+                      blurRadius: 8,
+                      offset: Offset(0, 3),
+                    ),
+                  ],
           ),
           child: Wrap(
             spacing: 12,
             runSpacing: 10,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              const Text(
+              Text(
                 'Role:',
-                style: TextStyle(color: AppColors.textGray, fontSize: 10),
+                style: TextStyle(color: palette.textSecondary, fontSize: 10),
               ),
               _filterMenu(
                 _roleFilter,
                 _roleFilters,
                 (v) => setState(() => _roleFilter = v),
               ),
-              const Text(
+              Text(
                 'Showing approved, registered users only',
-                style: TextStyle(color: AppColors.textGray, fontSize: 10),
+                style: TextStyle(color: palette.textSecondary, fontSize: 10),
               ),
             ],
           ),
@@ -442,9 +435,9 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
         Container(
           constraints: const BoxConstraints(minHeight: 200),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: palette.surface,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.borderLight),
+            border: Border.all(color: palette.border),
           ),
           child: Column(
             children: [
@@ -454,21 +447,66 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
                     horizontal: 16,
                     vertical: 12,
                   ),
-                  color: const Color(0xFFFBFBFD),
-                  child: const Row(
+                  color: palette.progressTrack,
+                  child: Row(
                     children: [
                       Expanded(
                         flex: 2,
-                        child: Text('USER DETAILS', style: _headerStyle),
+                        child: Text(
+                          'USER DETAILS',
+                          style: _headerStyle.copyWith(
+                            color: palette.textSecondary,
+                          ),
+                        ),
                       ),
-                      Expanded(child: Text('EMAIL', style: _headerStyle)),
-                      Expanded(child: Text('ROLE', style: _headerStyle)),
-                      Expanded(child: Text('VERIFIED', style: _headerStyle)),
-                      Expanded(child: Text('JOINED', style: _headerStyle)),
-                      Expanded(child: Text('STATUS', style: _headerStyle)),
+                      Expanded(
+                        child: Text(
+                          'EMAIL',
+                          style: _headerStyle.copyWith(
+                            color: palette.textSecondary,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          'ROLE',
+                          style: _headerStyle.copyWith(
+                            color: palette.textSecondary,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          'VERIFIED',
+                          style: _headerStyle.copyWith(
+                            color: palette.textSecondary,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          'JOINED',
+                          style: _headerStyle.copyWith(
+                            color: palette.textSecondary,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          'STATUS',
+                          style: _headerStyle.copyWith(
+                            color: palette.textSecondary,
+                          ),
+                        ),
+                      ),
                       SizedBox(
                         width: 150,
-                        child: Text('ACTIONS', style: _headerStyle),
+                        child: Text(
+                          'ACTIONS',
+                          style: _headerStyle.copyWith(
+                            color: palette.textSecondary,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -488,10 +526,7 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
                     children: [
                       Text(
                         _loadError!,
-                        style: const TextStyle(
-                          color: AppColors.dangerRed,
-                          fontSize: 12,
-                        ),
+                        style: TextStyle(color: palette.danger, fontSize: 12),
                       ),
                       const SizedBox(height: 10),
                       OutlinedButton(
@@ -517,8 +552,8 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
                   children: [
                     Text(
                       'Showing ${filtered.length} of ${_users.length} accounts',
-                      style: const TextStyle(
-                        color: AppColors.textGray,
+                      style: TextStyle(
+                        color: palette.textSecondary,
                         fontSize: 10,
                       ),
                     ),
@@ -621,9 +656,7 @@ class _UserRow extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         TextButton(
-          onPressed: user.canReview
-              ? () => screen._reviewUser(user)
-              : null,
+          onPressed: user.canReview ? () => screen._reviewUser(user) : null,
           style: TextButton.styleFrom(
             padding: const EdgeInsets.symmetric(horizontal: 6),
             minimumSize: Size.zero,

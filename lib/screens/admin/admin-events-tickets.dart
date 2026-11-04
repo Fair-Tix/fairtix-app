@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/admin_event_service.dart';
 import '../../services/csv_export.dart';
+import '../../theme/fairtix_palette.dart';
 import '../../widgets/admin_document_viewer.dart';
 import '../../widgets/admin_shell.dart';
 import '../../widgets/admin_widgets.dart';
@@ -20,11 +21,19 @@ class AdminEventsTicketsScreen extends StatefulWidget {
   const AdminEventsTicketsScreen({super.key});
 
   @override
-  State<AdminEventsTicketsScreen> createState() => _AdminEventsTicketsScreenState();
+  State<AdminEventsTicketsScreen> createState() =>
+      _AdminEventsTicketsScreenState();
 }
 
 class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
-  static const _statusFilters = ['All', 'Published', 'Unpublished', 'Draft', 'Cancelled', 'Completed'];
+  static const _statusFilters = [
+    'All',
+    'Published',
+    'Unpublished',
+    'Draft',
+    'Cancelled',
+    'Completed',
+  ];
 
   final _searchController = TextEditingController();
   List<AdminEventSummary> _events = const [];
@@ -73,15 +82,20 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
   List<AdminEventSummary> get _filtered {
     final query = _searchController.text.trim().toLowerCase();
     return _events.where((e) {
-      if (_statusFilter != 'All' && e.statusLabel != _statusFilter) return false;
+      if (_statusFilter != 'All' && e.statusLabel != _statusFilter)
+        return false;
       if (query.isEmpty) return true;
-      return '${e.title} ${e.organizerName} ${e.venue}'.toLowerCase().contains(query);
+      return '${e.title} ${e.organizerName} ${e.venue}'.toLowerCase().contains(
+        query,
+      );
     }).toList();
   }
 
   void _toast(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _cancelEvent(AdminEventSummary event) async {
@@ -188,7 +202,8 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
                         for (final d in const [3, 7, 14, 30])
                           DropdownMenuItem(value: d, child: Text('$d days')),
                       ],
-                      onChanged: (v) => setDialogState(() => deadlineDays = v ?? 7),
+                      onChanged: (v) =>
+                          setDialogState(() => deadlineDays = v ?? 7),
                     ),
                   ],
                 ),
@@ -290,7 +305,16 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
       return;
     }
     final csv = toCsv([
-      ['Event', 'Organizer', 'Venue', 'Dates', 'Status', 'Tickets Sold', 'Capacity', 'Gross Ticket Sales'],
+      [
+        'Event',
+        'Organizer',
+        'Venue',
+        'Dates',
+        'Status',
+        'Tickets Sold',
+        'Capacity',
+        'Gross Ticket Sales',
+      ],
       for (final e in rows)
         [
           csvSafe(e.title),
@@ -320,6 +344,7 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
   }
 
   Widget _buildBody() {
+    final palette = FairTixPalette.of(context);
     // Cancelled events are being refunded, so they don't count as sales.
     final live = _events.where((e) => e.status != 'canceled').toList();
     final published = _events.where((e) => e.status == 'published').length;
@@ -332,7 +357,12 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
       children: [
         Row(
           children: [
-            const Expanded(child: Text('Events & Tickets', style: AppTextStyles.h2)),
+            Expanded(
+              child: Text(
+                'Events & Tickets',
+                style: AppTextStyles.h2.copyWith(color: palette.textPrimary),
+              ),
+            ),
             IconButton(
               onPressed: _isLoading ? null : _load,
               icon: const Icon(Icons.refresh, size: 18),
@@ -342,10 +372,15 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
             // Same published catalogue event goers see, view-only.
             OutlinedButton.icon(
               onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const AllEventsScreen(readOnly: true)),
+                MaterialPageRoute(
+                  builder: (_) => const AllEventsScreen(readOnly: true),
+                ),
               ),
               icon: const Icon(Icons.explore_outlined, size: 14),
-              label: const Text('Browse Published Events', style: TextStyle(fontSize: 11)),
+              label: const Text(
+                'Browse Published Events',
+                style: TextStyle(fontSize: 11),
+              ),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.primaryPurple,
                 side: const BorderSide(color: AppColors.primaryPurple),
@@ -401,13 +436,17 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
                   decoration: InputDecoration(
                     hintText: 'Search event, organizer or venue...',
                     hintStyle: const TextStyle(fontSize: 11),
-                    prefixIcon: const Icon(Icons.search, size: 17, color: AppColors.textGray),
+                    prefixIcon: Icon(
+                      Icons.search,
+                      size: 17,
+                      color: palette.textSecondary,
+                    ),
                     isDense: true,
                     filled: true,
-                    fillColor: const Color(0xFFF8F7FC),
+                    fillColor: palette.surface,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(7),
-                      borderSide: const BorderSide(color: AppColors.borderLight),
+                      borderSide: BorderSide(color: palette.border),
                     ),
                   ),
                 ),
@@ -418,9 +457,13 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
                 underline: const SizedBox.shrink(),
                 items: [
                   for (final f in _statusFilters)
-                    DropdownMenuItem(value: f, child: Text(f, style: const TextStyle(fontSize: 12))),
+                    DropdownMenuItem(
+                      value: f,
+                      child: Text(f, style: const TextStyle(fontSize: 12)),
+                    ),
                 ],
-                onChanged: (value) => setState(() => _statusFilter = value ?? 'All'),
+                onChanged: (value) =>
+                    setState(() => _statusFilter = value ?? 'All'),
               ),
             ],
           ),
@@ -430,7 +473,9 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
           child: _isLoading
               ? const Padding(
                   padding: EdgeInsets.all(32),
-                  child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+                  child: Center(
+                    child: CircularProgressIndicator(strokeWidth: 2.4),
+                  ),
                 )
               : _loadError != null
               ? AdminErrorBox(message: _loadError!, onRetry: _load)
@@ -444,7 +489,9 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
     if (filtered.isEmpty) {
       return AdminEmptyState(
         icon: Icons.event_busy_outlined,
-        title: _events.isEmpty ? 'No events yet' : 'No events match your filters',
+        title: _events.isEmpty
+            ? 'No events yet'
+            : 'No events match your filters',
         hint: _events.isEmpty
             ? 'Events will appear here once organizers create them.'
             : 'Try a different search or status.',
@@ -452,21 +499,71 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
     }
     return LayoutBuilder(
       builder: (context, constraints) {
+        final palette = FairTixPalette.of(context);
         final wide = constraints.maxWidth >= 760;
         return Column(
           children: [
             if (wide)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                color: const Color(0xFFFBFBFD),
-                child: const Row(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                color: palette.progressTrack,
+                child: Row(
                   children: [
-                    Expanded(flex: 3, child: Text('EVENT', style: adminHeaderStyle)),
-                    Expanded(flex: 2, child: Text('ORGANIZER', style: adminHeaderStyle)),
-                    Expanded(flex: 2, child: Text('DATE', style: adminHeaderStyle)),
-                    Expanded(child: Text('SOLD', style: adminHeaderStyle)),
-                    Expanded(child: Text('STATUS', style: adminHeaderStyle)),
-                    SizedBox(width: 300, child: Text('ACTIONS', style: adminHeaderStyle)),
+                    Expanded(
+                      flex: 3,
+                      child: Text(
+                        'EVENT',
+                        style: adminHeaderStyle.copyWith(
+                          color: palette.textSecondary,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        'ORGANIZER',
+                        style: adminHeaderStyle.copyWith(
+                          color: palette.textSecondary,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        'DATE',
+                        style: adminHeaderStyle.copyWith(
+                          color: palette.textSecondary,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        'SOLD',
+                        style: adminHeaderStyle.copyWith(
+                          color: palette.textSecondary,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        'STATUS',
+                        style: adminHeaderStyle.copyWith(
+                          color: palette.textSecondary,
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 300,
+                      child: Text(
+                        'ACTIONS',
+                        style: adminHeaderStyle.copyWith(
+                          color: palette.textSecondary,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -491,7 +588,10 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
                 alignment: Alignment.centerLeft,
                 child: Text(
                   'Showing ${filtered.length} of ${_events.length} events',
-                  style: const TextStyle(color: AppColors.textGray, fontSize: 10),
+                  style: const TextStyle(
+                    color: AppColors.textGray,
+                    fontSize: 10,
+                  ),
                 ),
               ),
             ),
@@ -538,13 +638,25 @@ class _EventRow extends StatelessWidget {
     children: [
       TextButton(
         onPressed: onToggle,
-        style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 6), minimumSize: Size.zero),
-        child: Text(expanded ? 'Hide tiers' : 'Tiers', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          minimumSize: Size.zero,
+        ),
+        child: Text(
+          expanded ? 'Hide tiers' : 'Tiers',
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+        ),
       ),
       TextButton(
         onPressed: onViewDocuments,
-        style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 6), minimumSize: Size.zero),
-        child: const Text('Documents', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          minimumSize: Size.zero,
+        ),
+        child: const Text(
+          'Documents',
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+        ),
       ),
       if (event.canRepublish)
         TextButton(
@@ -554,13 +666,22 @@ class _EventRow extends StatelessWidget {
             minimumSize: Size.zero,
             foregroundColor: AppColors.successGreen,
           ),
-          child: const Text('Republish', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+          child: const Text(
+            'Republish',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+          ),
         ),
       if (event.canUnpublish)
         TextButton(
           onPressed: busy ? null : onUnpublish,
-          style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 6), minimumSize: Size.zero),
-          child: const Text('Unpublish', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            minimumSize: Size.zero,
+          ),
+          child: const Text(
+            'Unpublish',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+          ),
         ),
       if (event.canCancel)
         TextButton(
@@ -570,41 +691,81 @@ class _EventRow extends StatelessWidget {
             minimumSize: Size.zero,
             foregroundColor: AppColors.dangerRed,
           ),
-          child: Text(busy ? 'Working...' : 'Cancel', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+          child: Text(
+            busy ? 'Working...' : 'Cancel',
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+          ),
         ),
     ],
   );
 
-  Widget _tierDetails() => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
-    color: const Color(0xFFFBFBFD),
-    child: event.tiers.isEmpty
-        ? const Text('No ticket tiers.', style: TextStyle(color: AppColors.textGray, fontSize: 11))
-        : Column(
-            children: [
-              for (final tier in event.tiers)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    children: [
-                      Expanded(flex: 3, child: Text(tier.label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600))),
-                      Expanded(flex: 2, child: Text(formatPeso(tier.price), style: const TextStyle(fontSize: 11))),
-                      Expanded(flex: 2, child: Text('${tier.sold} / ${tier.total} sold', style: const TextStyle(fontSize: 11))),
-                      Expanded(
-                        flex: 2,
-                        child: Text(
-                          formatPeso(tier.revenue),
-                          textAlign: TextAlign.right,
-                          style: const TextStyle(fontSize: 11, color: AppColors.textGray),
+  Widget _tierDetails(BuildContext context) {
+    final palette = FairTixPalette.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+      color: palette.progressTrack,
+      child: event.tiers.isEmpty
+          ? Text(
+              'No ticket tiers.',
+              style: TextStyle(color: palette.textSecondary, fontSize: 11),
+            )
+          : Column(
+              children: [
+                for (final tier in event.tiers)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: Text(
+                            tier.label,
+                            style: TextStyle(
+                              color: palette.textPrimary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            formatPeso(tier.price),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: palette.textPrimary,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            '${tier.sold} / ${tier.total} sold',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: palette.textPrimary,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            formatPeso(tier.revenue),
+                            textAlign: TextAlign.right,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: palette.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-            ],
-          ),
-  );
+              ],
+            ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -618,17 +779,57 @@ class _EventRow extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(event.title, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
-                      Text(event.venue, style: const TextStyle(fontSize: 10.5, color: AppColors.textGray)),
+                      Text(
+                        event.title,
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        event.venue,
+                        style: const TextStyle(
+                          fontSize: 10.5,
+                          color: AppColors.textGray,
+                        ),
+                      ),
                       if (event.complianceLabel != null)
-                        Text(event.complianceLabel!, style: const TextStyle(fontSize: 10.5, color: AppColors.dangerRed)),
+                        Text(
+                          event.complianceLabel!,
+                          style: const TextStyle(
+                            fontSize: 10.5,
+                            color: AppColors.dangerRed,
+                          ),
+                        ),
                     ],
                   ),
                 ),
-                Expanded(flex: 2, child: Text(event.organizerName, style: const TextStyle(fontSize: 11))),
-                Expanded(flex: 2, child: Text(event.dateLabel, style: const TextStyle(fontSize: 11))),
-                Expanded(child: Text(event.soldLabel, style: const TextStyle(fontSize: 11))),
-                Expanded(child: Align(alignment: Alignment.centerLeft, child: _statusBadge(event))),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    event.organizerName,
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    event.dateLabel,
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    event.soldLabel,
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ),
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: _statusBadge(event),
+                  ),
+                ),
                 SizedBox(width: 300, child: _actions()),
               ],
             ),
@@ -640,16 +841,39 @@ class _EventRow extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Expanded(child: Text(event.title, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700))),
+                    Expanded(
+                      child: Text(
+                        event.title,
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
                     _statusBadge(event),
                   ],
                 ),
                 const SizedBox(height: 2),
-                Text('${event.organizerName} \u2022 ${event.venue}', style: const TextStyle(fontSize: 10.5, color: AppColors.textGray)),
+                Text(
+                  '${event.organizerName} \u2022 ${event.venue}',
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    color: AppColors.textGray,
+                  ),
+                ),
                 const SizedBox(height: 4),
-                Text('${event.dateLabel} \u2022 ${event.soldLabel} sold', style: const TextStyle(fontSize: 11)),
+                Text(
+                  '${event.dateLabel} \u2022 ${event.soldLabel} sold',
+                  style: const TextStyle(fontSize: 11),
+                ),
                 if (event.complianceLabel != null)
-                  Text(event.complianceLabel!, style: const TextStyle(fontSize: 10.5, color: AppColors.dangerRed)),
+                  Text(
+                    event.complianceLabel!,
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      color: AppColors.dangerRed,
+                    ),
+                  ),
                 const SizedBox(height: 6),
                 _actions(),
               ],
@@ -657,8 +881,10 @@ class _EventRow extends StatelessWidget {
           );
 
     return Container(
-      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.borderLight))),
-      child: Column(children: [row, if (expanded) _tierDetails()]),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
+      ),
+      child: Column(children: [row, if (expanded) _tierDetails(context)]),
     );
   }
 }

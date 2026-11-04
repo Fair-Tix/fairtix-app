@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../widgets/admin_shell.dart';
 import '../../services/admin_auth_service.dart';
 import '../../services/admin_session.dart';
+import '../../theme/fairtix_palette.dart';
 import '../organizer/app_colors.dart';
 import 'admin-accounts.dart';
 import 'admin-dashboard.dart';
@@ -83,7 +85,18 @@ class _AdminPlatformSettingsScreenState
 
   String _formatLastSaved(DateTime dt) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     final hour12 = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
     final minute = dt.minute.toString().padLeft(2, '0');
@@ -119,27 +132,10 @@ class _AdminPlatformSettingsScreenState
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width >= 900;
-    return Scaffold(
-      backgroundColor: const Color(0xFFF9F9FC),
-      drawer: isWide ? null : Drawer(child: _buildSidebar(context)),
-      body: Row(
-        children: [
-          if (isWide) SizedBox(width: 180, child: _buildSidebar(context)),
-          Expanded(
-            child: Column(
-              children: [
-                _buildTopBar(context, isWide),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.all(isWide ? 18 : 14),
-                    child: _buildContent(isWide),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return AdminShell(
+      active: AdminNavItem.platformSettings,
+      title: 'Settings',
+      body: _buildContent(isWide),
     );
   }
 
@@ -287,6 +283,7 @@ class _AdminPlatformSettingsScreenState
   }
 
   Widget _buildContent(bool isWide) {
+    final palette = FairTixPalette.of(context);
     final settings = <Widget>[
       _buildGeneralCard(),
       Column(
@@ -305,20 +302,23 @@ class _AdminPlatformSettingsScreenState
         Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            const Expanded(
-              child: Text('Platform Settings', style: AppTextStyles.h2),
+            Expanded(
+              child: Text(
+                'Platform Settings',
+                style: AppTextStyles.h2.copyWith(color: palette.textPrimary),
+              ),
             ),
             if (isWide && _lastSavedAt != null)
               Text(
                 _formatLastSaved(_lastSavedAt!),
-                style: const TextStyle(color: AppColors.textGray, fontSize: 10),
+                style: TextStyle(color: palette.textSecondary, fontSize: 10),
               ),
           ],
         ),
         const SizedBox(height: 3),
-        const Text(
+        Text(
           'Manage global application rules and pricing structures.',
-          style: TextStyle(color: AppColors.textGray, fontSize: 10),
+          style: TextStyle(color: palette.textSecondary, fontSize: 10),
         ),
         const SizedBox(height: 18),
         if (isWide)
@@ -400,8 +400,8 @@ class _AdminPlatformSettingsScreenState
         onChanged: (value) =>
             setState(() => _payoutSchedule = value ?? _payoutSchedule),
         decoration: _inputDecoration(),
-        style: const TextStyle(
-          color: AppColors.textDark,
+        style: TextStyle(
+          color: FairTixPalette.of(context).textPrimary,
           fontSize: 10,
           fontWeight: FontWeight.w600,
         ),
@@ -461,13 +461,20 @@ class _AdminPlatformSettingsScreenState
         Expanded(
           child: Text(
             title,
-            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
+            style: TextStyle(
+              color: FairTixPalette.of(context).textPrimary,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
         Expanded(
           child: Text(
             description,
-            style: const TextStyle(color: AppColors.textGray, fontSize: 8),
+            style: TextStyle(
+              color: FairTixPalette.of(context).textSecondary,
+              fontSize: 8,
+            ),
           ),
         ),
       ],
@@ -484,6 +491,7 @@ class _AdminPlatformSettingsScreenState
     keyboardType: keyboardType,
     textAlign: suffix == null ? TextAlign.left : TextAlign.right,
     style: TextStyle(
+      color: FairTixPalette.of(context).textPrimary,
       fontSize: 10,
       fontWeight: FontWeight.w600,
       fontStyle: italic ? FontStyle.italic : FontStyle.normal,
@@ -491,20 +499,25 @@ class _AdminPlatformSettingsScreenState
     decoration: _inputDecoration(suffix: suffix),
   );
 
-  InputDecoration _inputDecoration({String? suffix}) => InputDecoration(
-    isDense: true,
-    suffixText: suffix,
-    suffixStyle: const TextStyle(color: AppColors.textGray, fontSize: 10),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(5),
-      borderSide: const BorderSide(color: AppColors.borderLight),
-    ),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(5),
-      borderSide: const BorderSide(color: AppColors.borderLight),
-    ),
-  );
+  InputDecoration _inputDecoration({String? suffix}) {
+    final palette = FairTixPalette.of(context);
+    return InputDecoration(
+      isDense: true,
+      suffixText: suffix,
+      suffixStyle: TextStyle(color: palette.textSecondary, fontSize: 10),
+      filled: true,
+      fillColor: palette.surface,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(5),
+        borderSide: BorderSide(color: palette.border),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(5),
+        borderSide: BorderSide(color: palette.border),
+      ),
+    );
+  }
 
   Widget _switchRow(
     String title,
@@ -519,11 +532,18 @@ class _AdminPlatformSettingsScreenState
           children: [
             Text(
               title,
-              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
+              style: TextStyle(
+                color: FairTixPalette.of(context).textPrimary,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             Text(
               subtitle,
-              style: const TextStyle(color: AppColors.textGray, fontSize: 8),
+              style: TextStyle(
+                color: FairTixPalette.of(context).textSecondary,
+                fontSize: 8,
+              ),
             ),
           ],
         ),
@@ -559,11 +579,12 @@ class _SettingsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = FairTixPalette.of(context);
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: palette.surface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.borderLight),
+        border: Border.all(color: palette.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -592,12 +613,7 @@ class _SettingsCard extends StatelessWidget {
               ],
             ),
           ),
-          const Divider(
-            height: 1,
-            indent: 12,
-            endIndent: 12,
-            color: Color(0xFFE9D5FF),
-          ),
+          Divider(height: 1, indent: 12, endIndent: 12, color: palette.border),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 9, 12, 12),
             child: Column(
@@ -605,17 +621,14 @@ class _SettingsCard extends StatelessWidget {
               children: [
                 Text(
                   subtitle,
-                  style: const TextStyle(
-                    color: AppColors.textGray,
-                    fontSize: 8,
-                  ),
+                  style: TextStyle(color: palette.textSecondary, fontSize: 8),
                 ),
                 const SizedBox(height: 15),
                 ...children,
               ],
             ),
           ),
-          const Divider(height: 1, color: AppColors.borderLight),
+          Divider(height: 1, color: palette.border),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
             child: Row(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../screens/organizer/app_colors.dart';
+import '../theme/fairtix_palette.dart';
 
 /// Small building blocks shared by the admin screens (Events & Tickets,
 /// Resale Monitoring, Fraud Alerts, Dashboard, Revenue & Reports), so each
@@ -10,17 +11,31 @@ import '../screens/organizer/app_colors.dart';
 String formatPeso(num amount) {
   final fixed = amount.abs().toStringAsFixed(2);
   final parts = fixed.split('.');
-  final whole = parts[0].replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',');
+  final whole = parts[0].replaceAllMapped(
+    RegExp(r'\B(?=(\d{3})+(?!\d))'),
+    (_) => ',',
+  );
   return '${amount < 0 ? '-' : ''}\u20B1$whole.${parts[1]}';
 }
 
 const _months = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
 ];
 
 /// "Oct 13, 2026".
-String formatAdminDate(DateTime d) => '${_months[d.month - 1]} ${d.day}, ${d.year}';
+String formatAdminDate(DateTime d) =>
+    '${_months[d.month - 1]} ${d.day}, ${d.year}';
 
 /// "Oct 13, 2026 2:34 PM".
 String formatAdminDateTime(DateTime d) {
@@ -78,14 +93,47 @@ class AdminBadge extends StatelessWidget {
   );
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-    decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(999)),
-    child: Text(
-      label,
-      style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w700),
-    ),
-  );
+  Widget build(BuildContext context) {
+    final palette = FairTixPalette.of(context);
+    final badgeColor = !palette.isDark
+        ? color
+        : color == AppColors.successGreen
+        ? palette.success
+        : color == AppColors.dangerRed
+        ? palette.danger
+        : color == AppColors.warningOrange
+        ? palette.warning
+        : color == AppColors.infoBlue
+        ? palette.accentLabel
+        : palette.textSecondary;
+    final badgeBackground = !palette.isDark
+        ? background
+        : color == AppColors.successGreen
+        ? palette.successSurface
+        : color == AppColors.dangerRed
+        ? palette.dangerSurface
+        : color == AppColors.warningOrange
+        ? palette.warningSurface
+        : color == AppColors.infoBlue
+        ? palette.primary.withValues(alpha: 0.18)
+        : palette.progressTrack;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: badgeBackground,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: badgeColor,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
 }
 
 /// White rounded panel with a light border and soft shadow.
@@ -96,18 +144,27 @@ class AdminCard extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: padding,
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(10),
-      border: Border.all(color: AppColors.borderLight),
-      boxShadow: const [
-        BoxShadow(color: Color(0x08000000), blurRadius: 8, offset: Offset(0, 3)),
-      ],
-    ),
-    child: child,
-  );
+  Widget build(BuildContext context) {
+    final palette = FairTixPalette.of(context);
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: palette.surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: palette.border),
+        boxShadow: palette.isDark
+            ? const []
+            : [
+                BoxShadow(
+                  color: const Color(0xFF6D28D9).withValues(alpha: 0.06),
+                  blurRadius: 28,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+      ),
+      child: child,
+    );
+  }
 }
 
 /// Centered icon + title + hint, for an empty list.
@@ -124,58 +181,68 @@ class AdminEmptyState extends StatelessWidget {
   final String hint;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
-    child: Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 40, color: const Color(0xFFD9D7E4)),
-          const SizedBox(height: 12),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: AppColors.textGray,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+  Widget build(BuildContext context) {
+    final palette = FairTixPalette.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 40, color: palette.textSecondary),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: palette.textPrimary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            hint,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Color(0xFFA6A9B7), fontSize: 10),
-          ),
-        ],
+            const SizedBox(height: 4),
+            Text(
+              hint,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: palette.textSecondary, fontSize: 10),
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// A load-failed message with a Retry button.
 class AdminErrorBox extends StatelessWidget {
-  const AdminErrorBox({super.key, required this.message, required this.onRetry});
+  const AdminErrorBox({
+    super.key,
+    required this.message,
+    required this.onRetry,
+  });
 
   final String message;
   final VoidCallback onRetry;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(24),
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          message,
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: AppColors.dangerRed, fontSize: 12),
-        ),
-        const SizedBox(height: 10),
-        OutlinedButton(onPressed: onRetry, child: const Text('Retry')),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final palette = FairTixPalette.of(context);
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: palette.danger, fontSize: 12),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton(onPressed: onRetry, child: const Text('Retry')),
+        ],
+      ),
+    );
+  }
 }
 
 /// One headline-number card.
@@ -196,53 +263,59 @@ class AdminSummaryCard extends StatelessWidget {
   final String? caption;
 
   @override
-  Widget build(BuildContext context) => AdminCard(
-    padding: const EdgeInsets.all(16),
-    child: SizedBox(
-      height: 84,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 14,
-                backgroundColor: color.withValues(alpha: 0.12),
-                child: Icon(icon, size: 16, color: color),
-              ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: Text(
-                  label,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: AppColors.textGray, fontSize: 11),
+  Widget build(BuildContext context) {
+    final palette = FairTixPalette.of(context);
+    return AdminCard(
+      padding: const EdgeInsets.all(16),
+      child: SizedBox(
+        height: 84,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 14,
+                  backgroundColor: color.withValues(alpha: 0.12),
+                  child: Icon(icon, size: 16, color: color),
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    label,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: palette.textSecondary,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const Spacer(),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                style: TextStyle(
+                  color: palette.textPrimary,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-            ],
-          ),
-          const Spacer(),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              value,
-              style: const TextStyle(
-                color: AppColors.textDark,
-                fontSize: 24,
-                fontWeight: FontWeight.w800,
+            ),
+            if (caption != null)
+              Text(
+                caption!,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: palette.textSecondary, fontSize: 10),
               ),
-            ),
-          ),
-          if (caption != null)
-            Text(
-              caption!,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: AppColors.textGray, fontSize: 10),
-            ),
-        ],
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// Lays [cards] out in a responsive row (all in one row when wide, two per
@@ -258,7 +331,8 @@ class AdminSummaryRow extends StatelessWidget {
       final columns = constraints.maxWidth > 900
           ? cards.length
           : (constraints.maxWidth > 520 ? 2 : 1);
-      final width = ((constraints.maxWidth - 16 * (columns - 1)) / columns).floorToDouble();
+      final width = ((constraints.maxWidth - 16 * (columns - 1)) / columns)
+          .floorToDouble();
       return Wrap(
         spacing: 16,
         runSpacing: 12,

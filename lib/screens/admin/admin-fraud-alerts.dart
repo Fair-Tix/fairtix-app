@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../services/admin_resale_service.dart';
 import '../../services/admin_user_service.dart';
 import '../../services/csv_export.dart';
+import '../../theme/fairtix_palette.dart';
 import '../../widgets/admin_shell.dart';
 import '../../widgets/admin_widgets.dart';
 import '../organizer/app_colors.dart';
@@ -23,7 +24,12 @@ class AdminFraudAlertsScreen extends StatefulWidget {
 }
 
 class _AdminFraudAlertsScreenState extends State<AdminFraudAlertsScreen> {
-  static const _filters = ['All', 'System-Flagged', 'Organizer-Flagged', 'Resolved'];
+  static const _filters = [
+    'All',
+    'System-Flagged',
+    'Organizer-Flagged',
+    'Resolved',
+  ];
 
   List<FraudAlertEntry> _alerts = const [];
   bool _isLoading = true;
@@ -67,11 +73,14 @@ class _AdminFraudAlertsScreenState extends State<AdminFraudAlertsScreen> {
     _ => true,
   };
 
-  List<FraudAlertEntry> get _filtered => _alerts.where((a) => _matches(a, _filter)).toList();
+  List<FraudAlertEntry> get _filtered =>
+      _alerts.where((a) => _matches(a, _filter)).toList();
 
   void _toast(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _review(FraudAlertEntry alert) async {
@@ -93,8 +102,18 @@ class _AdminFraudAlertsScreenState extends State<AdminFraudAlertsScreen> {
     }
     final csv = toCsv([
       [
-        'Alert ID', 'Type', 'Source', 'Flagged User', 'Email', 'Event', 'Severity',
-        'Status', 'Created', 'Reviewed', 'Resolution Note', 'Details',
+        'Alert ID',
+        'Type',
+        'Source',
+        'Flagged User',
+        'Email',
+        'Event',
+        'Severity',
+        'Status',
+        'Created',
+        'Reviewed',
+        'Resolution Note',
+        'Details',
       ],
       for (final a in rows)
         [
@@ -137,7 +156,9 @@ class _AdminFraudAlertsScreenState extends State<AdminFraudAlertsScreen> {
       children: [
         Row(
           children: [
-            const Expanded(child: Text('Fraud Alerts', style: AppTextStyles.h2)),
+            const Expanded(
+              child: Text('Fraud Alerts', style: AppTextStyles.h2),
+            ),
             Text(
               '$open open alert${open == 1 ? '' : 's'}',
               style: TextStyle(
@@ -171,16 +192,23 @@ class _AdminFraudAlertsScreenState extends State<AdminFraudAlertsScreen> {
                 ChoiceChip(
                   label: Text(
                     '$filter  ${_alerts.where((a) => _matches(a, filter)).length}',
-                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   selected: _filter == filter,
                   onSelected: (_) => setState(() => _filter = filter),
                   selectedColor: AppColors.primaryPurple,
                   labelStyle: TextStyle(
-                    color: _filter == filter ? Colors.white : AppColors.textDark,
+                    color: _filter == filter
+                        ? Colors.white
+                        : AppColors.textDark,
                   ),
                   side: BorderSide(
-                    color: _filter == filter ? AppColors.primaryPurple : AppColors.borderLight,
+                    color: _filter == filter
+                        ? AppColors.primaryPurple
+                        : AppColors.borderLight,
                   ),
                   showCheckmark: false,
                 ),
@@ -194,7 +222,9 @@ class _AdminFraudAlertsScreenState extends State<AdminFraudAlertsScreen> {
           child: _isLoading
               ? const Padding(
                   padding: EdgeInsets.all(32),
-                  child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+                  child: Center(
+                    child: CircularProgressIndicator(strokeWidth: 2.4),
+                  ),
                 )
               : _loadError != null
               ? AdminErrorBox(message: _loadError!, onRetry: _load)
@@ -225,25 +255,45 @@ class _AdminFraudAlertsScreenState extends State<AdminFraudAlertsScreen> {
                 child: Row(
                   children: [
                     Expanded(child: Text('ALERT ID', style: adminHeaderStyle)),
-                    Expanded(flex: 2, child: Text('TYPE', style: adminHeaderStyle)),
+                    Expanded(
+                      flex: 2,
+                      child: Text('TYPE', style: adminHeaderStyle),
+                    ),
                     Expanded(child: Text('SOURCE', style: adminHeaderStyle)),
-                    Expanded(flex: 2, child: Text('FLAGGED USER', style: adminHeaderStyle)),
-                    Expanded(flex: 2, child: Text('TIMESTAMP', style: adminHeaderStyle)),
+                    Expanded(
+                      flex: 2,
+                      child: Text('FLAGGED USER', style: adminHeaderStyle),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: Text('TIMESTAMP', style: adminHeaderStyle),
+                    ),
                     Expanded(child: Text('SEVERITY', style: adminHeaderStyle)),
                     Expanded(child: Text('STATUS', style: adminHeaderStyle)),
-                    SizedBox(width: 70, child: Text('ACTION', style: adminHeaderStyle)),
+                    SizedBox(
+                      width: 70,
+                      child: Text('ACTION', style: adminHeaderStyle),
+                    ),
                   ],
                 ),
               ),
             const Divider(height: 1),
-            for (final alert in filtered) _AlertRow(alert: alert, wide: wide, onReview: () => _review(alert)),
+            for (final alert in filtered)
+              _AlertRow(
+                alert: alert,
+                wide: wide,
+                onReview: () => _review(alert),
+              ),
             Padding(
               padding: const EdgeInsets.all(14),
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
                   'Showing ${filtered.length} of ${_alerts.length} alerts',
-                  style: const TextStyle(color: AppColors.textGray, fontSize: 10),
+                  style: const TextStyle(
+                    color: AppColors.textGray,
+                    fontSize: 10,
+                  ),
                 ),
               ),
             ),
@@ -268,7 +318,11 @@ AdminBadge _alertStatusBadge(FraudAlertEntry a) => switch (a.status) {
 };
 
 class _AlertRow extends StatelessWidget {
-  const _AlertRow({required this.alert, required this.wide, required this.onReview});
+  const _AlertRow({
+    required this.alert,
+    required this.wide,
+    required this.onReview,
+  });
 
   final FraudAlertEntry alert;
   final bool wide;
@@ -278,7 +332,10 @@ class _AlertRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final reviewButton = TextButton(
       onPressed: onReview,
-      style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 6), minimumSize: Size.zero),
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        minimumSize: Size.zero,
+      ),
       child: Text(
         alert.isClosed ? 'View' : 'Review',
         style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
@@ -291,23 +348,74 @@ class _AlertRow extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(18, 12, 14, 12),
             child: Row(
               children: [
-                Expanded(child: Text(alert.shortId, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700))),
-                Expanded(flex: 2, child: Text(alert.typeLabel, style: const TextStyle(fontSize: 11))),
-                Expanded(child: Text(alert.sourceLabel, style: const TextStyle(fontSize: 11))),
+                Expanded(
+                  child: Text(
+                    alert.shortId,
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    alert.typeLabel,
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    alert.sourceLabel,
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ),
                 Expanded(
                   flex: 2,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(user, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                      Text(
+                        user,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                       if (alert.eventTitle != null)
-                        Text(alert.eventTitle!, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, color: AppColors.textGray)),
+                        Text(
+                          alert.eventTitle!,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: AppColors.textGray,
+                          ),
+                        ),
                     ],
                   ),
                 ),
-                Expanded(flex: 2, child: Text(formatAdminDateTime(alert.createdAt), style: const TextStyle(fontSize: 10.5, color: AppColors.textGray))),
-                Expanded(child: Align(alignment: Alignment.centerLeft, child: _severityBadge(alert))),
-                Expanded(child: Align(alignment: Alignment.centerLeft, child: _alertStatusBadge(alert))),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    formatAdminDateTime(alert.createdAt),
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      color: AppColors.textGray,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: _severityBadge(alert),
+                  ),
+                ),
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: _alertStatusBadge(alert),
+                  ),
+                ),
                 SizedBox(width: 70, child: reviewButton),
               ],
             ),
@@ -319,18 +427,35 @@ class _AlertRow extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Expanded(child: Text('${alert.typeLabel}  \u2022  ${alert.shortId}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                    Expanded(
+                      child: Text(
+                        '${alert.typeLabel}  \u2022  ${alert.shortId}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
                     _severityBadge(alert),
                   ],
                 ),
                 const SizedBox(height: 3),
-                Text('$user${alert.eventTitle != null ? ' \u2022 ${alert.eventTitle}' : ''}', style: const TextStyle(fontSize: 11)),
+                Text(
+                  '$user${alert.eventTitle != null ? ' \u2022 ${alert.eventTitle}' : ''}',
+                  style: const TextStyle(fontSize: 11),
+                ),
                 const SizedBox(height: 3),
                 Row(
                   children: [
                     _alertStatusBadge(alert),
                     const SizedBox(width: 8),
-                    Text(formatAdminDateTime(alert.createdAt), style: const TextStyle(fontSize: 10, color: AppColors.textGray)),
+                    Text(
+                      formatAdminDateTime(alert.createdAt),
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: AppColors.textGray,
+                      ),
+                    ),
                   ],
                 ),
                 reviewButton,
@@ -338,7 +463,9 @@ class _AlertRow extends StatelessWidget {
             ),
           );
     return Container(
-      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.borderLight))),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
+      ),
       child: content,
     );
   }
@@ -410,7 +537,13 @@ class _AlertReviewDialogState extends State<_AlertReviewDialog> {
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(width: 92, child: Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textGray))),
+        SizedBox(
+          width: 92,
+          child: Text(
+            label,
+            style: const TextStyle(fontSize: 11, color: AppColors.textGray),
+          ),
+        ),
         Expanded(child: Text(value, style: const TextStyle(fontSize: 11.5))),
       ],
     ),
@@ -418,6 +551,7 @@ class _AlertReviewDialogState extends State<_AlertReviewDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = FairTixPalette.of(context);
     final a = widget.alert;
     final svc = AdminResaleService.instance;
     return Dialog(
@@ -439,22 +573,31 @@ class _AlertReviewDialogState extends State<_AlertReviewDialog> {
                 ],
               ),
               const SizedBox(height: 4),
-              Text('Alert ${a.shortId} \u2022 ${a.sourceLabel}-flagged', style: AppTextStyles.bodyGray.copyWith(fontSize: 12)),
+              Text(
+                'Alert ${a.shortId} \u2022 ${a.sourceLabel}-flagged',
+                style: AppTextStyles.bodyGray.copyWith(fontSize: 12),
+              ),
               const SizedBox(height: 14),
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF8F7FC),
+                  color: palette.progressTrack,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.borderLight),
+                  border: Border.all(color: palette.border),
                 ),
                 child: Text(a.details, style: const TextStyle(fontSize: 12)),
               ),
               const SizedBox(height: 14),
-              _fact('Flagged user', a.userName == null ? 'Unknown' : '${a.userName}${a.userEmail == null ? '' : ' (${a.userEmail})'}'),
+              _fact(
+                'Flagged user',
+                a.userName == null
+                    ? 'Unknown'
+                    : '${a.userName}${a.userEmail == null ? '' : ' (${a.userEmail})'}',
+              ),
               if (a.eventTitle != null) _fact('Event', a.eventTitle!),
               _fact('Flagged', formatAdminDateTime(a.createdAt)),
-              if (a.reviewedAt != null) _fact('Last reviewed', formatAdminDateTime(a.reviewedAt!)),
+              if (a.reviewedAt != null)
+                _fact('Last reviewed', formatAdminDateTime(a.reviewedAt!)),
               const SizedBox(height: 8),
               TextField(
                 controller: _note,
@@ -469,12 +612,25 @@ class _AlertReviewDialogState extends State<_AlertReviewDialog> {
               if (_error != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 10),
-                  child: Text(_error!, style: const TextStyle(color: AppColors.dangerRed, fontSize: 12)),
+                  child: Text(
+                    _error!,
+                    style: const TextStyle(
+                      color: AppColors.dangerRed,
+                      fontSize: 12,
+                    ),
+                  ),
                 ),
               if (_info != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 10),
-                  child: Text(_info!, style: const TextStyle(color: AppColors.successGreen, fontSize: 12, fontWeight: FontWeight.w600)),
+                  child: Text(
+                    _info!,
+                    style: const TextStyle(
+                      color: AppColors.successGreen,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               Wrap(
                 spacing: 8,
@@ -484,20 +640,43 @@ class _AlertReviewDialogState extends State<_AlertReviewDialog> {
                     OutlinedButton(
                       onPressed: _busy
                           ? null
-                          : () => _run(() => svc.updateAlert(a.id, 'reviewing', note: _note.text), closeAfter: true),
+                          : () => _run(
+                              () => svc.updateAlert(
+                                a.id,
+                                'reviewing',
+                                note: _note.text,
+                              ),
+                              closeAfter: true,
+                            ),
                       child: const Text('Mark Reviewing'),
                     ),
                   FilledButton(
                     onPressed: _busy
                         ? null
-                        : () => _run(() => svc.updateAlert(a.id, 'resolved', note: _note.text), closeAfter: true),
-                    style: FilledButton.styleFrom(backgroundColor: AppColors.successGreen),
+                        : () => _run(
+                            () => svc.updateAlert(
+                              a.id,
+                              'resolved',
+                              note: _note.text,
+                            ),
+                            closeAfter: true,
+                          ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.successGreen,
+                    ),
                     child: const Text('Resolve'),
                   ),
                   OutlinedButton(
                     onPressed: _busy
                         ? null
-                        : () => _run(() => svc.updateAlert(a.id, 'dismissed', note: _note.text), closeAfter: true),
+                        : () => _run(
+                            () => svc.updateAlert(
+                              a.id,
+                              'dismissed',
+                              note: _note.text,
+                            ),
+                            closeAfter: true,
+                          ),
                     child: const Text('Dismiss'),
                   ),
                 ],
@@ -515,8 +694,12 @@ class _AlertReviewDialogState extends State<_AlertReviewDialog> {
                         onPressed: _busy
                             ? null
                             : () => _run(
-                                () => svc.removeListing(a.listingId!, reason: _note.text.trim()),
-                                success: 'Listing removed and the seller was notified.',
+                                () => svc.removeListing(
+                                  a.listingId!,
+                                  reason: _note.text.trim(),
+                                ),
+                                success:
+                                    'Listing removed and the seller was notified.',
                               ),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.dangerRed,
@@ -529,11 +712,13 @@ class _AlertReviewDialogState extends State<_AlertReviewDialog> {
                         onPressed: _busy
                             ? null
                             : () => _run(
-                                () => AdminUserService.instance.setAccountStatus(
-                                  userId: a.userId!,
-                                  status: 'suspended',
-                                ),
-                                success: 'Account suspended. It can be reactivated from Accounts.',
+                                () =>
+                                    AdminUserService.instance.setAccountStatus(
+                                      userId: a.userId!,
+                                      status: 'suspended',
+                                    ),
+                                success:
+                                    'Account suspended. It can be reactivated from Accounts.',
                               ),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.dangerRed,
@@ -548,7 +733,9 @@ class _AlertReviewDialogState extends State<_AlertReviewDialog> {
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
-                  onPressed: _busy ? null : () => Navigator.pop(context, _changed),
+                  onPressed: _busy
+                      ? null
+                      : () => Navigator.pop(context, _changed),
                   child: const Text('Close'),
                 ),
               ),

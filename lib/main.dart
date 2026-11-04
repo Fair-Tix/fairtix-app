@@ -218,11 +218,7 @@ class _LoadingApp extends StatelessWidget {
 final SupabaseClient supabase = Supabase.instance.client;
 
 class MyApp extends StatelessWidget {
-  const MyApp({
-    super.key,
-    this.initialRoute,
-    this.startupAuthError,
-  });
+  const MyApp({super.key, this.initialRoute, this.startupAuthError});
 
   final String? initialRoute;
   final String? startupAuthError;
@@ -246,6 +242,7 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = FairTixPalette.of(context);
     return MaterialApp(
       title: 'FairTix',
       debugShowCheckedModeBanner: false,
@@ -286,10 +283,75 @@ class MyApp extends StatelessWidget {
         );
       },
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: AppColors.primaryPurple),
+        colorScheme:
+            ColorScheme.fromSeed(
+              seedColor: AppColors.primaryPurple,
+              brightness: palette.isDark ? Brightness.dark : Brightness.light,
+            ).copyWith(
+              primary: palette.primary,
+              onPrimary: Colors.white,
+              surface: palette.surface,
+              onSurface: palette.textPrimary,
+              error: palette.danger,
+            ),
         useMaterial3: true,
         pageTransitionsTheme: smoothPageTransitionsTheme,
-        scaffoldBackgroundColor: const Color(0xFFF9F9FC),
+        scaffoldBackgroundColor: palette.background,
+        dividerColor: palette.border,
+        cardColor: palette.surface,
+        textTheme:
+            (palette.isDark
+                    ? Typography.whiteMountainView
+                    : Typography.blackMountainView)
+                .apply(
+                  bodyColor: palette.textPrimary,
+                  displayColor: palette.textPrimary,
+                ),
+        iconTheme: IconThemeData(color: palette.textSecondary),
+        dataTableTheme: DataTableThemeData(
+          headingRowColor: WidgetStateProperty.all(palette.progressTrack),
+          headingTextStyle: TextStyle(
+            color: palette.textSecondary,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+          ),
+          dataTextStyle: TextStyle(color: palette.textPrimary, fontSize: 12),
+          dividerThickness: 1,
+        ),
+        drawerTheme: DrawerThemeData(
+          backgroundColor: palette.surface,
+          surfaceTintColor: Colors.transparent,
+        ),
+        appBarTheme: AppBarTheme(
+          backgroundColor: palette.surface,
+          foregroundColor: palette.textPrimary,
+          surfaceTintColor: Colors.transparent,
+        ),
+        popupMenuTheme: PopupMenuThemeData(
+          color: palette.surface,
+          textStyle: TextStyle(color: palette.textPrimary),
+        ),
+        dialogTheme: DialogThemeData(
+          backgroundColor: palette.surface,
+          titleTextStyle: TextStyle(
+            color: palette.textPrimary,
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+          ),
+          contentTextStyle: TextStyle(color: palette.textSecondary),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: palette.surface,
+          hintStyle: TextStyle(color: palette.textSecondary),
+          labelStyle: TextStyle(color: palette.textSecondary),
+          enabledBorder: OutlineInputBorder(
+            borderSide: BorderSide(color: palette.border),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderSide: BorderSide(color: palette.primary, width: 1.5),
+          ),
+        ),
       ),
       scrollBehavior: const _AppScrollBehavior(),
       builder: (context, child) {
@@ -308,9 +370,7 @@ class MyApp extends StatelessWidget {
           // The phone app on a tablet / foldable / landscape: keep the phone
           // layout centered instead of stretching it edge to edge. Children
           // see the narrower width through MediaQuery as well.
-          data = data.copyWith(
-            size: Size(_phoneMaxWidth, media.size.height),
-          );
+          data = data.copyWith(size: Size(_phoneMaxWidth, media.size.height));
           content = ColoredBox(
             color: Theme.of(context).scaffoldBackgroundColor,
             child: Center(

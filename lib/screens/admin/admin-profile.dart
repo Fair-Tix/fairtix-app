@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../widgets/admin_shell.dart';
 import '../../services/admin_auth_service.dart';
 import '../../services/admin_session.dart';
 import '../../services/password_service.dart';
+import '../../theme/fairtix_palette.dart';
 import '../organizer/app_colors.dart';
 import 'admin-accounts.dart';
 import 'admin-dashboard.dart';
@@ -135,27 +137,10 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width >= 900;
-    return Scaffold(
-      backgroundColor: const Color(0xFFF9F9FC),
-      drawer: isWide ? null : Drawer(child: _buildSidebar(context)),
-      body: Row(
-        children: [
-          if (isWide) SizedBox(width: 180, child: _buildSidebar(context)),
-          Expanded(
-            child: Column(
-              children: [
-                _buildTopBar(context, isWide),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.all(isWide ? 18 : 14),
-                    child: _buildContent(isWide),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return AdminShell(
+      active: AdminNavItem.profile,
+      title: 'Profile',
+      body: _buildContent(isWide),
     );
   }
 
@@ -328,6 +313,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
   }
 
   Widget _buildIdentityCard() {
+    final palette = FairTixPalette.of(context);
     final currentEmail =
         AdminSession.instance.currentEmail ?? 'admin@fairtix.com';
     final sessionLabel = currentEmail.split('@').first.trim();
@@ -353,28 +339,32 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
             const SizedBox(height: 12),
             Text(
               sessionLabel.isNotEmpty ? sessionLabel : 'Admin',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+              style: TextStyle(
+                color: palette.textPrimary,
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+              ),
             ),
             const SizedBox(height: 5),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 3),
               decoration: BoxDecoration(
-                color: AppColors.infoBlueBg,
+                color: palette.primary.withValues(alpha: 0.16),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
                     Icons.shield_outlined,
                     size: 11,
-                    color: AppColors.infoBlue,
+                    color: palette.accentLabel,
                   ),
                   SizedBox(width: 5),
                   Text(
                     'Administrator',
                     style: TextStyle(
-                      color: AppColors.infoBlue,
+                      color: palette.accentLabel,
                       fontSize: 9,
                       fontWeight: FontWeight.w600,
                     ),
@@ -404,10 +394,10 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
             const SizedBox(height: 18),
             Row(
               children: [
-                const Text(
+                Text(
                   'ACCOUNT STATUS',
                   style: TextStyle(
-                    color: Color(0xFF9CA3AF),
+                    color: palette.textSecondary,
                     fontSize: 8,
                     fontWeight: FontWeight.w700,
                   ),
@@ -417,7 +407,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
                   width: 7,
                   height: 7,
                   decoration: BoxDecoration(
-                    color: isSignedIn ? AppColors.successGreen : Colors.grey,
+                    color: isSignedIn ? palette.success : palette.textSecondary,
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -425,7 +415,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
                 Text(
                   isSignedIn ? 'Signed in' : 'Signed out',
                   style: TextStyle(
-                    color: isSignedIn ? AppColors.successGreen : Colors.grey,
+                    color: isSignedIn ? palette.success : palette.textSecondary,
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                   ),
@@ -448,7 +438,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 16, color: const Color(0xFF9CA3AF)),
+        Icon(icon, size: 16, color: FairTixPalette.of(context).textSecondary),
         const SizedBox(width: 10),
         Expanded(
           child: Column(
@@ -456,8 +446,8 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
             children: [
               Text(
                 label,
-                style: const TextStyle(
-                  color: Color(0xFF9CA3AF),
+                style: TextStyle(
+                  color: FairTixPalette.of(context).textSecondary,
                   fontSize: 8,
                   fontWeight: FontWeight.w700,
                 ),
@@ -474,14 +464,21 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
                 const SizedBox(height: 7),
                 Text(
                   note,
-                  style: const TextStyle(color: Color(0xFFA6A9B7), fontSize: 8),
+                  style: TextStyle(
+                    color: FairTixPalette.of(context).textSecondary,
+                    fontSize: 8,
+                  ),
                 ),
               ],
             ],
           ),
         ),
         if (label != 'MEMBER SINCE')
-          const Icon(Icons.lock_outline, size: 14, color: Color(0xFFB7BBC7)),
+          Icon(
+            Icons.lock_outline,
+            size: 14,
+            color: FairTixPalette.of(context).textSecondary,
+          ),
       ],
     ),
   );
@@ -627,6 +624,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
   );
 
   Widget _strengthIndicator() {
+    final palette = FairTixPalette.of(context);
     final password = _newPasswordController.text;
     int score = 0;
     if (password.length >= 8) score++;
@@ -642,21 +640,21 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
     final Color color;
     if (password.isEmpty) {
       label = 'Enter a new password';
-      color = const Color(0xFFA6A9B7);
+      color = palette.textSecondary;
     } else if (score <= 1) {
       label = 'Password strength: Weak';
-      color = AppColors.dangerRed;
+      color = palette.danger;
     } else if (score <= 3) {
       label = 'Password strength: Medium';
-      color = AppColors.warningOrange;
+      color = palette.warning;
     } else {
       label = 'Password strength: Strong';
-      color = AppColors.successGreen;
+      color = palette.success;
     }
 
     Color barColor(int index) {
       final filled = password.isEmpty ? 0 : (score.clamp(0, 5) / 5 * 3).ceil();
-      return index < filled ? color : const Color(0xFFE5E7EB);
+      return index < filled ? color : palette.progressTrack;
     }
 
     return SizedBox(
@@ -719,7 +717,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
               'Activity logging isn\u2019t built yet \u2014 actions you take (approvals, suspensions, etc.) aren\u2019t recorded to a log for display here.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: AppColors.textGray,
+                color: FairTixPalette.of(context).textSecondary,
                 fontSize: isWide ? 11 : 10,
               ),
             ),
@@ -735,21 +733,26 @@ class _Panel extends StatelessWidget {
   const _Panel({required this.child});
 
   @override
-  Widget build(BuildContext context) => Container(
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(9),
-      border: Border.all(color: AppColors.borderLight),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x08000000),
-          blurRadius: 8,
-          offset: Offset(0, 3),
-        ),
-      ],
-    ),
-    child: child,
-  );
+  Widget build(BuildContext context) {
+    final palette = FairTixPalette.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: palette.surface,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: palette.border),
+        boxShadow: palette.isDark
+            ? null
+            : const [
+                BoxShadow(
+                  color: Color(0x08000000),
+                  blurRadius: 8,
+                  offset: Offset(0, 3),
+                ),
+              ],
+      ),
+      child: child,
+    );
+  }
 }
 
 class _PanelHeader extends StatelessWidget {
@@ -759,41 +762,48 @@ class _PanelHeader extends StatelessWidget {
   const _PanelHeader({required this.icon, required this.title, this.action});
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.fromLTRB(18, 15, 18, 14),
-    decoration: const BoxDecoration(
-      border: Border(bottom: BorderSide(color: AppColors.borderLight)),
-    ),
-    child: Row(
-      children: [
-        Container(
-          width: 25,
-          height: 25,
-          decoration: BoxDecoration(
-            color: const Color(0xFFF0E9FF),
-            borderRadius: BorderRadius.circular(8),
+  Widget build(BuildContext context) {
+    final palette = FairTixPalette.of(context);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 15, 18, 14),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: palette.border)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 25,
+            height: 25,
+            decoration: BoxDecoration(
+              color: palette.progressTrack,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: palette.primary, size: 15),
           ),
-          child: Icon(icon, color: AppColors.primaryPurple, size: 15),
-        ),
-        const SizedBox(width: 10),
-        Text(
-          title,
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-        ),
-        if (action != null) ...[
-          const Spacer(),
+          const SizedBox(width: 10),
           Text(
-            action!,
-            style: const TextStyle(
-              color: AppColors.primaryPurple,
-              fontSize: 9,
-              fontWeight: FontWeight.w600,
+            title,
+            style: TextStyle(
+              color: palette.textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
             ),
           ),
+          if (action != null) ...[
+            const Spacer(),
+            Text(
+              action!,
+              style: TextStyle(
+                color: palette.primary,
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ],
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }
 
 class _AdminLogo extends StatelessWidget {

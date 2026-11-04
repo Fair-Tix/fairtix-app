@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../services/admin_auth_service.dart';
 import '../organizer/app_colors.dart';
+import '../../theme/fairtix_palette.dart';
+import '../../widgets/theme_mode_switch.dart';
 import 'admin-dashboard.dart';
 import 'admin-route.dart';
 
@@ -59,25 +61,39 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = FairTixPalette.of(context);
     final isWide = MediaQuery.of(context).size.width > 900;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9F9FC),
-      body: Row(
+      backgroundColor: palette.background,
+      body: Stack(
         children: [
-          if (isWide) const Expanded(flex: 39, child: _AdminBrandPanel()),
-          Expanded(
-            flex: 61,
-            child: Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 40,
+          Row(
+            children: [
+              if (isWide) const Expanded(flex: 39, child: _AdminBrandPanel()),
+              Expanded(
+                flex: 61,
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 64,
+                    ),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 410),
+                      child: _buildLoginCard(),
+                    ),
+                  ),
                 ),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 410),
-                  child: _buildLoginCard(),
-                ),
+              ),
+            ],
+          ),
+          const SafeArea(
+            child: Align(
+              alignment: Alignment.topRight,
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: ThemeModeSwitch(),
               ),
             ),
           ),
@@ -87,18 +103,22 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
   }
 
   Widget _buildLoginCard() {
+    final palette = FairTixPalette.of(context);
     return Container(
       padding: const EdgeInsets.fromLTRB(34, 30, 34, 32),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: palette.surface,
         borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.12),
-            blurRadius: 28,
-            offset: const Offset(0, 14),
-          ),
-        ],
+        border: Border.all(color: palette.border),
+        boxShadow: palette.isDark
+            ? const []
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.12),
+                  blurRadius: 28,
+                  offset: const Offset(0, 14),
+                ),
+              ],
       ),
       child: Form(
         key: _formKey,
@@ -106,22 +126,22 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const _AdminLogo(),
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(top: 18),
-              child: Divider(color: AppColors.borderLight),
+              child: Divider(color: palette.border),
             ),
             const SizedBox(height: 26),
-            const Text(
+            Text(
               'Admin Portal',
               textAlign: TextAlign.center,
-              style: AppTextStyles.h1,
+              style: AppTextStyles.h1.copyWith(color: palette.textPrimary),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Restricted access - authorized personnel only',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Color(0xFFB45309),
+                color: palette.warning,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
@@ -135,12 +155,15 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                   vertical: 10,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF3F0FF),
+                  color: palette.progressTrack,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   'Test account: ${AdminAuthService.debugCredentialsHint}',
-                  style: AppTextStyles.bodyGray.copyWith(fontSize: 12),
+                  style: AppTextStyles.bodyGray.copyWith(
+                    color: palette.textSecondary,
+                    fontSize: 12,
+                  ),
                 ),
               ),
               const SizedBox(height: 18),
@@ -164,10 +187,10 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
               hint: 'Enter your password',
               controller: _passwordController,
               obscureText: _obscurePassword,
-              prefixIcon: const Icon(
+              prefixIcon: Icon(
                 Icons.lock_outline,
                 size: 20,
-                color: AppColors.textGray,
+                color: palette.textSecondary,
               ),
               suffixIcon: IconButton(
                 tooltip: _obscurePassword ? 'Show password' : 'Hide password',
@@ -176,7 +199,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                       ? Icons.visibility_off_outlined
                       : Icons.visibility_outlined,
                   size: 20,
-                  color: AppColors.textGray,
+                  color: palette.textSecondary,
                 ),
                 onPressed: () =>
                     setState(() => _obscurePassword = !_obscurePassword),
@@ -189,10 +212,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
               const SizedBox(height: 12),
               Text(
                 _errorText!,
-                style: const TextStyle(
-                  color: AppColors.dangerRed,
-                  fontSize: 13,
-                ),
+                style: TextStyle(color: palette.danger, fontSize: 13),
               ),
             ],
             Align(
@@ -206,10 +226,10 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                   ),
                 ),
                 style: TextButton.styleFrom(padding: EdgeInsets.zero),
-                child: const Text(
+                child: Text(
                   'Forgot password?',
                   style: TextStyle(
-                    color: AppColors.primaryPurple,
+                    color: palette.primary,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -230,18 +250,22 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                     isGradient: true,
                     height: 52,
                   ),
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(top: 18, bottom: 16),
-              child: Divider(color: AppColors.borderLight),
+              child: Divider(color: palette.border),
             ),
-            const Row(
+            Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.lock_outline, size: 14, color: AppColors.textGray),
+                Icon(
+                  Icons.lock_outline,
+                  size: 14,
+                  color: palette.textSecondary,
+                ),
                 SizedBox(width: 7),
                 Text(
                   'This portal is not publicly accessible.',
-                  style: TextStyle(color: AppColors.textGray, fontSize: 11),
+                  style: TextStyle(color: palette.textSecondary, fontSize: 11),
                 ),
               ],
             ),
@@ -261,40 +285,51 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     Widget? prefixIcon,
     Widget? suffixIcon,
   }) {
+    final palette = FairTixPalette.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: AppTextStyles.label.copyWith(fontSize: 12)),
+        Text(
+          label,
+          style: AppTextStyles.label.copyWith(
+            color: palette.textPrimary,
+            fontSize: 12,
+          ),
+        ),
         const SizedBox(height: 7),
         TextFormField(
           controller: controller,
           keyboardType: keyboardType,
           obscureText: obscureText,
           validator: validator,
-          style: AppTextStyles.body,
+          style: AppTextStyles.body.copyWith(color: palette.textPrimary),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: AppTextStyles.bodyGray.copyWith(fontSize: 12),
+            hintStyle: AppTextStyles.bodyGray.copyWith(
+              color: palette.textSecondary,
+              fontSize: 12,
+            ),
             prefixIcon: prefixIcon,
             suffixIcon: suffixIcon,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 14,
               vertical: 14,
             ),
-            border: _border(),
-            enabledBorder: _border(),
-            focusedBorder: _border(AppColors.primaryPurple),
+            filled: true,
+            fillColor: palette.surface,
+            border: _border(palette.border),
+            enabledBorder: _border(palette.border),
+            focusedBorder: _border(palette.primary),
           ),
         ),
       ],
     );
   }
 
-  OutlineInputBorder _border([Color color = AppColors.borderLight]) =>
-      OutlineInputBorder(
-        borderRadius: BorderRadius.circular(9),
-        borderSide: BorderSide(color: color),
-      );
+  OutlineInputBorder _border(Color color) => OutlineInputBorder(
+    borderRadius: BorderRadius.circular(9),
+    borderSide: BorderSide(color: color),
+  );
 }
 
 class _AdminBrandPanel extends StatelessWidget {
@@ -376,7 +411,8 @@ class _AdminLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = light ? Colors.white : AppColors.textDark;
+    final palette = FairTixPalette.of(context);
+    final color = light ? Colors.white : palette.textPrimary;
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [

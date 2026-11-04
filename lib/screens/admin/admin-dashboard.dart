@@ -6,6 +6,7 @@ import '../../services/admin_refund_service.dart';
 import '../../services/admin_resale_service.dart';
 import '../../services/admin_user_service.dart';
 import '../../services/csv_export.dart';
+import '../../theme/fairtix_palette.dart';
 import '../../widgets/admin_shell.dart';
 import '../../widgets/admin_widgets.dart';
 import '../organizer/app_colors.dart';
@@ -56,7 +57,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   Future<void> _load() async {
     setState(() => _isLoading = true);
-    await Future.wait([_loadStats(), _loadUsers(), _loadAlerts(), _loadRefunds()]);
+    await Future.wait([
+      _loadStats(),
+      _loadUsers(),
+      _loadAlerts(),
+      _loadRefunds(),
+    ]);
     if (mounted) setState(() => _isLoading = false);
   }
 
@@ -117,10 +123,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   List<AdminUserSummary> get _pendingApplications => _users
-      .where((u) => u.role == 'organizer' && u.idVerificationStatus == 'pending')
+      .where(
+        (u) => u.role == 'organizer' && u.idVerificationStatus == 'pending',
+      )
       .toList();
 
-  List<FraudAlertEntry> get _openAlerts => _alerts.where((a) => !a.isClosed).toList();
+  List<FraudAlertEntry> get _openAlerts =>
+      _alerts.where((a) => !a.isClosed).toList();
 
   static String _roleLabel(String role) => switch (role) {
     'organizer' => 'an organizer',
@@ -135,7 +144,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       if (at == null) continue;
       items.add((
         at: at.toLocal(),
-        icon: u.role == 'organizer' ? Icons.business_outlined : Icons.person_add_alt_outlined,
+        icon: u.role == 'organizer'
+            ? Icons.business_outlined
+            : Icons.person_add_alt_outlined,
         text: '${u.fullName} registered as ${_roleLabel(u.role)}',
       ));
     }
@@ -143,7 +154,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       items.add((
         at: a.createdAt,
         icon: Icons.flag_outlined,
-        text: 'Fraud alert (${a.typeLabel}) for ${a.userName ?? 'an unknown user'}',
+        text:
+            'Fraud alert (${a.typeLabel}) for ${a.userName ?? 'an unknown user'}',
       ));
     }
     for (final r in _refunds) {
@@ -160,7 +172,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   void _toast(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _exportActivity() async {
@@ -202,28 +216,43 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             OutlinedButton.icon(
               onPressed: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const AdminAnnouncementScreen()),
+                MaterialPageRoute(
+                  builder: (_) => const AdminAnnouncementScreen(),
+                ),
               ),
               icon: const Icon(Icons.campaign_outlined, size: 14),
-              label: const Text('Create Announcement', style: TextStyle(fontSize: 10)),
+              label: const Text(
+                'Create Announcement',
+                style: TextStyle(fontSize: 10),
+              ),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.primaryPurple,
                 side: const BorderSide(color: AppColors.primaryPurple),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 10,
+                ),
               ),
             ),
             const SizedBox(width: 8),
             TextButton.icon(
               onPressed: _isLoading ? null : _load,
               icon: const Icon(Icons.refresh, size: 14),
-              label: Text(_isLoading ? 'Refreshing...' : 'Refresh Data', style: const TextStyle(fontSize: 10)),
-              style: TextButton.styleFrom(foregroundColor: AppColors.primaryPurple),
+              label: Text(
+                _isLoading ? 'Refreshing...' : 'Refresh Data',
+                style: const TextStyle(fontSize: 10),
+              ),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primaryPurple,
+              ),
             ),
           ],
         ),
         const SizedBox(height: 18),
         if (_statsError != null) ...[
-          AdminCard(child: AdminErrorBox(message: _statsError!, onRetry: _loadStats)),
+          AdminCard(
+            child: AdminErrorBox(message: _statsError!, onRetry: _loadStats),
+          ),
           const SizedBox(height: 18),
         ],
         AdminSummaryRow(
@@ -260,7 +289,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               icon: Icons.monetization_on_outlined,
               color: AppColors.successGreen,
               label: 'Platform Revenue',
-              value: stats == null ? '\u2014' : formatPeso(stats.platformRevenue),
+              value: stats == null
+                  ? '\u2014'
+                  : formatPeso(stats.platformRevenue),
               caption: 'Platform fees, after refunds',
             ),
           ],
@@ -280,7 +311,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       Expanded(child: alerts),
                     ],
                   )
-                : Column(children: [applications, const SizedBox(height: 16), alerts]);
+                : Column(
+                    children: [
+                      applications,
+                      const SizedBox(height: 16),
+                      alerts,
+                    ],
+                  );
           },
         ),
         const SizedBox(height: 18),
@@ -303,15 +340,28 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         children: [
           Row(
             children: [
-              Expanded(child: Text(title, style: AppTextStyles.label.copyWith(fontSize: 12))),
+              Expanded(
+                child: Text(
+                  title,
+                  style: AppTextStyles.label.copyWith(fontSize: 12),
+                ),
+              ),
               TextButton(
                 onPressed: onAction,
                 style: TextButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 6),
                   minimumSize: Size.zero,
-                  foregroundColor: alertAction ? AppColors.dangerRed : AppColors.primaryPurple,
+                  foregroundColor: alertAction
+                      ? AppColors.dangerRed
+                      : AppColors.primaryPurple,
                 ),
-                child: Text(action, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
+                child: Text(
+                  action,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ],
           ),
@@ -328,7 +378,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       child: Text(
         text,
         textAlign: TextAlign.center,
-        style: TextStyle(color: error ? AppColors.dangerRed : AppColors.textGray, fontSize: 11),
+        style: TextStyle(
+          color: error ? AppColors.dangerRed : AppColors.textGray,
+          fontSize: 11,
+        ),
       ),
     ),
   );
@@ -358,15 +411,22 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          (applicant.organizationName?.trim().isNotEmpty ?? false)
+                          (applicant.organizationName?.trim().isNotEmpty ??
+                                  false)
                               ? applicant.organizationName!
                               : applicant.fullName,
-                          style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                         Text(
                           '${applicant.fullName} \u2022 ${applicant.email}',
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 10, color: AppColors.textGray),
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: AppColors.textGray,
+                          ),
                         ),
                       ],
                     ),
@@ -374,7 +434,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   if (applicant.createdAt != null)
                     Text(
                       formatAdminDate(applicant.createdAt!.toLocal()),
-                      style: const TextStyle(fontSize: 10, color: AppColors.textGray),
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: AppColors.textGray,
+                      ),
                     ),
                 ],
               ),
@@ -391,7 +454,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       );
     }
     return _panel(
-      title: 'Pending Organizer Applications${pending.isEmpty ? '' : ' (${pending.length})'}',
+      title:
+          'Pending Organizer Applications${pending.isEmpty ? '' : ' (${pending.length})'}',
       action: 'View All',
       onAction: () => adminPushReplacement(
         context,
@@ -425,11 +489,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(alert.typeLabel, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
+                        Text(
+                          alert.typeLabel,
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                         Text(
                           '${alert.userName ?? 'Unknown user'} \u2022 ${formatAdminDateTime(alert.createdAt)}',
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 10, color: AppColors.textGray),
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: AppColors.textGray,
+                          ),
                         ),
                       ],
                     ),
@@ -454,20 +527,24 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       );
     }
     return _panel(
-      title: 'Recent Fraud Alerts${open.isEmpty ? '' : ' (${open.length} open)'}',
+      title:
+          'Recent Fraud Alerts${open.isEmpty ? '' : ' (${open.length} open)'}',
       action: 'View All',
       alertAction: true,
-      onAction: () => adminPushReplacement(
-        context,
-        const AdminFraudAlertsScreen(),
-      ),
+      onAction: () =>
+          adminPushReplacement(context, const AdminFraudAlertsScreen()),
       child: body,
     );
   }
 
   Widget _buildActivityPanel() {
+    final palette = FairTixPalette.of(context);
     final items = _activity;
-    final failed = [_usersError, _alertsError, _refundsError].whereType<String>().isNotEmpty;
+    final failed = [
+      _usersError,
+      _alertsError,
+      _refundsError,
+    ].whereType<String>().isNotEmpty;
     final Widget body;
     if (_isLoading && items.isEmpty) {
       body = const Padding(
@@ -490,24 +567,32 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 children: [
                   CircleAvatar(
                     radius: 13,
-                    backgroundColor: const Color(0xFFF0E9FF),
-                    child: Icon(item.icon, size: 14, color: AppColors.primaryPurple),
+                    backgroundColor: palette.progressTrack,
+                    child: Icon(item.icon, size: 14, color: palette.primary),
                   ),
                   const SizedBox(width: 10),
-                  Expanded(child: Text(item.text, style: const TextStyle(fontSize: 11.5))),
+                  Expanded(
+                    child: Text(
+                      item.text,
+                      style: const TextStyle(fontSize: 11.5),
+                    ),
+                  ),
                   const SizedBox(width: 10),
                   Text(
                     formatAdminDateTime(item.at),
-                    style: const TextStyle(fontSize: 10, color: AppColors.textGray),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: palette.textSecondary,
+                    ),
                   ),
                 ],
               ),
             ),
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(top: 6, bottom: 6),
             child: Text(
               'Built from recent registrations, fraud alerts and refunds. Admin actions are not logged yet.',
-              style: TextStyle(fontSize: 9.5, color: Color(0xFFA6A9B7)),
+              style: TextStyle(fontSize: 9.5, color: palette.textSecondary),
             ),
           ),
         ],
@@ -521,7 +606,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         children: [
           Row(
             children: [
-              const Expanded(child: Text('Recent Activity', style: AppTextStyles.label)),
+              const Expanded(
+                child: Text('Recent Activity', style: AppTextStyles.label),
+              ),
               IconButton(
                 onPressed: _exportActivity,
                 icon: const Icon(Icons.download_outlined, size: 16),

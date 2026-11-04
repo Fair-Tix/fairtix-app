@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../services/admin_auth_service.dart';
 import '../organizer/app_colors.dart';
 import '../../theme/fairtix_palette.dart';
-import '../../widgets/theme_mode_switch.dart';
 import 'admin-dashboard.dart';
 import 'admin-route.dart';
 
@@ -66,34 +65,21 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
 
     return Scaffold(
       backgroundColor: palette.background,
-      body: Stack(
+      body: Row(
         children: [
-          Row(
-            children: [
-              if (isWide) const Expanded(flex: 39, child: _AdminBrandPanel()),
-              Expanded(
-                flex: 61,
-                child: Center(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 64,
-                    ),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 410),
-                      child: _buildLoginCard(),
-                    ),
-                  ),
+          if (isWide) const Expanded(flex: 39, child: _AdminBrandPanel()),
+          Expanded(
+            flex: 61,
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 64,
                 ),
-              ),
-            ],
-          ),
-          const SafeArea(
-            child: Align(
-              alignment: Alignment.topRight,
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: ThemeModeSwitch(),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 410),
+                  child: _buildLoginCard(),
+                ),
               ),
             ),
           ),

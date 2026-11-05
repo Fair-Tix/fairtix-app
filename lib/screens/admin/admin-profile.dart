@@ -1,22 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../widgets/admin_shell.dart';
-import '../../services/admin_auth_service.dart';
+import '../../widgets/admin_widgets.dart';
+import '../../widgets/organizer_ui.dart';
 import '../../services/admin_session.dart';
 import '../../services/password_service.dart';
 import '../../theme/fairtix_palette.dart';
-import '../organizer/app_colors.dart';
-import 'admin-accounts.dart';
-import 'admin-dashboard.dart';
-import 'admin-events-tickets.dart';
-import 'admin-fraud-alerts.dart';
-import 'admin-login.dart';
-import 'admin-organizer-applications.dart';
-import 'admin-platform-settings.dart';
-import 'admin-resale-monitoring.dart';
-import 'admin-revenue-reports.dart';
-import 'admin-route.dart';
-import 'admin-user-registrations.dart';
 
 class AdminProfileScreen extends StatefulWidget {
   const AdminProfileScreen({super.key});
@@ -35,19 +24,6 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
   bool _showConfirmPassword = false;
   bool _isSavingPassword = false;
 
-  static const _items = [
-    (Icons.grid_view_rounded, 'Dashboard'),
-    (Icons.business_outlined, 'Organizer Applications'),
-    (Icons.how_to_reg_outlined, 'User Registrations'),
-    (Icons.people_outline, 'Accounts'),
-    (Icons.calendar_today_outlined, 'Events & Tickets'),
-    (Icons.swap_vert_rounded, 'Resale Monitoring'),
-    (Icons.shield_outlined, 'Fraud Alerts'),
-    (Icons.bar_chart_rounded, 'Revenue & Reports'),
-    (Icons.settings_outlined, 'Platform Settings'),
-    (Icons.person_outline, 'Profile'),
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -60,24 +36,6 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
-  }
-
-  void _navigate(BuildContext context, int index) {
-    final pages = <int, Widget>{
-      0: const AdminDashboardScreen(),
-      1: const AdminOrganizerApplicationsScreen(),
-      2: const AdminUserRegistrationsScreen(),
-      3: const AdminAccountsScreen(),
-      4: const AdminEventsTicketsScreen(),
-      5: const AdminResaleMonitoringScreen(),
-      6: const AdminFraudAlertsScreen(),
-      7: const AdminRevenueReportsScreen(),
-      8: const AdminPlatformSettingsScreen(),
-    };
-    final page = pages[index];
-    if (page != null) {
-      adminPushReplacement(context, page);
-    }
   }
 
   Future<void> _savePassword() async {
@@ -101,37 +59,12 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(e.message),
-          backgroundColor: AppColors.dangerRed,
+          backgroundColor: FairTixPalette.of(context).danger,
         ),
       );
     } finally {
       if (mounted) setState(() => _isSavingPassword = false);
     }
-  }
-
-  Future<void> _confirmLogout() async {
-    final shouldLogout = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Log out?'),
-        content: const Text('Are you sure you want to log out?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Log out'),
-          ),
-        ],
-      ),
-    );
-
-    if (!mounted || shouldLogout != true) return;
-
-    AdminAuthService.instance.logout();
-    adminPushAndRemoveUntil(context, const AdminLoginScreen());
   }
 
   @override
@@ -144,439 +77,308 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
     );
   }
 
-  Widget _buildSidebar(BuildContext context) {
-    final currentEmail =
-        AdminSession.instance.currentEmail ?? 'admin@fairtix.com';
-
-    return Container(
-      color: const Color(0xFFF3F1FD),
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 18, 12, 18),
-              child: _AdminLogo(),
-            ),
-            const Divider(height: 1, color: AppColors.borderLight),
-            const SizedBox(height: 14),
-            for (var index = 0; index < _items.length; index++)
-              _SidebarItem(
-                icon: _items[index].$1,
-                label: _items[index].$2,
-                selected: index == 9,
-                onTap: () => _navigate(context, index),
-              ),
-            const Spacer(),
-            const Divider(height: 1, color: AppColors.borderLight),
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                children: [
-                  const CircleAvatar(
-                    radius: 15,
-                    backgroundColor: Color(0xFFE8E6F1),
-                    child: Icon(
-                      Icons.person,
-                      size: 17,
-                      color: AppColors.textGray,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Admin', style: AppTextStyles.label),
-                        Text(
-                          currentEmail,
-                          style: const TextStyle(
-                            color: AppColors.textGray,
-                            fontSize: 9,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: _confirmLogout,
-                    icon: const Icon(
-                      Icons.logout,
-                      size: 17,
-                      color: AppColors.textGray,
-                    ),
-                    tooltip: 'Log out',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTopBar(BuildContext context, bool isWide) {
-    final currentEmail =
-        AdminSession.instance.currentEmail ?? 'admin@fairtix.com';
-
-    return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 18),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
-      ),
-      child: Row(
-        children: [
-          if (!isWide)
-            Builder(
-              builder: (context) => IconButton(
-                icon: const Icon(Icons.menu, size: 20),
-                onPressed: () => Scaffold.of(context).openDrawer(),
-              ),
-            ),
-          const Text('My Profile', style: AppTextStyles.label),
-          const Spacer(),
-          SizedBox(
-            width: isWide ? 270 : 130,
-            height: 32,
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Search users, events...',
-                hintStyle: const TextStyle(
-                  color: Color(0xFFA6A9B7),
-                  fontSize: 10,
-                ),
-                prefixIcon: const Icon(
-                  Icons.search,
-                  size: 16,
-                  color: Color(0xFFA6A9B7),
-                ),
-                filled: true,
-                fillColor: const Color(0xFFF3F3F6),
-                contentPadding: EdgeInsets.zero,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
-          const Icon(
-            Icons.notifications_none,
-            size: 19,
-            color: AppColors.textGray,
-          ),
-          const SizedBox(width: 14),
-          const CircleAvatar(
-            radius: 14,
-            backgroundColor: Color(0xFFE8E6F1),
-            child: Icon(Icons.person, size: 16, color: AppColors.textGray),
-          ),
-          if (isWide) ...[
-            const SizedBox(width: 8),
-            Text(
-              currentEmail,
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-            ),
-            const Icon(Icons.keyboard_arrow_down, size: 16),
-          ],
-        ],
-      ),
-    );
-  }
-
   Widget _buildContent(bool isWide) {
     final left = _buildIdentityCard();
     final right = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildPasswordCard(),
-        const SizedBox(height: 16),
-        _buildActivityCard(isWide),
+        const SizedBox(height: 20),
+        _buildActivityCard(),
       ],
     );
 
-    return isWide
-        ? Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const AdminPageHeader(
+          title: 'My Profile',
+          subtitle: 'Your administrator account and sign-in security.',
+        ),
+        const SizedBox(height: 24),
+        if (isWide)
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(flex: 4, child: left),
-              const SizedBox(width: 18),
+              const SizedBox(width: 20),
               Expanded(flex: 6, child: right),
             ],
           )
-        : Column(children: [left, const SizedBox(height: 16), right]);
+        else
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [left, const SizedBox(height: 20), right],
+          ),
+      ],
+    );
   }
 
   Widget _buildIdentityCard() {
-    final palette = FairTixPalette.of(context);
+    final p = FairTixPalette.of(context);
     final currentEmail =
         AdminSession.instance.currentEmail ?? 'admin@fairtix.com';
     final sessionLabel = currentEmail.split('@').first.trim();
     final isSignedIn = AdminSession.instance.isSignedIn;
 
-    return _Panel(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(26, 26, 26, 22),
-        child: Column(
-          children: [
-            CircleAvatar(
-              radius: 33,
-              backgroundColor: AppColors.primaryPurple,
-              child: Text(
-                sessionLabel.isNotEmpty ? sessionLabel[0].toUpperCase() : 'A',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              sessionLabel.isNotEmpty ? sessionLabel : 'Admin',
-              style: TextStyle(
-                color: palette.textPrimary,
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 5),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 3),
+    return AdminCard(
+      padding: const EdgeInsets.fromLTRB(26, 28, 26, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 76,
+              height: 76,
+              alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: palette.primary.withValues(alpha: 0.16),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.shield_outlined,
-                    size: 11,
-                    color: palette.accentLabel,
-                  ),
-                  SizedBox(width: 5),
-                  Text(
-                    'Administrator',
-                    style: TextStyle(
-                      color: palette.accentLabel,
-                      fontSize: 9,
-                      fontWeight: FontWeight.w600,
-                    ),
+                shape: BoxShape.circle,
+                gradient: FairTixPalette.buttonGradient,
+                boxShadow: [
+                  BoxShadow(
+                    color: p.primary.withValues(alpha: 0.30),
+                    blurRadius: 18,
+                    offset: const Offset(0, 6),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 25),
-            const Divider(height: 1),
-            _profileDetail(Icons.mail_outline, 'EMAIL', currentEmail, null),
-            _profileDetail(
-              Icons.calendar_today_outlined,
-              'MEMBER SINCE',
-              AdminSession.instance.memberSince != null
-                  ? formatFriendlyDate(AdminSession.instance.memberSince!)
-                  : '\u2014',
-              null,
-            ),
-            _profileDetail(
-              Icons.shield_outlined,
-              'ROLE',
-              'Administrator',
-              null,
-            ),
-            const SizedBox(height: 18),
-            const Divider(height: 1),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                Text(
-                  'ACCOUNT STATUS',
-                  style: TextStyle(
-                    color: palette.textSecondary,
-                    fontSize: 8,
-                    fontWeight: FontWeight.w700,
-                  ),
+              child: Text(
+                sessionLabel.isNotEmpty ? sessionLabel[0].toUpperCase() : 'A',
+                style: orgText(
+                  p,
+                  size: 28,
+                  weight: FontWeight.w800,
+                  color: Colors.white,
+                  height: 1,
                 ),
-                const Spacer(),
-                Container(
-                  width: 7,
-                  height: 7,
-                  decoration: BoxDecoration(
-                    color: isSignedIn ? palette.success : palette.textSecondary,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 5),
-                Text(
-                  isSignedIn ? 'Signed in' : 'Signed out',
-                  style: TextStyle(
-                    color: isSignedIn ? palette.success : palette.textSecondary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
+              ),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            sessionLabel.isNotEmpty ? sessionLabel : 'Admin',
+            textAlign: TextAlign.center,
+            style: orgText(p, size: 22, weight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          Center(child: AdminBadge.info('Administrator')),
+          const SizedBox(height: 24),
+          Divider(height: 1, color: p.border),
+          _profileDetail(Icons.mail_outline, 'EMAIL', currentEmail),
+          _profileDetail(
+            Icons.calendar_today_outlined,
+            'MEMBER SINCE',
+            AdminSession.instance.memberSince != null
+                ? formatAdminDate(AdminSession.instance.memberSince!)
+                : '\u2014',
+          ),
+          Divider(height: 1, color: p.border),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Text(
+                'ACCOUNT STATUS',
+                style: orgText(
+                  p,
+                  size: 11,
+                  weight: FontWeight.w700,
+                  color: p.textSecondary,
+                  letterSpacing: 0.6,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: isSignedIn ? p.success : p.textSecondary,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                isSignedIn ? 'Signed in' : 'Signed out',
+                style: orgText(
+                  p,
+                  size: 13,
+                  weight: FontWeight.w700,
+                  color: isSignedIn ? p.success : p.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
-  Widget _profileDetail(
-    IconData icon,
-    String label,
-    String value,
-    String? note,
-  ) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 14),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 16, color: FairTixPalette.of(context).textSecondary),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  color: FairTixPalette.of(context).textSecondary,
-                  fontSize: 8,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              if (note != null) ...[
-                const SizedBox(height: 7),
-                Text(
-                  note,
-                  style: TextStyle(
-                    color: FairTixPalette.of(context).textSecondary,
-                    fontSize: 8,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-        if (label != 'MEMBER SINCE')
-          Icon(
-            Icons.lock_outline,
-            size: 14,
-            color: FairTixPalette.of(context).textSecondary,
-          ),
-      ],
-    ),
-  );
-
-  Widget _buildPasswordCard() => _Panel(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const _PanelHeader(icon: Icons.lock_outline, title: 'Change Password'),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
-          child: Form(
-            key: _formKey,
+  Widget _profileDetail(IconData icon, String label, String value) {
+    final p = FairTixPalette.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: p.textSecondary),
+          const SizedBox(width: 12),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _passwordField(
-                  'Current Password',
-                  _currentPasswordController,
-                  _showCurrentPassword,
-                  () => setState(
-                    () => _showCurrentPassword = !_showCurrentPassword,
+                Text(
+                  label,
+                  style: orgText(
+                    p,
+                    size: 11,
+                    weight: FontWeight.w700,
+                    color: p.textSecondary,
+                    letterSpacing: 0.6,
                   ),
-                  validator: (value) => (value == null || value.isEmpty)
-                      ? 'Enter your current password.'
-                      : null,
                 ),
-                const SizedBox(height: 15),
-                _passwordField(
-                  'New Password',
-                  _newPasswordController,
-                  _showNewPassword,
-                  () => setState(() => _showNewPassword = !_showNewPassword),
-                  validator: (value) => (value ?? '').length < 8
-                      ? 'Use at least 8 characters.'
-                      : null,
-                ),
-                const SizedBox(height: 8),
-                _strengthIndicator(),
-                const SizedBox(height: 15),
-                _passwordField(
-                  'Confirm New Password',
-                  _confirmPasswordController,
-                  _showConfirmPassword,
-                  () => setState(
-                    () => _showConfirmPassword = !_showConfirmPassword,
-                  ),
-                  validator: (value) => value != _newPasswordController.text
-                      ? 'Passwords do not match.'
-                      : null,
-                ),
-                const SizedBox(height: 18),
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Your name and email stay locked to your admin account. Only your password can be changed here.',
-                        style: TextStyle(color: Color(0xFFA6A9B7), fontSize: 8),
-                      ),
-                    ),
-                    FilledButton(
-                      onPressed: _isSavingPassword ? null : _savePassword,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.primaryPurple,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                      ),
-                      child: _isSavingPassword
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text(
-                              'Save Changes',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                    ),
-                  ],
+                const SizedBox(height: 3),
+                Text(
+                  value,
+                  style: orgText(p, size: 14, weight: FontWeight.w600),
                 ),
               ],
             ),
           ),
-        ),
-      ],
-    ),
-  );
+          if (label != 'MEMBER SINCE')
+            Icon(Icons.lock_outline, size: 16, color: p.textSecondary),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPasswordCard() {
+    final p = FairTixPalette.of(context);
+    return AdminCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _PanelHeader(
+            icon: Icons.lock_outline,
+            title: 'Change Password',
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(22, 20, 22, 20),
+            child: Form(
+              key: _formKey,
+              child: LayoutBuilder(
+                builder: (context, box) {
+                  // Current password on its own row, then New + Confirm side by
+                  // side; everything stacks on narrow cards.
+                  final sideBySide = box.maxWidth >= 560;
+                  final fieldWidth = sideBySide
+                      ? (box.maxWidth - 16) / 2
+                      : box.maxWidth;
+
+                  final current = _passwordField(
+                    'Current Password',
+                    _currentPasswordController,
+                    _showCurrentPassword,
+                    () => setState(
+                      () => _showCurrentPassword = !_showCurrentPassword,
+                    ),
+                    validator: (value) => (value == null || value.isEmpty)
+                        ? 'Enter your current password.'
+                        : null,
+                  );
+                  final newField = Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _passwordField(
+                        'New Password',
+                        _newPasswordController,
+                        _showNewPassword,
+                        () => setState(
+                          () => _showNewPassword = !_showNewPassword,
+                        ),
+                        validator: (value) => (value ?? '').length < 8
+                            ? 'Use at least 8 characters.'
+                            : null,
+                      ),
+                      const SizedBox(height: 10),
+                      _strengthIndicator(),
+                    ],
+                  );
+                  final confirm = _passwordField(
+                    'Confirm New Password',
+                    _confirmPasswordController,
+                    _showConfirmPassword,
+                    () => setState(
+                      () => _showConfirmPassword = !_showConfirmPassword,
+                    ),
+                    validator: (value) => value != _newPasswordController.text
+                        ? 'Passwords do not match.'
+                        : null,
+                  );
+                  final note = Text(
+                    'Your name and email stay locked to your admin account. Only your password can be changed here.',
+                    style: orgText(
+                      p,
+                      size: 12,
+                      color: p.textSecondary,
+                      height: 1.4,
+                    ),
+                  );
+                  final save = AdminHeaderButton(
+                    label: _isSavingPassword ? 'Saving...' : 'Save Changes',
+                    filled: true,
+                    onPressed: _isSavingPassword ? null : _savePassword,
+                  );
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: fieldWidth),
+                          child: current,
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      if (sideBySide)
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: newField),
+                            const SizedBox(width: 16),
+                            Expanded(child: confirm),
+                          ],
+                        )
+                      else ...[
+                        newField,
+                        const SizedBox(height: 18),
+                        confirm,
+                      ],
+                      const SizedBox(height: 22),
+                      Divider(height: 1, color: p.border),
+                      const SizedBox(height: 16),
+                      if (sideBySide)
+                        Row(
+                          children: [
+                            Expanded(child: note),
+                            const SizedBox(width: 16),
+                            save,
+                          ],
+                        )
+                      else ...[
+                        note,
+                        const SizedBox(height: 14),
+                        Align(alignment: Alignment.centerLeft, child: save),
+                      ],
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _passwordField(
     String label,
@@ -584,47 +386,53 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
     bool visible,
     VoidCallback onToggle, {
     String? Function(String?)? validator,
-  }) => SizedBox(
-    width: 310,
-    child: TextFormField(
-      controller: controller,
-      obscureText: !visible,
-      validator: validator,
-      style: const TextStyle(fontSize: 10),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(
-          color: AppColors.textDark,
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-        ),
-        floatingLabelBehavior: FloatingLabelBehavior.always,
-        hintText: '••••••••',
-        hintStyle: const TextStyle(color: Color(0xFFA6A9B7), fontSize: 10),
-        suffixIcon: IconButton(
-          onPressed: onToggle,
-          icon: Icon(
-            visible ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-            size: 17,
-            color: const Color(0xFFA6A9B7),
+  }) {
+    final p = FairTixPalette.of(context);
+    OutlineInputBorder border(Color c) => OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: BorderSide(color: c),
+    );
+    return Padding(
+      padding: EdgeInsets.zero,
+      child: TextFormField(
+        controller: controller,
+        obscureText: !visible,
+        validator: validator,
+        cursorColor: p.accentLabel,
+        style: orgText(p, size: 14),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: orgText(p, size: 14, weight: FontWeight.w700),
+          floatingLabelBehavior: FloatingLabelBehavior.always,
+          hintText: '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022',
+          hintStyle: orgText(p, size: 14, color: p.textSecondary),
+          errorStyle: orgText(p, size: 12, color: p.danger),
+          filled: true,
+          fillColor: p.surface,
+          suffixIcon: IconButton(
+            onPressed: onToggle,
+            icon: Icon(
+              visible
+                  ? Icons.visibility_outlined
+                  : Icons.visibility_off_outlined,
+              size: 19,
+              color: p.textSecondary,
+            ),
+            tooltip: visible ? 'Hide password' : 'Show password',
           ),
-          tooltip: visible ? 'Hide password' : 'Show password',
-        ),
-        contentPadding: const EdgeInsets.fromLTRB(10, 13, 4, 9),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(6),
-          borderSide: const BorderSide(color: AppColors.borderLight),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(6),
-          borderSide: const BorderSide(color: AppColors.borderLight),
+          contentPadding: const EdgeInsets.fromLTRB(14, 16, 6, 14),
+          border: border(p.border),
+          enabledBorder: border(p.border),
+          focusedBorder: border(p.accentLabel),
+          errorBorder: border(p.danger),
+          focusedErrorBorder: border(p.danger),
         ),
       ),
-    ),
-  );
+    );
+  }
 
   Widget _strengthIndicator() {
-    final palette = FairTixPalette.of(context);
+    final p = FairTixPalette.of(context);
     final password = _newPasswordController.text;
     int score = 0;
     if (password.length >= 8) score++;
@@ -640,117 +448,82 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
     final Color color;
     if (password.isEmpty) {
       label = 'Enter a new password';
-      color = palette.textSecondary;
+      color = p.textSecondary;
     } else if (score <= 1) {
       label = 'Password strength: Weak';
-      color = palette.danger;
+      color = p.danger;
     } else if (score <= 3) {
       label = 'Password strength: Medium';
-      color = palette.warning;
+      color = p.warning;
     } else {
       label = 'Password strength: Strong';
-      color = palette.success;
+      color = p.success;
     }
 
-    Color barColor(int index) {
+    Widget bar(int index) {
       final filled = password.isEmpty ? 0 : (score.clamp(0, 5) / 5 * 3).ceil();
-      return index < filled ? color : palette.progressTrack;
+      return Expanded(
+        child: Container(
+          height: 5,
+          decoration: BoxDecoration(
+            color: index < filled ? color : p.progressTrack,
+            borderRadius: BorderRadius.circular(3),
+          ),
+        ),
+      );
     }
 
-    return SizedBox(
-      width: 310,
+    return Padding(
+      padding: EdgeInsets.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Expanded(
-                child: Container(
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: barColor(0),
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                ),
-              ),
+              bar(0),
               const SizedBox(width: 4),
-              Expanded(child: Container(height: 4, color: barColor(1))),
+              bar(1),
               const SizedBox(width: 4),
-              Expanded(
-                child: Container(
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: barColor(2),
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                ),
-              ),
+              bar(2),
             ],
           ),
-          const SizedBox(height: 5),
+          const SizedBox(height: 6),
           Text(
             label,
-            style: TextStyle(
-              color: color,
-              fontSize: 8,
-              fontWeight: FontWeight.w700,
-            ),
+            style: orgText(p, size: 12, weight: FontWeight.w700, color: color),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildActivityCard(bool isWide) => _Panel(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const _PanelHeader(
-          icon: Icons.access_time,
-          title: 'Recent Activity',
-          action: 'View Full Log',
-        ),
-        Padding(
-          padding: const EdgeInsets.all(20),
-          child: Center(
-            child: Text(
-              'Activity logging isn\u2019t built yet \u2014 actions you take (approvals, suspensions, etc.) aren\u2019t recorded to a log for display here.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: FairTixPalette.of(context).textSecondary,
-                fontSize: isWide ? 11 : 10,
+  Widget _buildActivityCard() {
+    final p = FairTixPalette.of(context);
+    return AdminCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _PanelHeader(
+            icon: Icons.access_time,
+            title: 'Recent Activity',
+          ),
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Center(
+              child: Text(
+                'Activity logging isn\u2019t built yet \u2014 actions you take (approvals, suspensions, etc.) aren\u2019t recorded to a log for display here.',
+                textAlign: TextAlign.center,
+                style: orgText(
+                  p,
+                  size: 13,
+                  color: p.textSecondary,
+                  height: 1.45,
+                ),
               ),
             ),
           ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _Panel extends StatelessWidget {
-  final Widget child;
-  const _Panel({required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = FairTixPalette.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: palette.surface,
-        borderRadius: BorderRadius.circular(9),
-        border: Border.all(color: palette.border),
-        boxShadow: palette.isDark
-            ? null
-            : const [
-                BoxShadow(
-                  color: Color(0x08000000),
-                  blurRadius: 8,
-                  offset: Offset(0, 3),
-                ),
-              ],
+        ],
       ),
-      child: child,
     );
   }
 }
@@ -758,138 +531,31 @@ class _Panel extends StatelessWidget {
 class _PanelHeader extends StatelessWidget {
   final IconData icon;
   final String title;
-  final String? action;
-  const _PanelHeader({required this.icon, required this.title, this.action});
+  const _PanelHeader({required this.icon, required this.title});
 
   @override
   Widget build(BuildContext context) {
-    final palette = FairTixPalette.of(context);
+    final p = FairTixPalette.of(context);
     return Container(
-      padding: const EdgeInsets.fromLTRB(18, 15, 18, 14),
+      padding: const EdgeInsets.fromLTRB(22, 18, 22, 16),
       decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: palette.border)),
+        border: Border(bottom: BorderSide(color: p.border)),
       ),
       child: Row(
         children: [
           Container(
-            width: 25,
-            height: 25,
+            width: 34,
+            height: 34,
             decoration: BoxDecoration(
-              color: palette.progressTrack,
-              borderRadius: BorderRadius.circular(8),
+              color: p.primary.withValues(alpha: p.isDark ? 0.20 : 0.10),
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, color: palette.primary, size: 15),
+            child: Icon(icon, color: p.accentLabel, size: 18),
           ),
-          const SizedBox(width: 10),
-          Text(
-            title,
-            style: TextStyle(
-              color: palette.textPrimary,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          if (action != null) ...[
-            const Spacer(),
-            Text(
-              action!,
-              style: TextStyle(
-                color: palette.primary,
-                fontSize: 9,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
+          const SizedBox(width: 12),
+          Text(title, style: orgText(p, size: 16, weight: FontWeight.w700)),
         ],
       ),
     );
   }
-}
-
-class _AdminLogo extends StatelessWidget {
-  const _AdminLogo();
-
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Container(
-        width: 22,
-        height: 22,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: AppColors.primaryPurple,
-          borderRadius: BorderRadius.circular(5),
-        ),
-        child: const Icon(
-          Icons.confirmation_number_outlined,
-          color: Colors.white,
-          size: 14,
-        ),
-      ),
-      const SizedBox(width: 6),
-      const Text(
-        'FairTix',
-        style: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w800,
-          fontStyle: FontStyle.italic,
-        ),
-      ),
-      const SizedBox(width: 3),
-      const Text(
-        'ADMIN',
-        style: TextStyle(fontSize: 8, color: AppColors.textGray),
-      ),
-    ],
-  );
-}
-
-class _SidebarItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-  const _SidebarItem({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-    child: Material(
-      color: selected ? AppColors.primaryPurple : Colors.transparent,
-      borderRadius: BorderRadius.circular(7),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(7),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                size: 15,
-                color: selected ? Colors.white : AppColors.textGray,
-              ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    color: selected ? Colors.white : AppColors.textGray,
-                    fontSize: 10,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
 }

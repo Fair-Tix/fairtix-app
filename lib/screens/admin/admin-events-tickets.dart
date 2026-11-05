@@ -3,11 +3,12 @@ import 'package:flutter/material.dart';
 import '../../services/admin_event_service.dart';
 import '../../services/csv_export.dart';
 import '../../theme/fairtix_palette.dart';
-import '../../widgets/admin_document_viewer.dart';
+import '../../widgets/admin_document_viewer.dart'
+    show AdminReviewDocument, showAdminReviewDialog;
 import '../../widgets/admin_shell.dart';
 import '../../widgets/admin_widgets.dart';
-import '../organizer/app_colors.dart';
-import '../user/all_events_screen.dart';
+import '../../widgets/organizer_ui.dart';
+import 'admin-browse-events.dart';
 
 /// Every organizer's events with real sales numbers, plus the admin's two
 /// powers from the manuscript: cancel or unpublish any event.
@@ -34,6 +35,9 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
     'Cancelled',
     'Completed',
   ];
+
+  /// Relative column widths (event, organizer, date, sold, status, actions).
+  static const _flex = [4, 3, 3, 2, 2, 6];
 
   final _searchController = TextEditingController();
   List<AdminEventSummary> _events = const [];
@@ -82,14 +86,19 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
   List<AdminEventSummary> get _filtered {
     final query = _searchController.text.trim().toLowerCase();
     return _events.where((e) {
-      if (_statusFilter != 'All' && e.statusLabel != _statusFilter)
+      if (_statusFilter != 'All' && e.statusLabel != _statusFilter) {
         return false;
+      }
       if (query.isEmpty) return true;
       return '${e.title} ${e.organizerName} ${e.venue}'.toLowerCase().contains(
         query,
       );
     }).toList();
   }
+
+  int _countFor(String filter) => filter == 'All'
+      ? _events.length
+      : _events.where((e) => e.statusLabel == filter).length;
 
   void _toast(String message) {
     if (!mounted) return;
@@ -99,6 +108,7 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
   }
 
   Future<void> _cancelEvent(AdminEventSummary event) async {
+    final p = FairTixPalette.of(context);
     final sold = event.ticketsSold;
     final body = sold == 0
         ? 'No tickets have been sold for "${event.title}". It will be marked as cancelled.'
@@ -108,18 +118,18 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
               'This cannot be undone.';
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Cancel this event?'),
-        content: Text(body),
+      builder: (ctx) => AdminDialog(
+        title: 'Cancel this event?',
+        content: AdminDialogText(body),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Keep Event'),
+          AdminDialogButton(
+            label: 'Keep Event',
+            onPressed: () => Navigator.pop(ctx, false),
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.dangerRed),
-            child: const Text('Cancel Event'),
+          AdminDialogButton(
+            label: 'Cancel Event',
+            color: p.danger,
+            onPressed: () => Navigator.pop(ctx, true),
           ),
         ],
       ),
@@ -163,75 +173,87 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
               'will be refunded automatically and every holder notified.';
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Unpublish this event?'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '"${event.title}" will be hidden from event goers but not deleted. '
-                  '$refundNote',
-                  style: const TextStyle(fontSize: 12.5),
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: reasonController,
-                  maxLines: 3,
-                  decoration: InputDecoration(
-                    labelText: 'Reason (shown to the organizer)',
-                    hintText: 'e.g. LGU permit is missing or expired',
-                    errorText: showReasonError ? 'A reason is required.' : null,
-                    border: const OutlineInputBorder(),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final p = FairTixPalette.of(ctx);
+          return AdminDialog(
+            title: 'Unpublish this event?',
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AdminDialogText(
+                    '"${event.title}" will be hidden from event goers but not deleted. '
+                    '$refundNote',
                   ),
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Time to submit proper documents',
-                        style: TextStyle(fontSize: 12.5),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: reasonController,
+                    maxLines: 3,
+                    style: orgText(p, size: 14, height: 1.3),
+                    cursorColor: p.accentLabel,
+                    decoration: adminInputDecoration(
+                      ctx,
+                      label: 'Reason (shown to the organizer)',
+                      hint: 'e.g. LGU permit is missing or expired',
+                      errorText: showReasonError
+                          ? 'A reason is required.'
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: AdminDialogText('Time to submit proper documents'),
                       ),
-                    ),
-                    DropdownButton<int>(
-                      value: deadlineDays,
-                      items: [
-                        for (final d in const [3, 7, 14, 30])
-                          DropdownMenuItem(value: d, child: Text('$d days')),
-                      ],
-                      onChanged: (v) =>
-                          setDialogState(() => deadlineDays = v ?? 7),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'If the organizer does not comply in time, the event is cancelled.',
-                  style: TextStyle(fontSize: 11, color: AppColors.textGray),
-                ),
-              ],
+                      DropdownButton<int>(
+                        value: deadlineDays,
+                        dropdownColor: p.surface,
+                        underline: const SizedBox.shrink(),
+                        items: [
+                          for (final d in const [3, 7, 14, 30])
+                            DropdownMenuItem(
+                              value: d,
+                              child: Text(
+                                '$d days',
+                                style: orgText(p, size: 14),
+                              ),
+                            ),
+                        ],
+                        onChanged: (v) =>
+                            setDialogState(() => deadlineDays = v ?? 7),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  const AdminDialogText(
+                    'If the organizer does not comply in time, the event is cancelled.',
+                    small: true,
+                  ),
+                ],
+              ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                if (reasonController.text.trim().isEmpty) {
-                  setDialogState(() => showReasonError = true);
-                  return;
-                }
-                Navigator.pop(context, true);
-              },
-              child: const Text('Unpublish'),
-            ),
-          ],
-        ),
+            actions: [
+              AdminDialogButton(
+                label: 'Cancel',
+                onPressed: () => Navigator.pop(ctx, false),
+              ),
+              AdminDialogButton(
+                label: 'Unpublish',
+                color: p.danger,
+                onPressed: () {
+                  if (reasonController.text.trim().isEmpty) {
+                    setDialogState(() => showReasonError = true);
+                    return;
+                  }
+                  Navigator.pop(ctx, true);
+                },
+              ),
+            ],
+          );
+        },
       ),
     );
     final reason = reasonController.text.trim();
@@ -253,22 +275,24 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
   }
 
   Future<void> _republishEvent(AdminEventSummary event) async {
+    final p = FairTixPalette.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Republish this event?'),
-        content: Text(
+      builder: (ctx) => AdminDialog(
+        title: 'Republish this event?',
+        content: AdminDialogText(
           '"${event.title}" will be visible and on sale again. Make sure you reviewed '
           'the new documents first. Previously refunded tickets are not restored.',
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+          AdminDialogButton(
+            label: 'Cancel',
+            onPressed: () => Navigator.pop(ctx, false),
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Republish'),
+          AdminDialogButton(
+            label: 'Republish',
+            color: p.success,
+            onPressed: () => Navigator.pop(ctx, true),
           ),
         ],
       ),
@@ -344,142 +368,109 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
   }
 
   Widget _buildBody() {
-    final palette = FairTixPalette.of(context);
+    final p = FairTixPalette.of(context);
     // Cancelled events are being refunded, so they don't count as sales.
     final live = _events.where((e) => e.status != 'canceled').toList();
     final published = _events.where((e) => e.status == 'published').length;
     final ticketsSold = live.fold<int>(0, (sum, e) => sum + e.ticketsSold);
     final gross = live.fold<double>(0, (sum, e) => sum + e.grossRevenue);
     final filtered = _filtered;
+    final ready = !_isLoading && _loadError == null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Events & Tickets',
-                style: AppTextStyles.h2.copyWith(color: palette.textPrimary),
-              ),
-            ),
-            IconButton(
+        AdminPageHeader(
+          title: 'Events & Tickets',
+          subtitle:
+              'Every organizer\'s events with real sales, plus cancel and unpublish controls.',
+          actions: [
+            AdminIconButton(
+              icon: Icons.refresh_rounded,
+              tooltip: 'Refresh data',
+              loading: _isLoading,
               onPressed: _isLoading ? null : _load,
-              icon: const Icon(Icons.refresh, size: 18),
-              tooltip: 'Refresh',
             ),
-            const SizedBox(width: 4),
             // Same published catalogue event goers see, view-only.
-            OutlinedButton.icon(
+            AdminHeaderButton(
+              icon: Icons.explore_outlined,
+              label: 'Browse Published Events',
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => const AllEventsScreen(readOnly: true),
+                  builder: (_) => const AdminBrowseEventsScreen(),
                 ),
               ),
-              icon: const Icon(Icons.explore_outlined, size: 14),
-              label: const Text(
-                'Browse Published Events',
-                style: TextStyle(fontSize: 11),
-              ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.primaryPurple,
-                side: const BorderSide(color: AppColors.primaryPurple),
-              ),
             ),
-            const SizedBox(width: 8),
-            OutlinedButton.icon(
+            AdminHeaderButton(
+              icon: Icons.download_outlined,
+              label: 'Export CSV',
               onPressed: _isLoading ? null : _exportCsv,
-              icon: const Icon(Icons.download_outlined, size: 14),
-              label: const Text('Export CSV', style: TextStyle(fontSize: 11)),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.primaryPurple,
-                side: const BorderSide(color: AppColors.primaryPurple),
-              ),
             ),
           ],
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 24),
         AdminSummaryRow(
           cards: [
             AdminSummaryCard(
               icon: Icons.event_outlined,
-              color: AppColors.primaryPurple,
+              color: p.accentLabel,
               label: 'Total Events',
               value: '${_events.length}',
               caption: '$published published',
             ),
             AdminSummaryCard(
               icon: Icons.confirmation_number_outlined,
-              color: AppColors.infoBlue,
+              color: p.accentLabel,
               label: 'Tickets Sold',
               value: '$ticketsSold',
               caption: 'Excludes cancelled events',
             ),
             AdminSummaryCard(
               icon: Icons.payments_outlined,
-              color: AppColors.successGreen,
+              color: p.success,
               label: 'Gross Ticket Sales',
               value: formatPeso(gross),
               caption: 'Before platform fees',
             ),
           ],
         ),
-        const SizedBox(height: 18),
-        AdminCard(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: (_) => setState(() {}),
-                  decoration: InputDecoration(
-                    hintText: 'Search event, organizer or venue...',
-                    hintStyle: const TextStyle(fontSize: 11),
-                    prefixIcon: Icon(
-                      Icons.search,
-                      size: 17,
-                      color: palette.textSecondary,
-                    ),
-                    isDense: true,
-                    filled: true,
-                    fillColor: palette.surface,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(7),
-                      borderSide: BorderSide(color: palette.border),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              DropdownButton<String>(
-                value: _statusFilter,
-                underline: const SizedBox.shrink(),
-                items: [
-                  for (final f in _statusFilters)
-                    DropdownMenuItem(
-                      value: f,
-                      child: Text(f, style: const TextStyle(fontSize: 12)),
-                    ),
-                ],
-                onChanged: (value) =>
-                    setState(() => _statusFilter = value ?? 'All'),
-              ),
-            ],
+        const SizedBox(height: 24),
+        AdminFilterChips(
+          labels: _statusFilters,
+          selected: _statusFilters.indexOf(_statusFilter),
+          counts: [for (final f in _statusFilters) ready ? _countFor(f) : null],
+          onSelected: (i) => setState(() => _statusFilter = _statusFilters[i]),
+        ),
+        const SizedBox(height: 14),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: AdminSearchField(
+            hint: 'Search event, organizer or venue',
+            width: 320,
+            onChanged: (_) => setState(() {}),
           ),
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 20),
         AdminCard(
-          child: _isLoading
-              ? const Padding(
-                  padding: EdgeInsets.all(32),
-                  child: Center(
-                    child: CircularProgressIndicator(strokeWidth: 2.4),
-                  ),
-                )
-              : _loadError != null
-              ? AdminErrorBox(message: _loadError!, onRetry: _load)
-              : _buildTable(filtered),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(23),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 200),
+              child: _isLoading
+                  ? Padding(
+                      padding: const EdgeInsets.all(48),
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.4,
+                          color: p.accentLabel,
+                        ),
+                      ),
+                    )
+                  : _loadError != null
+                  ? AdminErrorBox(message: _loadError!, onRetry: _load)
+                  : _buildTable(filtered),
+            ),
+          ),
         ),
       ],
     );
@@ -499,79 +490,28 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
     }
     return LayoutBuilder(
       builder: (context, constraints) {
-        final palette = FairTixPalette.of(context);
-        final wide = constraints.maxWidth >= 760;
+        final p = FairTixPalette.of(context);
+        final wide = constraints.maxWidth >= 900;
         return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (wide)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                color: palette.progressTrack,
-                child: Row(
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: Text(
-                        'EVENT',
-                        style: adminHeaderStyle.copyWith(
-                          color: palette.textSecondary,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      flex: 2,
-                      child: Text(
-                        'ORGANIZER',
-                        style: adminHeaderStyle.copyWith(
-                          color: palette.textSecondary,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      flex: 2,
-                      child: Text(
-                        'DATE',
-                        style: adminHeaderStyle.copyWith(
-                          color: palette.textSecondary,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: Text(
-                        'SOLD',
-                        style: adminHeaderStyle.copyWith(
-                          color: palette.textSecondary,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: Text(
-                        'STATUS',
-                        style: adminHeaderStyle.copyWith(
-                          color: palette.textSecondary,
-                        ),
-                      ),
-                    ),
-                    SizedBox(
-                      width: 300,
-                      child: Text(
-                        'ACTIONS',
-                        style: adminHeaderStyle.copyWith(
-                          color: palette.textSecondary,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+              const AdminTableHeader(
+                labels: [
+                  'Event',
+                  'Organizer',
+                  'Date',
+                  'Sold',
+                  'Status',
+                  'Actions',
+                ],
+                flex: _flex,
               ),
-            const Divider(height: 1),
             for (final event in filtered)
               _EventRow(
                 event: event,
                 wide: wide,
+                flex: _flex,
                 expanded: _expanded.contains(event.id),
                 busy: _busyEventId == event.id,
                 onToggle: () => setState(() {
@@ -582,17 +522,12 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
                 onViewDocuments: () => _viewDocuments(event),
                 onCancel: () => _cancelEvent(event),
               ),
+            Divider(height: 1, color: p.border),
             Padding(
-              padding: const EdgeInsets.all(14),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Showing ${filtered.length} of ${_events.length} events',
-                  style: const TextStyle(
-                    color: AppColors.textGray,
-                    fontSize: 10,
-                  ),
-                ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              child: Text(
+                'Showing ${filtered.length} of ${_events.length} events',
+                style: orgText(p, size: 12, color: p.textSecondary),
               ),
             ),
           ],
@@ -614,6 +549,7 @@ class _EventRow extends StatelessWidget {
   const _EventRow({
     required this.event,
     required this.wide,
+    required this.flex,
     required this.expanded,
     required this.busy,
     required this.onToggle,
@@ -625,6 +561,7 @@ class _EventRow extends StatelessWidget {
 
   final AdminEventSummary event;
   final bool wide;
+  final List<int> flex;
   final bool expanded;
   final bool busy;
   final VoidCallback onToggle;
@@ -633,119 +570,75 @@ class _EventRow extends StatelessWidget {
   final VoidCallback onViewDocuments;
   final VoidCallback onCancel;
 
-  Widget _actions() => Wrap(
-    spacing: 2,
-    children: [
-      TextButton(
-        onPressed: onToggle,
-        style: TextButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 6),
-          minimumSize: Size.zero,
+  Widget _actions(BuildContext context) {
+    final p = FairTixPalette.of(context);
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        AdminRowAction(
+          label: expanded ? 'Hide tiers' : 'Tiers',
+          onPressed: onToggle,
         ),
-        child: Text(
-          expanded ? 'Hide tiers' : 'Tiers',
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-        ),
-      ),
-      TextButton(
-        onPressed: onViewDocuments,
-        style: TextButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 6),
-          minimumSize: Size.zero,
-        ),
-        child: const Text(
-          'Documents',
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-        ),
-      ),
-      if (event.canRepublish)
-        TextButton(
-          onPressed: busy ? null : onRepublish,
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            minimumSize: Size.zero,
-            foregroundColor: AppColors.successGreen,
+        AdminRowAction(label: 'Documents', onPressed: onViewDocuments),
+        if (event.canRepublish)
+          AdminRowAction(
+            label: 'Republish',
+            color: p.success,
+            onPressed: busy ? null : onRepublish,
           ),
-          child: const Text(
-            'Republish',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+        if (event.canUnpublish)
+          AdminRowAction(
+            label: 'Unpublish',
+            onPressed: busy ? null : onUnpublish,
           ),
-        ),
-      if (event.canUnpublish)
-        TextButton(
-          onPressed: busy ? null : onUnpublish,
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            minimumSize: Size.zero,
+        if (event.canCancel)
+          AdminRowAction(
+            label: busy ? 'Working...' : 'Cancel',
+            color: p.danger,
+            onPressed: busy ? null : onCancel,
           ),
-          child: const Text(
-            'Unpublish',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-          ),
-        ),
-      if (event.canCancel)
-        TextButton(
-          onPressed: busy ? null : onCancel,
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            minimumSize: Size.zero,
-            foregroundColor: AppColors.dangerRed,
-          ),
-          child: Text(
-            busy ? 'Working...' : 'Cancel',
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-          ),
-        ),
-    ],
-  );
+      ],
+    );
+  }
 
   Widget _tierDetails(BuildContext context) {
-    final palette = FairTixPalette.of(context);
+    final p = FairTixPalette.of(context);
+    TextStyle cell({bool bold = false, bool muted = false}) => orgText(
+      p,
+      size: 13,
+      weight: bold ? FontWeight.w600 : FontWeight.w400,
+      color: muted ? p.textSecondary : p.textPrimary,
+    );
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
-      color: palette.progressTrack,
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+      color: p.progressTrack,
       child: event.tiers.isEmpty
           ? Text(
               'No ticket tiers.',
-              style: TextStyle(color: palette.textSecondary, fontSize: 11),
+              style: orgText(p, size: 13, color: p.textSecondary),
             )
           : Column(
               children: [
                 for (final tier in event.tiers)
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    padding: const EdgeInsets.symmetric(vertical: 5),
                     child: Row(
                       children: [
                         Expanded(
                           flex: 3,
-                          child: Text(
-                            tier.label,
-                            style: TextStyle(
-                              color: palette.textPrimary,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                          child: Text(tier.label, style: cell(bold: true)),
                         ),
                         Expanded(
                           flex: 2,
-                          child: Text(
-                            formatPeso(tier.price),
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: palette.textPrimary,
-                            ),
-                          ),
+                          child: Text(formatPeso(tier.price), style: cell()),
                         ),
                         Expanded(
                           flex: 2,
                           child: Text(
                             '${tier.sold} / ${tier.total} sold',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: palette.textPrimary,
-                            ),
+                            style: cell(),
                           ),
                         ),
                         Expanded(
@@ -753,10 +646,7 @@ class _EventRow extends StatelessWidget {
                           child: Text(
                             formatPeso(tier.revenue),
                             textAlign: TextAlign.right,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: palette.textSecondary,
-                            ),
+                            style: cell(muted: true),
                           ),
                         ),
                       ],
@@ -769,122 +659,110 @@ class _EventRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final row = wide
-        ? Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        event.title,
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      Text(
-                        event.venue,
-                        style: const TextStyle(
-                          fontSize: 10.5,
-                          color: AppColors.textGray,
-                        ),
-                      ),
-                      if (event.complianceLabel != null)
-                        Text(
-                          event.complianceLabel!,
-                          style: const TextStyle(
-                            fontSize: 10.5,
-                            color: AppColors.dangerRed,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Text(
-                    event.organizerName,
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Text(
-                    event.dateLabel,
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                ),
-                Expanded(
-                  child: Text(
-                    event.soldLabel,
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                ),
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: _statusBadge(event),
-                  ),
-                ),
-                SizedBox(width: 300, child: _actions()),
-              ],
-            ),
-          )
-        : Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        event.title,
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    _statusBadge(event),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${event.organizerName} \u2022 ${event.venue}',
-                  style: const TextStyle(
-                    fontSize: 10.5,
-                    color: AppColors.textGray,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${event.dateLabel} \u2022 ${event.soldLabel} sold',
-                  style: const TextStyle(fontSize: 11),
-                ),
-                if (event.complianceLabel != null)
-                  Text(
-                    event.complianceLabel!,
-                    style: const TextStyle(
-                      fontSize: 10.5,
-                      color: AppColors.dangerRed,
-                    ),
-                  ),
-                const SizedBox(height: 6),
-                _actions(),
-              ],
-            ),
-          );
+    final p = FairTixPalette.of(context);
 
-    return Container(
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
-      ),
-      child: Column(children: [row, if (expanded) _tierDetails(context)]),
+    final Widget row;
+    if (wide) {
+      row = AdminTableRow(
+        children: [
+          Expanded(
+            flex: flex[0],
+            child: Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    event.title,
+                    style: orgText(
+                      p,
+                      size: 14,
+                      weight: FontWeight.w700,
+                      height: 1.3,
+                    ),
+                  ),
+                  Text(
+                    event.venue,
+                    style: orgText(
+                      p,
+                      size: 12,
+                      color: p.textSecondary,
+                      height: 1.3,
+                    ),
+                  ),
+                  if (event.complianceLabel != null)
+                    Text(
+                      event.complianceLabel!,
+                      style: orgText(
+                        p,
+                        size: 12,
+                        color: p.danger,
+                        height: 1.3,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          adminCell(context, flex[1], event.organizerName),
+          adminCell(context, flex[2], event.dateLabel),
+          adminCell(context, flex[3], event.soldLabel),
+          Expanded(
+            flex: flex[4],
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _statusBadge(event),
+            ),
+          ),
+          Expanded(flex: flex[5], child: _actions(context)),
+        ],
+      );
+    } else {
+      row = Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: p.border)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    event.title,
+                    style: orgText(p, size: 15, weight: FontWeight.w700),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _statusBadge(event),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '${event.organizerName} \u2022 ${event.venue}',
+              style: orgText(p, size: 12, color: p.textSecondary),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '${event.dateLabel} \u2022 ${event.soldLabel} sold',
+              style: orgText(p, size: 13),
+            ),
+            if (event.complianceLabel != null)
+              Text(
+                event.complianceLabel!,
+                style: orgText(p, size: 12, color: p.danger),
+              ),
+            const SizedBox(height: 12),
+            _actions(context),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [row, if (expanded) _tierDetails(context)],
     );
   }
 }

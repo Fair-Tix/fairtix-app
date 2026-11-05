@@ -10,7 +10,7 @@ import '../../theme/fairtix_palette.dart';
 import '../../services/pdf_export.dart';
 import '../../widgets/admin_shell.dart';
 import '../../widgets/admin_widgets.dart';
-import '../organizer/app_colors.dart';
+import '../../widgets/organizer_ui.dart';
 
 /// Platform earnings, the refund log and CSV report exports.
 ///
@@ -44,6 +44,8 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
     'November',
     'December',
   ];
+
+  static const _ranges = ['This Week', 'This Month', 'Custom Range'];
 
   String _range = 'This Month';
   DateTimeRange? _customRange;
@@ -194,21 +196,22 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
   Future<void> _processRefund(RefundEntry refund) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Mark refund as processed?'),
-        content: Text(
+      builder: (context) => AdminDialog(
+        title: 'Mark refund as processed?',
+        content: AdminDialogText(
           'Record that ${formatPeso(refund.amount)} was refunded to '
           '${refund.buyerName}. This does not send money by itself \u2014 '
           'issue the refund in PayMongo first.',
         ),
         actions: [
-          TextButton(
+          AdminDialogButton(
+            label: 'Cancel',
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
           ),
-          FilledButton(
+          AdminDialogButton(
+            label: 'Mark Processed',
+            color: FairTixPalette.of(context).accentLabel,
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Mark Processed'),
           ),
         ],
       ),
@@ -334,111 +337,46 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
   }
 
   Widget _buildContent(bool isWide) {
-    final palette = FairTixPalette.of(context);
-    final revenue = _plans.fold<double>(0, (sum, p) => sum + p.gross);
-    final fees = _plans.fold<double>(0, (sum, p) => sum + p.fees);
-    final payouts = _plans.fold<double>(0, (sum, p) => sum + p.net);
-    final hasData = _plans.any((p) => p.tickets > 0);
+    final p = FairTixPalette.of(context);
+    final revenue = _plans.fold<double>(0, (sum, e) => sum + e.gross);
+    final fees = _plans.fold<double>(0, (sum, e) => sum + e.fees);
+    final payouts = _plans.fold<double>(0, (sum, e) => sum + e.net);
+    final hasData = _plans.any((e) => e.tickets > 0);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Revenue & Reports',
-                    style: AppTextStyles.h2.copyWith(
-                      color: palette.textPrimary,
-                    ),
-                  ),
-                  SizedBox(height: 3),
-                  Text(
-                    'Track platform earnings and export financial data',
-                    style: TextStyle(
-                      color: palette.textSecondary,
-                      fontSize: 14,
-                    ),
-                  ),
-                ],
-              ),
+        AdminPageHeader(
+          title: 'Revenue & Reports',
+          subtitle: 'Track platform earnings and export financial data',
+          actions: [
+            AdminIconButton(
+              icon: Icons.refresh_rounded,
+              tooltip: 'Refresh data',
+              loading: _isLoading || _isLoadingRefunds || _isLoadingCharts,
+              onPressed: _isLoading || _isLoadingRefunds || _isLoadingCharts
+                  ? null
+                  : _refreshAll,
             ),
-            if (isWide) _buildRangeControls(),
-            IconButton(
-              onPressed: _refreshAll,
-              icon: const Icon(Icons.refresh, size: 18),
-              tooltip: 'Refresh',
-            ),
-            PopupMenuButton<bool>(
-              enabled: !_isExporting,
-              tooltip: 'Export the revenue report',
-              onSelected: (pdf) => _exportRevenue(pdf: pdf),
-              itemBuilder: (context) => const [
-                PopupMenuItem(value: false, child: Text('Export as CSV')),
-                PopupMenuItem(value: true, child: Text('Export as PDF')),
-              ],
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 9,
-                ),
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: _isExporting
-                        ? AppColors.borderLight
-                        : AppColors.primaryPurple,
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.download_outlined,
-                      size: 14,
-                      color: _isExporting
-                          ? AppColors.textGray
-                          : AppColors.primaryPurple,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      _isExporting ? 'Exporting...' : 'Export',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: _isExporting
-                            ? AppColors.textGray
-                            : AppColors.primaryPurple,
-                      ),
-                    ),
-                    Icon(
-                      Icons.arrow_drop_down,
-                      size: 16,
-                      color: _isExporting
-                          ? AppColors.textGray
-                          : AppColors.primaryPurple,
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            _buildExportMenu(),
           ],
         ),
-        if (!isWide) ...[const SizedBox(height: 12), _buildRangeControls()],
-        const SizedBox(height: 18),
+        const SizedBox(height: 20),
+        AdminFilterChips(
+          labels: _ranges,
+          selected: _ranges.indexOf(_range),
+          onSelected: (i) => _selectRange(_ranges[i]),
+        ),
+        const SizedBox(height: 20),
         if (_errorMessage != null) ...[
           _buildErrorBanner(),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
         ],
         AdminSummaryRow(
           cards: [
             AdminSummaryCard(
               icon: Icons.payments_outlined,
-              color: AppColors.primaryPurple,
+              color: p.accentLabel,
               label: 'Total Revenue',
               value: formatPeso(revenue),
               caption: hasData
@@ -447,7 +385,7 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
             ),
             AdminSummaryCard(
               icon: Icons.percent_outlined,
-              color: const Color(0xFFB05BFF),
+              color: p.accentLabel,
               label: 'Platform Fees',
               value: formatPeso(fees),
               caption: hasData
@@ -456,114 +394,122 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
             ),
             AdminSummaryCard(
               icon: Icons.sell_outlined,
-              color: AppColors.successGreen,
+              color: p.success,
               label: 'Net Payouts',
               value: formatPeso(payouts),
               caption: hasData ? 'After platform fees' : 'No payout data yet',
             ),
           ],
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 20),
         _buildFeesByPlan(),
-        const SizedBox(height: 18),
+        const SizedBox(height: 20),
         if (isWide)
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(child: _buildDailyRevenue()),
-              const SizedBox(width: 18),
+              const SizedBox(width: 20),
               Expanded(child: _buildBreakdown(revenue)),
             ],
           )
         else ...[
           _buildDailyRevenue(),
-          const SizedBox(height: 18),
+          const SizedBox(height: 20),
           _buildBreakdown(revenue),
         ],
-        const SizedBox(height: 18),
+        const SizedBox(height: 20),
         _buildMonthlyBreakdown(),
-        const SizedBox(height: 18),
+        const SizedBox(height: 20),
         _buildRefundLog(),
-        const SizedBox(height: 22),
+        const SizedBox(height: 28),
         _buildExportReports(),
       ],
     );
   }
 
-  Widget _buildRangeControls() {
-    final palette = FairTixPalette.of(context);
-    return Container(
-      height: 34,
-      margin: const EdgeInsets.only(right: 6),
-      decoration: BoxDecoration(
-        color: palette.surface,
-        border: Border.all(color: palette.border),
-        borderRadius: BorderRadius.circular(7),
+  /// "Export" dropdown in the page header (revenue report as CSV or PDF).
+  Widget _buildExportMenu() {
+    final p = FairTixPalette.of(context);
+    final fg = _isExporting ? p.textSecondary : p.accentLabel;
+    return PopupMenuButton<bool>(
+      enabled: !_isExporting,
+      tooltip: 'Export the revenue report',
+      color: p.surface,
+      offset: const Offset(0, 48),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: p.border),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final range in ['This Week', 'This Month', 'Custom Range'])
-            InkWell(
-              onTap: () => _selectRange(range),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 11),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: _range == range
-                      ? AppColors.primaryPurple
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Row(
-                  children: [
-                    if (range == 'Custom Range') ...[
-                      Icon(
-                        Icons.calendar_today_outlined,
-                        size: 12,
-                        color: _range == range
-                            ? Colors.white
-                            : palette.textSecondary,
-                      ),
-                      const SizedBox(width: 4),
-                    ],
-                    Text(
-                      range,
-                      style: TextStyle(
-                        color: _range == range
-                            ? Colors.white
-                            : palette.textSecondary,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
+      onSelected: (pdf) => _exportRevenue(pdf: pdf),
+      itemBuilder: (context) => [
+        PopupMenuItem(
+          value: false,
+          child: Text(
+            'Export as CSV',
+            style: orgText(p, size: 14, weight: FontWeight.w600),
+          ),
+        ),
+        PopupMenuItem(
+          value: true,
+          child: Text(
+            'Export as PDF',
+            style: orgText(p, size: 14, weight: FontWeight.w600),
+          ),
+        ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+        decoration: BoxDecoration(
+          color: p.surface,
+          border: Border.all(color: p.border),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.download_outlined, size: 16, color: fg),
+            const SizedBox(width: 7),
+            Text(
+              _isExporting ? 'Exporting...' : 'Export',
+              style: orgText(
+                p,
+                size: 13,
+                weight: FontWeight.w700,
+                color: fg,
+                height: 1.2,
               ),
             ),
-        ],
+            Icon(Icons.arrow_drop_down, size: 18, color: fg),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildErrorBanner() {
-    final palette = FairTixPalette.of(context);
+    final p = FairTixPalette.of(context);
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: palette.dangerSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: palette.danger),
+        color: p.dangerSurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: p.danger),
       ),
       child: Row(
         children: [
           Expanded(
             child: Text(
               _errorMessage!,
-              style: TextStyle(color: palette.danger, fontSize: 11),
+              style: orgText(p, size: 13, color: p.danger),
             ),
           ),
-          TextButton(onPressed: _loadRevenue, child: const Text('Retry')),
+          const SizedBox(width: 12),
+          AdminRowAction(
+            label: 'Retry',
+            color: p.danger,
+            onPressed: _loadRevenue,
+          ),
         ],
       ),
     );
@@ -578,84 +524,82 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
     return labels.join(' / ');
   }
 
+  /// Lets a wide table keep its [minWidth] on a phone by scrolling sideways
+  /// instead of squeezing its columns.
+  Widget _scrollable(double minWidth, Widget child) => LayoutBuilder(
+    builder: (context, constraints) {
+      if (constraints.maxWidth >= minWidth) return child;
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(width: minWidth, child: child),
+      );
+    },
+  );
+
   Widget _buildFeesByPlan() {
-    final plans = _plans;
+    const flex = [2, 1, 1, 2, 2];
+    final p = FairTixPalette.of(context);
     return _panel(
       title: 'Platform Fees by Plan',
       trailing: _isLoading ? 'Loading...' : _rangeLabel(),
-      child: Column(
-        children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 10, 16, 10),
-            child: Row(
-              children: [
-                Expanded(child: Text('PLAN', style: adminHeaderStyle)),
-                Expanded(child: Text('FEE RATE', style: adminHeaderStyle)),
-                Expanded(child: Text('TICKETS', style: adminHeaderStyle)),
-                Expanded(
-                  child: Text('TICKET REVENUE', style: adminHeaderStyle),
-                ),
-                Expanded(child: Text('PLATFORM FEES', style: adminHeaderStyle)),
+      child: _scrollable(
+        560,
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const AdminTableHeader(
+              labels: [
+                'Plan',
+                'Fee rate',
+                'Tickets',
+                'Ticket revenue',
+                'Platform fees',
               ],
+              flex: flex,
             ),
-          ),
-          const Divider(height: 1),
-          for (final plan in plans)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-              child: Row(
+            for (final plan in _plans)
+              AdminTableRow(
                 children: [
+                  adminCell(context, flex[0], plan.plan, bold: true),
                   Expanded(
-                    child: Text(
-                      plan.plan,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
+                    flex: flex[1],
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: Text(
+                        plan.rateLabel,
+                        style: orgText(
+                          p,
+                          size: 13,
+                          weight: FontWeight.w700,
+                          color: p.accentLabel,
+                          height: 1.3,
+                        ),
                       ),
                     ),
                   ),
-                  Expanded(
-                    child: Text(
-                      plan.rateLabel,
-                      style: const TextStyle(
-                        color: AppColors.primaryPurple,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      '${plan.tickets}',
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      formatPeso(plan.gross),
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      formatPeso(plan.fees),
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                  ),
+                  adminCell(context, flex[2], '${plan.tickets}'),
+                  adminCell(context, flex[3], formatPeso(plan.gross)),
+                  adminCell(context, flex[4], formatPeso(plan.fees)),
                 ],
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _chartSpinner() => const SizedBox(
+  Widget _chartSpinner() => SizedBox(
     height: 220,
-    child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+    child: Center(
+      child: CircularProgressIndicator(
+        strokeWidth: 2.4,
+        color: FairTixPalette.of(context).accentLabel,
+      ),
+    ),
   );
 
   Widget _buildDailyRevenue() {
+    final p = FairTixPalette.of(context);
     final total = _daily.fold<double>(0, (sum, d) => sum + d.gross);
     final maxGross = _daily.fold<double>(
       0,
@@ -678,7 +622,7 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
       );
     } else {
       body = Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
         child: SizedBox(
           height: 190,
           child: Column(
@@ -705,9 +649,7 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
                                 widthFactor: 1,
                                 child: Container(
                                   decoration: BoxDecoration(
-                                    color: d.gross > 0
-                                        ? AppColors.primaryPurple
-                                        : AppColors.borderLight,
+                                    color: d.gross > 0 ? p.primary : p.border,
                                     borderRadius: const BorderRadius.vertical(
                                       top: Radius.circular(2),
                                     ),
@@ -721,23 +663,17 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
               Row(
                 children: [
                   Text(
                     formatAdminDate(_daily.first.day),
-                    style: const TextStyle(
-                      color: AppColors.textGray,
-                      fontSize: 9,
-                    ),
+                    style: orgText(p, size: 11, color: p.textSecondary),
                   ),
                   const Spacer(),
                   Text(
                     formatAdminDate(_daily.last.day),
-                    style: const TextStyle(
-                      color: AppColors.textGray,
-                      fontSize: 9,
-                    ),
+                    style: orgText(p, size: 11, color: p.textSecondary),
                   ),
                 ],
               ),
@@ -757,6 +693,7 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
   }
 
   Widget _buildBreakdown(double revenue) {
+    final p = FairTixPalette.of(context);
     return _panel(
       title: 'Revenue Breakdown by Plan',
       trailing: _isLoading ? null : formatPeso(revenue),
@@ -772,12 +709,12 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
               ),
             )
           : Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
               child: Column(
                 children: [
                   for (final plan in _plans)
                     Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      padding: const EdgeInsets.symmetric(vertical: 9),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -786,37 +723,40 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
                               Expanded(
                                 child: Text(
                                   '${plan.plan} (${plan.rateLabel} fee)',
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
+                                  style: orgText(
+                                    p,
+                                    size: 13,
+                                    weight: FontWeight.w700,
                                   ),
                                 ),
                               ),
                               Text(
                                 '${(plan.gross / revenue * 100).round()}%',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.textGray,
+                                style: orgText(
+                                  p,
+                                  size: 13,
+                                  color: p.textSecondary,
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 5),
+                          const SizedBox(height: 6),
                           ClipRRect(
                             borderRadius: BorderRadius.circular(4),
                             child: LinearProgressIndicator(
                               value: plan.gross / revenue,
                               minHeight: 8,
-                              backgroundColor: const Color(0xFFF0EEFA),
-                              color: AppColors.primaryPurple,
+                              backgroundColor: p.progressTrack,
+                              color: p.primary,
                             ),
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 5),
                           Text(
                             '${formatPeso(plan.gross)} \u2022 ${plan.tickets} ticket${plan.tickets == 1 ? '' : 's'}',
-                            style: const TextStyle(
-                              color: AppColors.textGray,
-                              fontSize: 10,
+                            style: orgText(
+                              p,
+                              size: 12,
+                              color: p.textSecondary,
                             ),
                           ),
                         ],
@@ -829,6 +769,8 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
   }
 
   Widget _buildMonthlyBreakdown() {
+    const flex = [2, 2, 2, 2, 1];
+    final p = FairTixPalette.of(context);
     final year = DateTime.now().year;
     // Only months up to the current one; future months are always empty.
     final months = _monthly.take(DateTime.now().month).toList();
@@ -843,9 +785,9 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
     }
 
     Color growthColor(String text) {
-      if (text.startsWith('+')) return AppColors.successGreen;
-      if (text.startsWith('-')) return AppColors.dangerRed;
-      return AppColors.textGray;
+      if (text.startsWith('+')) return p.success;
+      if (text.startsWith('-')) return p.danger;
+      return p.textSecondary;
     }
 
     final Widget body;
@@ -860,83 +802,50 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
         hint: 'Monthly figures will appear here once tickets are sold.',
       );
     } else {
-      body = Column(
-        children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 10, 16, 10),
-            child: Row(
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: Text('MONTH', style: adminHeaderStyle),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Text('TICKET REVENUE', style: adminHeaderStyle),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Text('PLATFORM FEES', style: adminHeaderStyle),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Text('NET PAYOUTS', style: adminHeaderStyle),
-                ),
-                Expanded(child: Text('GROWTH', style: adminHeaderStyle)),
+      body = _scrollable(
+        620,
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const AdminTableHeader(
+              labels: [
+                'Month',
+                'Ticket revenue',
+                'Platform fees',
+                'Net payouts',
+                'Growth',
               ],
+              flex: flex,
             ),
-          ),
-          const Divider(height: 1),
-          for (var i = 0; i < months.length; i++)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 11, 16, 11),
-              child: Row(
+            for (var i = 0; i < months.length; i++)
+              AdminTableRow(
                 children: [
-                  Expanded(
-                    flex: 2,
-                    child: Text(
-                      _monthNames[months[i].month - 1],
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                  adminCell(
+                    context,
+                    flex[0],
+                    _monthNames[months[i].month - 1],
+                    bold: true,
                   ),
+                  adminCell(context, flex[1], formatPeso(months[i].gross)),
+                  adminCell(context, flex[2], formatPeso(months[i].fees)),
+                  adminCell(context, flex[3], formatPeso(months[i].net)),
                   Expanded(
-                    flex: 2,
-                    child: Text(
-                      formatPeso(months[i].gross),
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                  ),
-                  Expanded(
-                    flex: 2,
-                    child: Text(
-                      formatPeso(months[i].fees),
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                  ),
-                  Expanded(
-                    flex: 2,
-                    child: Text(
-                      formatPeso(months[i].net),
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                  ),
-                  Expanded(
+                    flex: flex[4],
                     child: Text(
                       growth(i),
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
+                      style: orgText(
+                        p,
+                        size: 13,
+                        weight: FontWeight.w700,
                         color: growthColor(growth(i)),
+                        height: 1.3,
                       ),
                     ),
                   ),
                 ],
               ),
-            ),
-        ],
+          ],
+        ),
       );
     }
 
@@ -944,14 +853,20 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
   }
 
   Widget _buildRefundLog() {
+    const flex = [3, 3, 3, 2, 2, 3];
     final pending = _refunds.where((r) => !r.isProcessed).length;
     final Widget body;
     if (_refundError != null) {
       body = AdminErrorBox(message: _refundError!, onRetry: _loadRefunds);
     } else if (_isLoadingRefunds) {
-      body = const Padding(
-        padding: EdgeInsets.all(28),
-        child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+      body = Padding(
+        padding: const EdgeInsets.all(32),
+        child: Center(
+          child: CircularProgressIndicator(
+            strokeWidth: 2.4,
+            color: FairTixPalette.of(context).accentLabel,
+          ),
+        ),
       );
     } else if (_refunds.isEmpty) {
       body = const AdminEmptyState(
@@ -960,64 +875,29 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
         hint: 'Refunds appear here when an event is canceled.',
       );
     } else {
-      body = Column(
-        children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 10, 16, 10),
-            child: Row(
-              children: [
-                Expanded(flex: 2, child: Text('DATE', style: adminHeaderStyle)),
-                Expanded(
-                  flex: 2,
-                  child: Text('EVENT', style: adminHeaderStyle),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Text('BUYER', style: adminHeaderStyle),
-                ),
-                Expanded(child: Text('AMOUNT', style: adminHeaderStyle)),
-                Expanded(child: Text('STATUS', style: adminHeaderStyle)),
-                SizedBox(width: 96),
-              ],
+      body = _scrollable(
+        820,
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const AdminTableHeader(
+              labels: ['Date', 'Event', 'Buyer', 'Amount', 'Status', ''],
+              flex: flex,
             ),
-          ),
-          const Divider(height: 1),
-          for (final refund in _refunds) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-              child: Row(
+            for (final refund in _refunds)
+              AdminTableRow(
                 children: [
-                  Expanded(
-                    flex: 2,
-                    child: Text(
-                      formatAdminDateTime(refund.createdAt),
-                      style: const TextStyle(fontSize: 10),
-                    ),
+                  adminCell(
+                    context,
+                    flex[0],
+                    formatAdminDateTime(refund.createdAt),
+                    muted: true,
                   ),
+                  adminCell(context, flex[1], refund.eventTitle),
+                  adminCell(context, flex[2], refund.buyerName),
+                  adminCell(context, flex[3], formatPeso(refund.amount)),
                   Expanded(
-                    flex: 2,
-                    child: Text(
-                      refund.eventTitle,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    flex: 2,
-                    child: Text(
-                      refund.buyerName,
-                      style: const TextStyle(fontSize: 10),
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      formatPeso(refund.amount),
-                      style: const TextStyle(fontSize: 10),
-                    ),
-                  ),
-                  Expanded(
+                    flex: flex[4],
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: refund.isProcessed
@@ -1025,24 +905,22 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
                           : AdminBadge.warning(refund.statusLabel),
                     ),
                   ),
-                  SizedBox(
-                    width: 96,
-                    child: refund.isProcessed
-                        ? const SizedBox.shrink()
-                        : TextButton(
-                            onPressed: () => _processRefund(refund),
-                            child: const Text(
-                              'Mark Processed',
-                              style: TextStyle(fontSize: 9),
+                  Expanded(
+                    flex: flex[5],
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: refund.isProcessed
+                          ? const SizedBox.shrink()
+                          : AdminRowAction(
+                              label: 'Mark Processed',
+                              onPressed: () => _processRefund(refund),
                             ),
-                          ),
+                    ),
                   ),
                 ],
               ),
-            ),
-            const Divider(height: 1),
           ],
-        ],
+        ),
       );
     }
 
@@ -1056,6 +934,7 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
   }
 
   Widget _buildExportReports() {
+    final p = FairTixPalette.of(context);
     // The last field is the export action (pdf: true/false), or null when
     // the report isn't available yet.
     final reports =
@@ -1101,102 +980,104 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Export Reports', style: AppTextStyles.h3),
+        Text(
+          'Export Reports',
+          style: orgText(p, size: 20, weight: FontWeight.w800),
+        ),
         const SizedBox(height: 4),
         Text(
           'Exports cover: ${_rangeLabel()} (change it with the range selector above)',
-          style: const TextStyle(color: AppColors.textGray, fontSize: 10),
+          style: orgText(p, size: 13, color: p.textSecondary),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
         LayoutBuilder(
-          builder: (context, constraints) => Wrap(
-            spacing: 16,
-            runSpacing: 12,
-            children: [
-              for (final report in reports)
-                SizedBox(
-                  width: constraints.maxWidth > 760
-                      ? ((constraints.maxWidth - 32) / 3).floorToDouble()
-                      : constraints.maxWidth,
-                  child: AdminCard(
-                    padding: const EdgeInsets.all(16),
-                    child: SizedBox(
-                      height: 128,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          CircleAvatar(
-                            radius: 20,
-                            backgroundColor: const Color(0xFFEDE7FF),
-                            child: Icon(
-                              report.$1,
-                              color: AppColors.primaryPurple,
-                              size: 19,
+          builder: (context, constraints) {
+            final columns = constraints.maxWidth >= 1000
+                ? 3
+                : (constraints.maxWidth >= 640 ? 2 : 1);
+            final cardWidth =
+                ((constraints.maxWidth - 16 * (columns - 1)) / columns)
+                    .floorToDouble();
+            return Wrap(
+              spacing: 16,
+              runSpacing: 16,
+              children: [
+                for (final report in reports)
+                  SizedBox(
+                    width: cardWidth,
+                    child: AdminCard(
+                      padding: const EdgeInsets.all(20),
+                      child: SizedBox(
+                        height: 168,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: p.primary.withValues(
+                                  alpha: p.isDark ? 0.20 : 0.10,
+                                ),
+                              ),
+                              alignment: Alignment.center,
+                              child: Icon(
+                                report.$1,
+                                color: p.accentLabel,
+                                size: 20,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            report.$2,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
+                            const SizedBox(height: 12),
+                            Text(
+                              report.$2,
+                              style: orgText(
+                                p,
+                                size: 14,
+                                weight: FontWeight.w700,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 5),
-                          Text(
-                            report.$3,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: AppColors.textGray,
-                              fontSize: 9,
-                              height: 1.3,
+                            const SizedBox(height: 4),
+                            Text(
+                              report.$3,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: orgText(
+                                p,
+                                size: 12,
+                                color: p.textSecondary,
+                                height: 1.35,
+                              ),
                             ),
-                          ),
-                          const Spacer(),
-                          Row(
-                            children: [
-                              for (final pdf in const [false, true]) ...[
-                                if (pdf) const SizedBox(width: 8),
-                                OutlinedButton.icon(
-                                  onPressed: _isExporting
-                                      ? null
-                                      : report.$4 == null
-                                      ? () => _showMessage(
-                                          '${report.$2} is not available yet.',
-                                        )
-                                      : () => report.$4!(pdf: pdf),
-                                  icon: Icon(
-                                    pdf
+                            const Spacer(),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                for (final pdf in const [false, true])
+                                  AdminHeaderButton(
+                                    icon: pdf
                                         ? Icons.picture_as_pdf_outlined
                                         : Icons.download_outlined,
-                                    size: 13,
+                                    label: pdf ? 'Export PDF' : 'Export CSV',
+                                    onPressed: _isExporting
+                                        ? null
+                                        : report.$4 == null
+                                        ? () => _showMessage(
+                                            '${report.$2} is not available yet.',
+                                          )
+                                        : () => report.$4!(pdf: pdf),
                                   ),
-                                  label: Text(
-                                    pdf ? 'Export PDF' : 'Export CSV',
-                                    style: const TextStyle(fontSize: 9),
-                                  ),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: AppColors.primaryPurple,
-                                    side: const BorderSide(
-                                      color: AppColors.primaryPurple,
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 8,
-                                    ),
-                                  ),
-                                ),
                               ],
-                            ],
-                          ),
-                        ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-            ],
-          ),
+              ],
+            );
+          },
         ),
       ],
     );
@@ -1207,29 +1088,35 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
     String? trailing,
     required Widget child,
   }) {
+    final p = FairTixPalette.of(context);
     return AdminCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-            child: Row(
-              children: [
-                Expanded(child: Text(title, style: AppTextStyles.h3)),
-                if (trailing != null)
-                  Text(
-                    trailing,
-                    style: const TextStyle(
-                      color: AppColors.textGray,
-                      fontSize: 10,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(23),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: orgText(p, size: 16, weight: FontWeight.w700),
                     ),
                   ),
-              ],
+                  if (trailing != null)
+                    Text(
+                      trailing,
+                      style: orgText(p, size: 12, color: p.textSecondary),
+                    ),
+                ],
+              ),
             ),
-          ),
-          const Divider(height: 1),
-          child,
-        ],
+            Divider(height: 1, color: p.border),
+            child,
+          ],
+        ),
       ),
     );
   }

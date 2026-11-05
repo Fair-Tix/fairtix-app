@@ -9,7 +9,7 @@ import '../../services/csv_export.dart';
 import '../../theme/fairtix_palette.dart';
 import '../../widgets/admin_shell.dart';
 import '../../widgets/admin_widgets.dart';
-import '../organizer/app_colors.dart';
+import '../../widgets/organizer_ui.dart';
 import 'admin-announcement.dart';
 import 'admin-fraud-alerts.dart';
 import 'admin-organizer-applications.dart';
@@ -204,90 +204,80 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Widget _buildBody() {
+    final palette = FairTixPalette.of(context);
     final stats = _stats;
     String count(int? n) => n == null ? '\u2014' : '$n';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            const Expanded(child: Text('Dashboard', style: AppTextStyles.h2)),
-            OutlinedButton.icon(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const AdminAnnouncementScreen(),
+        AdminPageHeader(
+          title: 'Dashboard',
+          subtitle: 'Platform overview and the items that need your attention.',
+          actions: [
+            // One centered row so the icon button and the primary button line up
+            // with each other and with the title, at every width.
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                AdminIconButton(
+                  icon: Icons.refresh_rounded,
+                  tooltip: 'Refresh data',
+                  loading: _isLoading,
+                  onPressed: _isLoading ? null : _load,
                 ),
-              ),
-              icon: const Icon(Icons.campaign_outlined, size: 14),
-              label: const Text(
-                'Create Announcement',
-                style: TextStyle(fontSize: 10),
-              ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.primaryPurple,
-                side: const BorderSide(color: AppColors.primaryPurple),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 10,
+                const SizedBox(width: 10),
+                AdminHeaderButton(
+                  icon: Icons.campaign_outlined,
+                  label: 'Create Announcement',
+                  filled: true,
+                  onPressed: () => showAdminAnnouncementDialog(context),
                 ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            TextButton.icon(
-              onPressed: _isLoading ? null : _load,
-              icon: const Icon(Icons.refresh, size: 14),
-              label: Text(
-                _isLoading ? 'Refreshing...' : 'Refresh Data',
-                style: const TextStyle(fontSize: 10),
-              ),
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.primaryPurple,
-              ),
+              ],
             ),
           ],
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 24),
         if (_statsError != null) ...[
           AdminCard(
             child: AdminErrorBox(message: _statsError!, onRetry: _loadStats),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 20),
         ],
         AdminSummaryRow(
           cards: [
             AdminSummaryCard(
               icon: Icons.people_outline,
-              color: AppColors.primaryPurple,
+              color: palette.accentLabel,
               label: 'Total Users',
               value: count(stats?.totalUsers),
               caption: 'Eventgoer accounts',
             ),
             AdminSummaryCard(
               icon: Icons.business_outlined,
-              color: AppColors.primaryPurple,
+              color: palette.accentLabel,
               label: 'Total Organizers',
               value: count(stats?.totalOrganizers),
               caption: '${_pendingApplications.length} awaiting approval',
             ),
             AdminSummaryCard(
               icon: Icons.calendar_today_outlined,
-              color: AppColors.primaryPurple,
+              color: palette.accentLabel,
               label: 'Total Events',
               value: count(stats?.totalEvents),
               caption: 'Multi-day runs count once',
             ),
             AdminSummaryCard(
               icon: Icons.confirmation_number_outlined,
-              color: AppColors.primaryPurple,
+              color: palette.accentLabel,
               label: 'Tickets Sold',
               value: count(stats?.ticketsSold),
               caption: 'Excludes refunded tickets',
             ),
             AdminSummaryCard(
               icon: Icons.monetization_on_outlined,
-              color: AppColors.successGreen,
+              color: palette.success,
               label: 'Platform Revenue',
               value: stats == null
                   ? '\u2014'
@@ -296,7 +286,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 20),
         LayoutBuilder(
           builder: (context, constraints) {
             final sideBySide = constraints.maxWidth > 760;
@@ -307,20 +297,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(child: applications),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 20),
                       Expanded(child: alerts),
                     ],
                   )
                 : Column(
                     children: [
                       applications,
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 20),
                       alerts,
                     ],
                   );
           },
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 20),
         _buildActivityPanel(),
       ],
     );
@@ -333,8 +323,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     required Widget child,
     bool alertAction = false,
   }) {
+    final p = FairTixPalette.of(context);
     return AdminCard(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+      padding: const EdgeInsets.fromLTRB(22, 20, 22, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -343,59 +334,86 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               Expanded(
                 child: Text(
                   title,
-                  style: AppTextStyles.label.copyWith(fontSize: 12),
+                  style: orgText(p, size: 16, weight: FontWeight.w700),
                 ),
               ),
-              TextButton(
-                onPressed: onAction,
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  minimumSize: Size.zero,
-                  foregroundColor: alertAction
-                      ? AppColors.dangerRed
-                      : AppColors.primaryPurple,
-                ),
-                child: Text(
-                  action,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
+              const SizedBox(width: 8),
+              MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onAction,
+                  child: Text(
+                    action,
+                    style: orgText(
+                      p,
+                      size: 13,
+                      weight: FontWeight.w700,
+                      color: alertAction ? p.danger : p.accentLabel,
+                      height: 1.3,
+                    ),
                   ),
                 ),
               ),
             ],
           ),
-          const Divider(height: 12),
+          Divider(height: 24, color: p.border),
           child,
         ],
       ),
     );
   }
 
-  Widget _inlineMessage(String text, {bool error = false}) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 24),
-    child: Center(
-      child: Text(
-        text,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          color: error ? AppColors.dangerRed : AppColors.textGray,
-          fontSize: 11,
+  Widget _inlineMessage(String text, {bool error = false}) {
+    final p = FairTixPalette.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 28),
+      child: Center(
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: orgText(
+            p,
+            size: 13,
+            color: error ? p.danger : p.textSecondary,
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
+
+  Widget _spinner() {
+    final p = FairTixPalette.of(context);
+    return Padding(
+      padding: const EdgeInsets.all(28),
+      child: Center(
+        child: CircularProgressIndicator(
+          strokeWidth: 2.4,
+          color: p.accentLabel,
+        ),
+      ),
+    );
+  }
+
+  Widget _moreLabel(int more) {
+    final p = FairTixPalette.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 6, bottom: 6),
+      child: Text(
+        '+ $more more',
+        style: orgText(p, size: 12, color: p.textSecondary),
+      ),
+    );
+  }
 
   Widget _buildApplicationsPanel() {
+    final p = FairTixPalette.of(context);
     final pending = _pendingApplications;
     final Widget body;
     if (_usersError != null) {
       body = _inlineMessage(_usersError!, error: true);
     } else if (_isLoading && _users.isEmpty) {
-      body = const Padding(
-        padding: EdgeInsets.all(24),
-        child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
-      );
+      body = _spinner();
     } else if (pending.isEmpty) {
       body = _inlineMessage('No applications waiting for review.');
     } else {
@@ -403,7 +421,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         children: [
           for (final applicant in pending.take(5))
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 7),
+              padding: const EdgeInsets.symmetric(vertical: 9),
               child: Row(
                 children: [
                   Expanded(
@@ -415,41 +433,28 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                   false)
                               ? applicant.organizationName!
                               : applicant.fullName,
-                          style: const TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w700,
-                          ),
+                          overflow: TextOverflow.ellipsis,
+                          style: orgText(p, size: 14, weight: FontWeight.w700),
                         ),
                         Text(
                           '${applicant.fullName} \u2022 ${applicant.email}',
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: AppColors.textGray,
-                          ),
+                          style: orgText(p, size: 12, color: p.textSecondary),
                         ),
                       ],
                     ),
                   ),
-                  if (applicant.createdAt != null)
+                  if (applicant.createdAt != null) ...[
+                    const SizedBox(width: 10),
                     Text(
                       formatAdminDate(applicant.createdAt!.toLocal()),
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: AppColors.textGray,
-                      ),
+                      style: orgText(p, size: 12, color: p.textSecondary),
                     ),
+                  ],
                 ],
               ),
             ),
-          if (pending.length > 5)
-            Padding(
-              padding: const EdgeInsets.only(top: 4, bottom: 4),
-              child: Text(
-                '+ ${pending.length - 5} more',
-                style: const TextStyle(fontSize: 10, color: AppColors.textGray),
-              ),
-            ),
+          if (pending.length > 5) _moreLabel(pending.length - 5),
         ],
       );
     }
@@ -466,15 +471,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Widget _buildAlertsPanel() {
+    final p = FairTixPalette.of(context);
     final open = _openAlerts;
     final Widget body;
     if (_alertsError != null) {
       body = _inlineMessage(_alertsError!, error: true);
     } else if (_isLoading && _alerts.isEmpty) {
-      body = const Padding(
-        padding: EdgeInsets.all(24),
-        child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
-      );
+      body = _spinner();
     } else if (open.isEmpty) {
       body = _inlineMessage('No open fraud alerts.');
     } else {
@@ -482,7 +485,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         children: [
           for (final alert in open.take(5))
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 7),
+              padding: const EdgeInsets.symmetric(vertical: 9),
               child: Row(
                 children: [
                   Expanded(
@@ -491,22 +494,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       children: [
                         Text(
                           alert.typeLabel,
-                          style: const TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w700,
-                          ),
+                          overflow: TextOverflow.ellipsis,
+                          style: orgText(p, size: 14, weight: FontWeight.w700),
                         ),
                         Text(
                           '${alert.userName ?? 'Unknown user'} \u2022 ${formatAdminDateTime(alert.createdAt)}',
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: AppColors.textGray,
-                          ),
+                          style: orgText(p, size: 12, color: p.textSecondary),
                         ),
                       ],
                     ),
                   ),
+                  const SizedBox(width: 10),
                   switch (alert.severity) {
                     'high' => AdminBadge.danger(alert.severityLabel),
                     'low' => AdminBadge.neutral(alert.severityLabel),
@@ -515,14 +514,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ],
               ),
             ),
-          if (open.length > 5)
-            Padding(
-              padding: const EdgeInsets.only(top: 4, bottom: 4),
-              child: Text(
-                '+ ${open.length - 5} more',
-                style: const TextStyle(fontSize: 10, color: AppColors.textGray),
-              ),
-            ),
+          if (open.length > 5) _moreLabel(open.length - 5),
         ],
       );
     }
@@ -547,14 +539,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     ].whereType<String>().isNotEmpty;
     final Widget body;
     if (_isLoading && items.isEmpty) {
-      body = const Padding(
-        padding: EdgeInsets.all(26),
-        child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
-      );
+      body = _spinner();
     } else if (items.isEmpty) {
       body = _inlineMessage(
         failed
-            ? 'Some activity could not be loaded. Use Refresh Data to try again.'
+            ? 'Some activity could not be loaded. Use the refresh button to try again.'
             : 'No recent activity yet.',
       );
     } else {
@@ -562,26 +551,33 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         children: [
           for (final item in items)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.symmetric(vertical: 9),
               child: Row(
                 children: [
                   CircleAvatar(
-                    radius: 13,
-                    backgroundColor: palette.progressTrack,
-                    child: Icon(item.icon, size: 14, color: palette.primary),
+                    radius: 17,
+                    backgroundColor: palette.primary.withValues(
+                      alpha: palette.isDark ? 0.22 : 0.10,
+                    ),
+                    child: Icon(
+                      item.icon,
+                      size: 17,
+                      color: palette.accentLabel,
+                    ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       item.text,
-                      style: const TextStyle(fontSize: 11.5),
+                      style: orgText(palette, size: 13, height: 1.35),
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 12),
                   Text(
                     formatAdminDateTime(item.at),
-                    style: TextStyle(
-                      fontSize: 10,
+                    style: orgText(
+                      palette,
+                      size: 12,
                       color: palette.textSecondary,
                     ),
                   ),
@@ -589,10 +585,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ),
             ),
           Padding(
-            padding: EdgeInsets.only(top: 6, bottom: 6),
+            padding: const EdgeInsets.only(top: 8, bottom: 6),
             child: Text(
               'Built from recent registrations, fraud alerts and refunds. Admin actions are not logged yet.',
-              style: TextStyle(fontSize: 9.5, color: palette.textSecondary),
+              style: orgText(palette, size: 11, color: palette.textSecondary),
             ),
           ),
         ],
@@ -600,23 +596,30 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     }
 
     return AdminCard(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(22, 20, 22, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              const Expanded(
-                child: Text('Recent Activity', style: AppTextStyles.label),
+              Expanded(
+                child: Text(
+                  'Recent Activity',
+                  style: orgText(palette, size: 16, weight: FontWeight.w700),
+                ),
               ),
               IconButton(
                 onPressed: _exportActivity,
-                icon: const Icon(Icons.download_outlined, size: 16),
+                icon: Icon(
+                  Icons.download_outlined,
+                  size: 20,
+                  color: palette.textSecondary,
+                ),
                 tooltip: 'Export activity',
               ),
             ],
           ),
-          const Divider(),
+          Divider(height: 16, color: palette.border),
           body,
         ],
       ),

@@ -6,7 +6,7 @@ import '../../services/csv_export.dart';
 import '../../theme/fairtix_palette.dart';
 import '../../widgets/admin_shell.dart';
 import '../../widgets/admin_widgets.dart';
-import '../organizer/app_colors.dart';
+import '../../widgets/organizer_ui.dart';
 
 /// The fraud / price-flag review queue.
 ///
@@ -30,6 +30,10 @@ class _AdminFraudAlertsScreenState extends State<AdminFraudAlertsScreen> {
     'Organizer-Flagged',
     'Resolved',
   ];
+
+  /// Relative column widths (id, type, source, flagged user, timestamp,
+  /// severity, status, action).
+  static const _flex = [2, 3, 2, 4, 4, 2, 3, 2];
 
   List<FraudAlertEntry> _alerts = const [];
   bool _isLoading = true;
@@ -149,92 +153,66 @@ class _AdminFraudAlertsScreenState extends State<AdminFraudAlertsScreen> {
 
   Widget _buildBody() {
     final open = _alerts.where((a) => !a.isClosed).length;
-    final filtered = _filtered;
+    final ready = !_isLoading && _loadError == null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            const Expanded(
-              child: Text('Fraud Alerts', style: AppTextStyles.h2),
-            ),
-            Text(
-              '$open open alert${open == 1 ? '' : 's'}',
-              style: TextStyle(
-                color: open > 0 ? AppColors.dangerRed : AppColors.textGray,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            IconButton(
+        AdminPageHeader(
+          title: 'Fraud Alerts',
+          subtitle: '$open open alert${open == 1 ? '' : 's'}',
+          actions: [
+            AdminIconButton(
+              icon: Icons.refresh_rounded,
+              tooltip: 'Refresh data',
+              loading: _isLoading,
               onPressed: _isLoading ? null : _load,
-              icon: const Icon(Icons.refresh, size: 18),
-              tooltip: 'Refresh',
             ),
-            OutlinedButton.icon(
+            AdminHeaderButton(
+              icon: Icons.download_outlined,
+              label: 'Export Log',
               onPressed: _isLoading ? null : _exportCsv,
-              icon: const Icon(Icons.download_outlined, size: 14),
-              label: const Text('Export Log', style: TextStyle(fontSize: 11)),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.primaryPurple,
-                side: const BorderSide(color: AppColors.primaryPurple),
-              ),
             ),
           ],
         ),
-        const SizedBox(height: 18),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              for (final filter in _filters) ...[
-                ChoiceChip(
-                  label: Text(
-                    '$filter  ${_alerts.where((a) => _matches(a, filter)).length}',
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  selected: _filter == filter,
-                  onSelected: (_) => setState(() => _filter = filter),
-                  selectedColor: AppColors.primaryPurple,
-                  labelStyle: TextStyle(
-                    color: _filter == filter
-                        ? Colors.white
-                        : AppColors.textDark,
-                  ),
-                  side: BorderSide(
-                    color: _filter == filter
-                        ? AppColors.primaryPurple
-                        : AppColors.borderLight,
-                  ),
-                  showCheckmark: false,
-                ),
-                const SizedBox(width: 10),
-              ],
-            ],
-          ),
+        const SizedBox(height: 24),
+        AdminFilterChips(
+          labels: _filters,
+          selected: _filters.indexOf(_filter),
+          counts: [
+            for (final f in _filters)
+              ready ? _alerts.where((a) => _matches(a, f)).length : null,
+          ],
+          onSelected: (i) => setState(() => _filter = _filters[i]),
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 20),
         AdminCard(
-          child: _isLoading
-              ? const Padding(
-                  padding: EdgeInsets.all(32),
-                  child: Center(
-                    child: CircularProgressIndicator(strokeWidth: 2.4),
-                  ),
-                )
-              : _loadError != null
-              ? AdminErrorBox(message: _loadError!, onRetry: _load)
-              : _buildTable(filtered),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(23),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 120),
+              child: _isLoading
+                  ? Padding(
+                      padding: const EdgeInsets.all(48),
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.4,
+                          color: FairTixPalette.of(context).accentLabel,
+                        ),
+                      ),
+                    )
+                  : _loadError != null
+                  ? AdminErrorBox(message: _loadError!, onRetry: _load)
+                  : _buildTable(_filtered),
+            ),
+          ),
         ),
       ],
     );
   }
 
   Widget _buildTable(List<FraudAlertEntry> filtered) {
+    final p = FairTixPalette.of(context);
     if (filtered.isEmpty) {
       return AdminEmptyState(
         icon: Icons.shield_outlined,
@@ -246,55 +224,37 @@ class _AdminFraudAlertsScreenState extends State<AdminFraudAlertsScreen> {
     }
     return LayoutBuilder(
       builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 820;
+        final wide = constraints.maxWidth >= 900;
         return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (wide)
-              const Padding(
-                padding: EdgeInsets.fromLTRB(18, 12, 14, 10),
-                child: Row(
-                  children: [
-                    Expanded(child: Text('ALERT ID', style: adminHeaderStyle)),
-                    Expanded(
-                      flex: 2,
-                      child: Text('TYPE', style: adminHeaderStyle),
-                    ),
-                    Expanded(child: Text('SOURCE', style: adminHeaderStyle)),
-                    Expanded(
-                      flex: 2,
-                      child: Text('FLAGGED USER', style: adminHeaderStyle),
-                    ),
-                    Expanded(
-                      flex: 2,
-                      child: Text('TIMESTAMP', style: adminHeaderStyle),
-                    ),
-                    Expanded(child: Text('SEVERITY', style: adminHeaderStyle)),
-                    Expanded(child: Text('STATUS', style: adminHeaderStyle)),
-                    SizedBox(
-                      width: 70,
-                      child: Text('ACTION', style: adminHeaderStyle),
-                    ),
-                  ],
-                ),
+              const AdminTableHeader(
+                labels: [
+                  'Alert ID',
+                  'Type',
+                  'Source',
+                  'Flagged user',
+                  'Timestamp',
+                  'Severity',
+                  'Status',
+                  '',
+                ],
+                flex: _flex,
               ),
-            const Divider(height: 1),
             for (final alert in filtered)
               _AlertRow(
                 alert: alert,
                 wide: wide,
+                flex: _flex,
                 onReview: () => _review(alert),
               ),
+            Divider(height: 1, color: p.border),
             Padding(
-              padding: const EdgeInsets.all(14),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Showing ${filtered.length} of ${_alerts.length} alerts',
-                  style: const TextStyle(
-                    color: AppColors.textGray,
-                    fontSize: 10,
-                  ),
-                ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              child: Text(
+                'Showing ${filtered.length} of ${_alerts.length} alerts',
+                style: orgText(p, size: 12, color: p.textSecondary),
               ),
             ),
           ],
@@ -321,152 +281,133 @@ class _AlertRow extends StatelessWidget {
   const _AlertRow({
     required this.alert,
     required this.wide,
+    required this.flex,
     required this.onReview,
   });
 
   final FraudAlertEntry alert;
   final bool wide;
+  final List<int> flex;
   final VoidCallback onReview;
 
   @override
   Widget build(BuildContext context) {
-    final reviewButton = TextButton(
+    final p = FairTixPalette.of(context);
+    final reviewButton = AdminRowAction(
+      label: alert.isClosed ? 'View' : 'Review',
+      filled: !alert.isClosed,
       onPressed: onReview,
-      style: TextButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-        minimumSize: Size.zero,
-      ),
-      child: Text(
-        alert.isClosed ? 'View' : 'Review',
-        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-      ),
     );
     final user = alert.userName ?? 'Unknown user';
 
-    final content = wide
-        ? Padding(
-            padding: const EdgeInsets.fromLTRB(18, 12, 14, 12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    alert.shortId,
-                    style: const TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
+    if (wide) {
+      return AdminTableRow(
+        children: [
+          adminCell(context, flex[0], alert.shortId, bold: true),
+          adminCell(context, flex[1], alert.typeLabel),
+          adminCell(context, flex[2], alert.sourceLabel),
+          Expanded(
+            flex: flex[3],
+            child: Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    user,
+                    overflow: TextOverflow.ellipsis,
+                    style: orgText(
+                      p,
+                      size: 13,
+                      weight: FontWeight.w600,
+                      height: 1.3,
                     ),
                   ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Text(
-                    alert.typeLabel,
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                ),
-                Expanded(
-                  child: Text(
-                    alert.sourceLabel,
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        user,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      if (alert.eventTitle != null)
-                        Text(
-                          alert.eventTitle!,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: AppColors.textGray,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Text(
-                    formatAdminDateTime(alert.createdAt),
-                    style: const TextStyle(
-                      fontSize: 10.5,
-                      color: AppColors.textGray,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: _severityBadge(alert),
-                  ),
-                ),
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: _alertStatusBadge(alert),
-                  ),
-                ),
-                SizedBox(width: 70, child: reviewButton),
-              ],
-            ),
-          )
-        : Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '${alert.typeLabel}  \u2022  ${alert.shortId}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    _severityBadge(alert),
-                  ],
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  '$user${alert.eventTitle != null ? ' \u2022 ${alert.eventTitle}' : ''}',
-                  style: const TextStyle(fontSize: 11),
-                ),
-                const SizedBox(height: 3),
-                Row(
-                  children: [
-                    _alertStatusBadge(alert),
-                    const SizedBox(width: 8),
+                  if (alert.eventTitle != null)
                     Text(
-                      formatAdminDateTime(alert.createdAt),
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: AppColors.textGray,
+                      alert.eventTitle!,
+                      overflow: TextOverflow.ellipsis,
+                      style: orgText(
+                        p,
+                        size: 12,
+                        color: p.textSecondary,
+                        height: 1.3,
                       ),
                     ),
-                  ],
-                ),
-                reviewButton,
-              ],
+                ],
+              ),
             ),
-          );
+          ),
+          adminCell(
+            context,
+            flex[4],
+            formatAdminDateTime(alert.createdAt),
+            muted: true,
+          ),
+          Expanded(
+            flex: flex[5],
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _severityBadge(alert),
+            ),
+          ),
+          Expanded(
+            flex: flex[6],
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _alertStatusBadge(alert),
+            ),
+          ),
+          Expanded(
+            flex: flex[7],
+            child: Align(alignment: Alignment.centerLeft, child: reviewButton),
+          ),
+        ],
+      );
+    }
+
     return Container(
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: p.border)),
       ),
-      child: content,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${alert.typeLabel}  \u2022  ${alert.shortId}',
+                  style: orgText(p, size: 14, weight: FontWeight.w700),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _severityBadge(alert),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '$user${alert.eventTitle != null ? ' \u2022 ${alert.eventTitle}' : ''}',
+            style: orgText(p, size: 13),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _alertStatusBadge(alert),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  formatAdminDateTime(alert.createdAt),
+                  style: orgText(p, size: 12, color: p.textSecondary),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Align(alignment: Alignment.centerLeft, child: reviewButton),
+        ],
+      ),
     );
   }
 }
@@ -532,41 +473,51 @@ class _AlertReviewDialogState extends State<_AlertReviewDialog> {
     }
   }
 
-  Widget _fact(String label, String value) => Padding(
-    padding: const EdgeInsets.only(bottom: 6),
+  Widget _fact(FairTixPalette p, String label, String value) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-          width: 92,
+          width: 100,
           child: Text(
             label,
-            style: const TextStyle(fontSize: 11, color: AppColors.textGray),
+            style: orgText(p, size: 12, color: p.textSecondary, height: 1.4),
           ),
         ),
-        Expanded(child: Text(value, style: const TextStyle(fontSize: 11.5))),
+        Expanded(child: Text(value, style: orgText(p, size: 13, height: 1.4))),
       ],
     ),
   );
 
   @override
   Widget build(BuildContext context) {
-    final palette = FairTixPalette.of(context);
+    final p = FairTixPalette.of(context);
     final a = widget.alert;
     final svc = AdminResaleService.instance;
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      backgroundColor: p.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: p.border),
+      ),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 540, maxHeight: 680),
+        constraints: const BoxConstraints(maxWidth: 540, maxHeight: 700),
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Row(
                 children: [
-                  Expanded(child: Text(a.typeLabel, style: AppTextStyles.h3)),
+                  Expanded(
+                    child: Text(
+                      a.typeLabel,
+                      style: orgText(p, size: 18, weight: FontWeight.w800),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   _severityBadge(a),
                   const SizedBox(width: 6),
                   _alertStatusBadge(a),
@@ -575,69 +526,75 @@ class _AlertReviewDialogState extends State<_AlertReviewDialog> {
               const SizedBox(height: 4),
               Text(
                 'Alert ${a.shortId} \u2022 ${a.sourceLabel}-flagged',
-                style: AppTextStyles.bodyGray.copyWith(fontSize: 12),
+                style: orgText(p, size: 13, color: p.textSecondary),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 16),
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: palette.progressTrack,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: palette.border),
+                  color: p.progressTrack,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: p.border),
                 ),
-                child: Text(a.details, style: const TextStyle(fontSize: 12)),
+                child: Text(
+                  a.details,
+                  style: orgText(p, size: 13, height: 1.45),
+                ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 16),
               _fact(
+                p,
                 'Flagged user',
                 a.userName == null
                     ? 'Unknown'
                     : '${a.userName}${a.userEmail == null ? '' : ' (${a.userEmail})'}',
               ),
-              if (a.eventTitle != null) _fact('Event', a.eventTitle!),
-              _fact('Flagged', formatAdminDateTime(a.createdAt)),
+              if (a.eventTitle != null) _fact(p, 'Event', a.eventTitle!),
+              _fact(p, 'Flagged', formatAdminDateTime(a.createdAt)),
               if (a.reviewedAt != null)
-                _fact('Last reviewed', formatAdminDateTime(a.reviewedAt!)),
+                _fact(p, 'Last reviewed', formatAdminDateTime(a.reviewedAt!)),
               const SizedBox(height: 8),
               TextField(
                 controller: _note,
                 enabled: !_busy,
                 maxLines: 3,
                 maxLength: 500,
-                decoration: const InputDecoration(
-                  labelText: 'Review note (optional)',
-                  border: OutlineInputBorder(),
+                style: orgText(p, size: 14, height: 1.4),
+                cursorColor: p.accentLabel,
+                decoration: adminInputDecoration(
+                  context,
+                  label: 'Review note (optional)',
                 ),
               ),
               if (_error != null)
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.only(top: 6, bottom: 10),
                   child: Text(
                     _error!,
-                    style: const TextStyle(
-                      color: AppColors.dangerRed,
-                      fontSize: 12,
-                    ),
+                    style: orgText(p, size: 13, color: p.danger),
                   ),
                 ),
               if (_info != null)
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.only(top: 6, bottom: 10),
                   child: Text(
                     _info!,
-                    style: const TextStyle(
-                      color: AppColors.successGreen,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                    style: orgText(
+                      p,
+                      size: 13,
+                      weight: FontWeight.w600,
+                      color: p.success,
                     ),
                   ),
                 ),
+              const SizedBox(height: 8),
               Wrap(
-                spacing: 8,
-                runSpacing: 8,
+                spacing: 10,
+                runSpacing: 10,
                 children: [
                   if (a.status == 'open')
-                    OutlinedButton(
+                    AdminHeaderButton(
+                      label: 'Mark Reviewing',
                       onPressed: _busy
                           ? null
                           : () => _run(
@@ -648,9 +605,10 @@ class _AlertReviewDialogState extends State<_AlertReviewDialog> {
                               ),
                               closeAfter: true,
                             ),
-                      child: const Text('Mark Reviewing'),
                     ),
-                  FilledButton(
+                  AdminHeaderButton(
+                    label: 'Resolve',
+                    filled: true,
                     onPressed: _busy
                         ? null
                         : () => _run(
@@ -661,12 +619,9 @@ class _AlertReviewDialogState extends State<_AlertReviewDialog> {
                             ),
                             closeAfter: true,
                           ),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.successGreen,
-                    ),
-                    child: const Text('Resolve'),
                   ),
-                  OutlinedButton(
+                  AdminHeaderButton(
+                    label: 'Dismiss',
                     onPressed: _busy
                         ? null
                         : () => _run(
@@ -677,20 +632,24 @@ class _AlertReviewDialogState extends State<_AlertReviewDialog> {
                             ),
                             closeAfter: true,
                           ),
-                    child: const Text('Dismiss'),
                   ),
                 ],
               ),
               if (a.listingId != null || a.userId != null) ...[
-                const Divider(height: 28),
-                const Text('Take action', style: AppTextStyles.label),
-                const SizedBox(height: 8),
+                Divider(height: 32, color: p.border),
+                Text(
+                  'Take action',
+                  style: orgText(p, size: 14, weight: FontWeight.w700),
+                ),
+                const SizedBox(height: 10),
                 Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                  spacing: 10,
+                  runSpacing: 10,
                   children: [
                     if (a.listingId != null)
-                      OutlinedButton(
+                      AdminRowAction(
+                        label: 'Remove Listing',
+                        color: p.danger,
                         onPressed: _busy
                             ? null
                             : () => _run(
@@ -701,14 +660,11 @@ class _AlertReviewDialogState extends State<_AlertReviewDialog> {
                                 success:
                                     'Listing removed and the seller was notified.',
                               ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.dangerRed,
-                          side: const BorderSide(color: AppColors.dangerRed),
-                        ),
-                        child: const Text('Remove Listing'),
                       ),
                     if (a.userId != null)
-                      OutlinedButton(
+                      AdminRowAction(
+                        label: 'Suspend User',
+                        color: p.danger,
                         onPressed: _busy
                             ? null
                             : () => _run(
@@ -720,23 +676,18 @@ class _AlertReviewDialogState extends State<_AlertReviewDialog> {
                                 success:
                                     'Account suspended. It can be reactivated from Accounts.',
                               ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.dangerRed,
-                          side: const BorderSide(color: AppColors.dangerRed),
-                        ),
-                        child: const Text('Suspend User'),
                       ),
                   ],
                 ),
               ],
-              const SizedBox(height: 14),
+              const SizedBox(height: 16),
               Align(
                 alignment: Alignment.centerRight,
-                child: TextButton(
+                child: AdminDialogButton(
+                  label: 'Close',
                   onPressed: _busy
                       ? null
                       : () => Navigator.pop(context, _changed),
-                  child: const Text('Close'),
                 ),
               ),
             ],

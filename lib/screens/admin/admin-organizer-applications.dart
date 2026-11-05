@@ -1,24 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../models/admin_user_summary.dart';
-import '../../services/admin_auth_service.dart';
-import '../../services/admin_session.dart';
 import '../../services/admin_user_service.dart';
 import '../../theme/fairtix_palette.dart';
-import '../../widgets/admin_document_viewer.dart';
+import '../../widgets/admin_document_viewer.dart'
+    show AdminReviewDocument, showAdminReviewDialog;
 import '../../widgets/admin_shell.dart';
-import '../organizer/app_colors.dart';
-import 'admin-dashboard.dart';
-import 'admin-login.dart';
-import 'admin-route.dart';
-import 'admin-user-registrations.dart';
-import 'admin-accounts.dart';
-import 'admin-events-tickets.dart';
-import 'admin-fraud-alerts.dart';
-import 'admin-resale-monitoring.dart';
-import 'admin-revenue-reports.dart';
-import 'admin-platform-settings.dart';
-import 'admin-profile.dart';
+import '../../widgets/admin_widgets.dart';
+import '../../widgets/organizer_ui.dart';
 
 /// Organizer applications ("Proof of Venue Booking" + "Valid Event
 /// Permit" review). Reads/writes `public.users` where `role = 'organizer'`
@@ -37,6 +26,11 @@ class AdminOrganizerApplicationsScreen extends StatefulWidget {
 class _AdminOrganizerApplicationsScreenState
     extends State<AdminOrganizerApplicationsScreen> {
   static const _filters = ['All', 'Pending', 'Approved', 'Rejected'];
+
+  /// Relative column widths of the wide table (name, email, organization,
+  /// submitted, action, status). Header and rows share these.
+  static const _flex = [3, 4, 3, 2, 2, 2];
+
   int _filterIndex = 1; // defaults to "Pending" — the actionable queue
 
   List<AdminUserSummary> _applications = [];
@@ -72,27 +66,41 @@ class _AdminOrganizerApplicationsScreenState
     }
   }
 
+  static String? _statusFor(int filterIndex) => switch (filterIndex) {
+    1 => 'pending',
+    2 => 'verified',
+    3 => 'rejected',
+    _ => null,
+  };
+
   List<AdminUserSummary> get _filtered {
-    final filterStatus = switch (_filterIndex) {
-      1 => 'pending',
-      2 => 'verified',
-      3 => 'rejected',
-      _ => null,
-    };
+    final filterStatus = _statusFor(_filterIndex);
     if (filterStatus == null) return _applications;
     return _applications
         .where((a) => a.idVerificationStatus == filterStatus)
         .toList();
   }
 
+  int _countFor(int filterIndex) {
+    final status = _statusFor(filterIndex);
+    if (status == null) return _applications.length;
+    return _applications.where((a) => a.idVerificationStatus == status).length;
+  }
+
+  static String _displayName(AdminUserSummary a) =>
+      a.organizationName?.trim().isNotEmpty == true
+      ? a.organizationName!
+      : a.fullName;
+
+  static String _appliedOn(AdminUserSummary a) =>
+      a.createdAt != null ? formatAdminDate(a.createdAt!.toLocal()) : '\u2014';
+
   Future<void> _reviewApplication(AdminUserSummary applicant) async {
     await showAdminReviewDialog(
       context: context,
-      title: applicant.organizationName?.trim().isNotEmpty == true
-          ? applicant.organizationName!
-          : applicant.fullName,
+      title: _displayName(applicant),
       subtitle:
-          '${applicant.fullName} \u2022 Applied ${applicant.createdAt != null ? formatFriendlyDate(applicant.createdAt!) : 'unknown date'}',
+          '${applicant.fullName} \u2022 Applied ${applicant.createdAt != null ? _appliedOn(applicant) : 'unknown date'}',
       currentStatus: applicant.idVerificationStatus,
       documents: [
         AdminReviewDocument(
@@ -118,9 +126,7 @@ class _AdminOrganizerApplicationsScreenState
     );
     await _loadApplications();
     if (!mounted) return;
-    final label = applicant.organizationName?.trim().isNotEmpty == true
-        ? applicant.organizationName!
-        : applicant.fullName;
+    final label = _displayName(applicant);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -142,278 +148,124 @@ class _AdminOrganizerApplicationsScreenState
     );
   }
 
-  Widget _buildSidebar() {
-    final currentEmail =
-        AdminSession.instance.currentEmail ?? 'admin@fairtix.com';
-    final items = [
-      (Icons.grid_view_rounded, 'Dashboard'),
-      (Icons.business_outlined, 'Organizer Applications'),
-      (Icons.how_to_reg_outlined, 'User Registrations'),
-      (Icons.people_outline, 'Accounts'),
-      (Icons.calendar_today_outlined, 'Events & Tickets'),
-      (Icons.swap_vert_rounded, 'Resale Monitoring'),
-      (Icons.shield_outlined, 'Fraud Alerts'),
-      (Icons.bar_chart_rounded, 'Revenue & Reports'),
-      (Icons.settings_outlined, 'Platform Settings'),
-      (Icons.person_outline, 'Profile'),
-    ];
-    return Container(
-      color: const Color(0xFFF3F1FD),
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 18, 12, 18),
-              child: _AdminLogo(),
-            ),
-            const Divider(height: 1, color: AppColors.borderLight),
-            const SizedBox(height: 14),
-            for (var index = 0; index < items.length; index++)
-              _SidebarItem(
-                icon: items[index].$1,
-                label: items[index].$2,
-                selected: index == 1,
-                onTap: () {
-                  final pages = <int, Widget>{
-                    0: const AdminDashboardScreen(),
-                    2: const AdminUserRegistrationsScreen(),
-                    3: const AdminAccountsScreen(),
-                    4: const AdminEventsTicketsScreen(),
-                    5: const AdminResaleMonitoringScreen(),
-                    6: const AdminFraudAlertsScreen(),
-                    7: const AdminRevenueReportsScreen(),
-                    8: const AdminPlatformSettingsScreen(),
-                    9: const AdminProfileScreen(),
-                  };
-                  final page = pages[index];
-                  if (page != null) {
-                    adminPushReplacement(context, page);
-                  }
-                },
-              ),
-            const Spacer(),
-            const Divider(height: 1, color: AppColors.borderLight),
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                children: [
-                  const CircleAvatar(
-                    radius: 15,
-                    backgroundColor: Color(0xFFE8E6F1),
-                    child: Icon(
-                      Icons.person,
-                      size: 17,
-                      color: AppColors.textGray,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Admin', style: AppTextStyles.label),
-                        Text(
-                          currentEmail,
-                          style: const TextStyle(
-                            color: AppColors.textGray,
-                            fontSize: 9,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: _confirmLogout,
-                    icon: const Icon(
-                      Icons.logout,
-                      size: 17,
-                      color: AppColors.textGray,
-                    ),
-                    tooltip: 'Log out',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTopBar(bool isWide) {
-    return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 18),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
-      ),
-      child: Row(
-        children: [
-          if (!isWide)
-            Builder(
-              builder: (context) => IconButton(
-                icon: const Icon(Icons.menu, size: 20),
-                onPressed: () => Scaffold.of(context).openDrawer(),
-              ),
-            ),
-          Text('Organizer Applications', style: AppTextStyles.label),
-          const Spacer(),
-          const Icon(
-            Icons.notifications_none,
-            size: 19,
-            color: AppColors.textGray,
-          ),
-          const SizedBox(width: 14),
-          const CircleAvatar(
-            radius: 14,
-            backgroundColor: Color(0xFFE8E6F1),
-            child: Icon(Icons.person, size: 16, color: AppColors.textGray),
-          ),
-          if (isWide) ...[
-            const SizedBox(width: 8),
-            Text(
-              AdminSession.instance.currentEmail ?? 'admin@fairtix.com',
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-            ),
-            const Icon(Icons.keyboard_arrow_down, size: 16),
-          ],
-        ],
-      ),
-    );
-  }
-
   Widget _buildContent(bool isWide) {
-    final palette = FairTixPalette.of(context);
+    final p = FairTixPalette.of(context);
     final filtered = _filtered;
+    final Widget content;
+    if (_isLoading) {
+      content = Padding(
+        padding: const EdgeInsets.all(48),
+        child: Center(
+          child: CircularProgressIndicator(
+            strokeWidth: 2.4,
+            color: p.accentLabel,
+          ),
+        ),
+      );
+    } else if (_loadError != null) {
+      content = AdminErrorBox(
+        message: _loadError!,
+        onRetry: _loadApplications,
+      );
+    } else if (isWide) {
+      content = _buildWideTable(filtered);
+    } else {
+      content = _buildCompactList(filtered);
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Organizer Applications',
-                style: AppTextStyles.h2.copyWith(color: palette.textPrimary),
-              ),
-            ),
-            IconButton(
+        AdminPageHeader(
+          title: 'Organizer Applications',
+          subtitle:
+              'Review venue bookings and event permits before organizers can publish events.',
+          actions: [
+            AdminIconButton(
+              icon: Icons.refresh_rounded,
+              tooltip: 'Refresh data',
+              loading: _isLoading,
               onPressed: _isLoading ? null : _loadApplications,
-              icon: const Icon(Icons.refresh, size: 18),
-              tooltip: 'Refresh',
             ),
           ],
         ),
-        const SizedBox(height: 18),
-        Wrap(
-          spacing: 10,
-          runSpacing: 8,
-          children: [
-            for (var index = 0; index < _filters.length; index++)
-              ChoiceChip(
-                label: Text(_filters[index]),
-                selected: _filterIndex == index,
-                onSelected: (_) => setState(() => _filterIndex = index),
-                labelStyle: TextStyle(
-                  fontSize: 11,
-                  color: _filterIndex == index
-                      ? Colors.white
-                      : palette.textSecondary,
-                  fontWeight: FontWeight.w600,
-                ),
-                selectedColor: AppColors.primaryPurple,
-                backgroundColor: palette.progressTrack,
-                side: BorderSide.none,
-                showCheckmark: false,
-              ),
+        const SizedBox(height: 24),
+        AdminFilterChips(
+          labels: _filters,
+          selected: _filterIndex,
+          counts: [
+            for (var i = 0; i < _filters.length; i++)
+              _isLoading || _loadError != null ? null : _countFor(i),
           ],
+          onSelected: (i) => setState(() => _filterIndex = i),
         ),
-        const SizedBox(height: 18),
-        Container(
-          constraints: const BoxConstraints(minHeight: 200),
-          decoration: BoxDecoration(
-            color: palette.surface,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: palette.border),
+        const SizedBox(height: 20),
+        AdminCard(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(23),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 200),
+              child: content,
+            ),
           ),
-          child: _isLoading
-              ? const Padding(
-                  padding: EdgeInsets.all(32),
-                  child: Center(
-                    child: CircularProgressIndicator(strokeWidth: 2.4),
-                  ),
-                )
-              : _loadError != null
-              ? Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    children: [
-                      Text(
-                        _loadError!,
-                        style: const TextStyle(
-                          color: AppColors.dangerRed,
-                          fontSize: 12,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      OutlinedButton(
-                        onPressed: _loadApplications,
-                        child: const Text('Retry'),
-                      ),
-                    ],
-                  ),
-                )
-              : isWide
-              ? _buildWideTable(filtered)
-              : _buildCompactList(filtered),
         ),
       ],
     );
   }
 
   Widget _buildWideTable(List<AdminUserSummary> filtered) {
-    final palette = FairTixPalette.of(context);
+    final p = FairTixPalette.of(context);
     const headers = [
-      'Applicant Name',
-      'Email',
-      'Organization',
-      'Submitted',
-      'Documents',
-      'Status',
-      '',
+      'APPLICANT',
+      'EMAIL',
+      'ORGANIZATION',
+      'SUBMITTED',
+      'DOCUMENTS',
+      'STATUS',
     ];
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          color: palette.progressTrack,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          color: p.progressTrack,
           child: Row(
             children: [
-              for (final header in headers)
+              for (var i = 0; i < headers.length; i++)
                 Expanded(
+                  flex: _flex[i],
                   child: Text(
-                    header,
-                    style: _headerStyle.copyWith(color: palette.textSecondary),
+                    headers[i],
+                    style: orgText(
+                      p,
+                      size: 11,
+                      weight: FontWeight.w700,
+                      color: p.textSecondary,
+                      letterSpacing: 0.6,
+                      height: 1.2,
+                    ),
                   ),
                 ),
             ],
           ),
         ),
-        const Divider(height: 1),
         if (filtered.isEmpty)
           const _EmptyApplications()
         else
           for (final applicant in filtered)
-            _ApplicationRowWide(applicant: applicant, screen: this),
-        const Divider(height: 1),
+            _ApplicationRowWide(
+              applicant: applicant,
+              flex: _flex,
+              onReview: applicant.canReview
+                  ? () => _reviewApplication(applicant)
+                  : null,
+            ),
+        Divider(height: 1, color: p.border),
         Padding(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: Text(
             'Showing ${filtered.length} of ${_applications.length} applications',
-            style: TextStyle(color: palette.textSecondary, fontSize: 10),
+            style: orgText(p, size: 12, color: p.textSecondary),
           ),
         ),
       ],
@@ -421,153 +273,97 @@ class _AdminOrganizerApplicationsScreenState
   }
 
   Widget _buildCompactList(List<AdminUserSummary> filtered) {
-    if (filtered.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(18),
-        child: _EmptyApplications(),
-      );
-    }
+    if (filtered.isEmpty) return const _EmptyApplications();
     return Column(
       children: [
         for (final applicant in filtered)
-          _ApplicationRowCompact(applicant: applicant, screen: this),
+          _ApplicationRowCompact(
+            applicant: applicant,
+            onReview: applicant.canReview
+                ? () => _reviewApplication(applicant)
+                : null,
+          ),
       ],
     );
   }
-
-  Future<void> _confirmLogout() async {
-    final shouldLogout = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Log out?'),
-        content: const Text('Are you sure you want to Log Out?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Log out'),
-          ),
-        ],
-      ),
-    );
-    if (!mounted || shouldLogout != true) return;
-    AdminAuthService.instance.logout();
-    adminPushAndRemoveUntil(context, const AdminLoginScreen());
-  }
 }
 
-const _headerStyle = TextStyle(
-  color: AppColors.textGray,
-  fontSize: 9,
-  fontWeight: FontWeight.w700,
-);
-
-class _ApplicationStatusBadge extends StatelessWidget {
-  const _ApplicationStatusBadge({required this.status});
-  final String status;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = FairTixPalette.of(context);
-    final (label, color, bg) = switch (status) {
-      'verified' => ('Approved', palette.success, palette.successSurface),
-      'rejected' => ('Rejected', palette.danger, palette.dangerSurface),
-      _ => ('Pending', palette.warning, palette.warningSurface),
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-}
+AdminBadge _statusBadge(String status) => switch (status) {
+  'verified' => AdminBadge.success('Approved'),
+  'rejected' => AdminBadge.danger('Rejected'),
+  _ => AdminBadge.warning('Pending'),
+};
 
 class _ApplicationRowWide extends StatelessWidget {
-  const _ApplicationRowWide({required this.applicant, required this.screen});
+  const _ApplicationRowWide({
+    required this.applicant,
+    required this.flex,
+    required this.onReview,
+  });
+
   final AdminUserSummary applicant;
-  final _AdminOrganizerApplicationsScreenState screen;
+  final List<int> flex;
+  final VoidCallback? onReview;
 
   @override
   Widget build(BuildContext context) {
-    final submitted = applicant.createdAt != null
-        ? formatFriendlyDate(applicant.createdAt!)
+    final p = FairTixPalette.of(context);
+    final pending = applicant.idVerificationStatus == 'pending';
+    final org = applicant.organizationName?.trim().isNotEmpty == true
+        ? applicant.organizationName!
         : '\u2014';
+    final submitted = _AdminOrganizerApplicationsScreenState._appliedOn(
+      applicant,
+    );
+
+    Widget cell(int i, String text, {bool bold = false, bool muted = false}) =>
+        Expanded(
+          flex: flex[i],
+          child: Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Text(
+              text,
+              overflow: TextOverflow.ellipsis,
+              style: orgText(
+                p,
+                size: bold ? 14 : 13,
+                weight: bold ? FontWeight.w700 : FontWeight.w400,
+                color: muted ? p.textSecondary : p.textPrimary,
+                height: 1.3,
+              ),
+            ),
+          ),
+        );
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: p.border)),
       ),
       child: Row(
         children: [
+          cell(0, applicant.fullName, bold: true),
+          cell(1, applicant.email),
+          cell(2, org),
+          cell(3, submitted, muted: true),
           Expanded(
-            child: Text(
-              applicant.fullName,
-              style: const TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
+            flex: flex[4],
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: AdminRowAction(
+                label: pending ? 'Review' : 'View',
+                filled: pending,
+                onPressed: onReview,
               ),
             ),
           ),
           Expanded(
-            child: Text(
-              applicant.email,
-              style: const TextStyle(fontSize: 11),
-              overflow: TextOverflow.ellipsis,
+            flex: flex[5],
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _statusBadge(applicant.idVerificationStatus),
             ),
           ),
-          Expanded(
-            child: Text(
-              applicant.organizationName?.trim().isNotEmpty == true
-                  ? applicant.organizationName!
-                  : '\u2014',
-              style: const TextStyle(fontSize: 11),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Expanded(
-            child: Text(
-              submitted,
-              style: const TextStyle(fontSize: 10.5, color: AppColors.textGray),
-            ),
-          ),
-          Expanded(
-            child: TextButton(
-              onPressed: applicant.canReview
-                  ? () => screen._reviewApplication(applicant)
-                  : null,
-              style: TextButton.styleFrom(
-                padding: EdgeInsets.zero,
-                minimumSize: Size.zero,
-                alignment: Alignment.centerLeft,
-              ),
-              child: Text(
-                applicant.idVerificationStatus == 'pending' ? 'Review' : 'View',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            child: _ApplicationStatusBadge(
-              status: applicant.idVerificationStatus,
-            ),
-          ),
-          const SizedBox(width: 12),
         ],
       ),
     );
@@ -575,19 +371,25 @@ class _ApplicationRowWide extends StatelessWidget {
 }
 
 class _ApplicationRowCompact extends StatelessWidget {
-  const _ApplicationRowCompact({required this.applicant, required this.screen});
+  const _ApplicationRowCompact({
+    required this.applicant,
+    required this.onReview,
+  });
+
   final AdminUserSummary applicant;
-  final _AdminOrganizerApplicationsScreenState screen;
+  final VoidCallback? onReview;
 
   @override
   Widget build(BuildContext context) {
-    final submitted = applicant.createdAt != null
-        ? formatFriendlyDate(applicant.createdAt!)
-        : '\u2014';
+    final p = FairTixPalette.of(context);
+    final pending = applicant.idVerificationStatus == 'pending';
+    final submitted = _AdminOrganizerApplicationsScreenState._appliedOn(
+      applicant,
+    );
     return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: p.border)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -600,55 +402,37 @@ class _ApplicationRowCompact extends StatelessWidget {
                   children: [
                     Text(
                       applicant.fullName,
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                      ),
+                      style: orgText(p, size: 15, weight: FontWeight.w700),
                     ),
                     Text(
                       applicant.email,
-                      style: const TextStyle(
-                        fontSize: 10.5,
-                        color: AppColors.textGray,
-                      ),
+                      overflow: TextOverflow.ellipsis,
+                      style: orgText(p, size: 13, color: p.textSecondary),
                     ),
                   ],
                 ),
               ),
-              _ApplicationStatusBadge(status: applicant.idVerificationStatus),
+              const SizedBox(width: 8),
+              _statusBadge(applicant.idVerificationStatus),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Text(
             applicant.organizationName?.trim().isNotEmpty == true
                 ? applicant.organizationName!
                 : 'No organization on file',
-            style: const TextStyle(fontSize: 11),
+            style: orgText(p, size: 13),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             'Applied $submitted',
-            style: const TextStyle(fontSize: 10, color: AppColors.textGray),
+            style: orgText(p, size: 12, color: p.textSecondary),
           ),
-          const SizedBox(height: 8),
-          TextButton(
-            onPressed: applicant.canReview
-                ? () => screen._reviewApplication(applicant)
-                : null,
-            style: TextButton.styleFrom(
-              padding: EdgeInsets.zero,
-              minimumSize: Size.zero,
-              alignment: Alignment.centerLeft,
-            ),
-            child: Text(
-              applicant.idVerificationStatus == 'pending'
-                  ? 'Review Application'
-                  : 'View Documents',
-              style: const TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+          const SizedBox(height: 12),
+          AdminRowAction(
+            label: pending ? 'Review Application' : 'View Documents',
+            filled: pending,
+            onPressed: onReview,
           ),
         ],
       ),
@@ -658,114 +442,11 @@ class _ApplicationRowCompact extends StatelessWidget {
 
 class _EmptyApplications extends StatelessWidget {
   const _EmptyApplications();
-  @override
-  Widget build(BuildContext context) => const Padding(
-    padding: EdgeInsets.all(32),
-    child: Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.inbox_outlined, size: 34, color: Color(0xFFD9D7E4)),
-          SizedBox(height: 10),
-          Text(
-            'No matching applications',
-            style: TextStyle(color: AppColors.textGray, fontSize: 12),
-          ),
-          SizedBox(height: 4),
-          Text(
-            'Try a different filter or check back once organizers apply.',
-            style: TextStyle(color: Color(0xFFA6A9B7), fontSize: 10),
-          ),
-        ],
-      ),
-    ),
-  );
-}
 
-class _AdminLogo extends StatelessWidget {
-  const _AdminLogo();
   @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Container(
-        width: 22,
-        height: 22,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: AppColors.primaryPurple,
-          borderRadius: BorderRadius.circular(5),
-        ),
-        child: const Icon(
-          Icons.confirmation_number_outlined,
-          color: Colors.white,
-          size: 14,
-        ),
-      ),
-      const SizedBox(width: 6),
-      const Text(
-        'FairTix',
-        style: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w800,
-          fontStyle: FontStyle.italic,
-        ),
-      ),
-      const SizedBox(width: 3),
-      const Text(
-        'ADMIN',
-        style: TextStyle(fontSize: 8, color: AppColors.textGray),
-      ),
-    ],
+  Widget build(BuildContext context) => const AdminEmptyState(
+    icon: Icons.inbox_outlined,
+    title: 'No matching applications',
+    hint: 'Try a different filter or check back once organizers apply.',
   );
-}
-
-class _SidebarItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-  const _SidebarItem({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-      child: Material(
-        color: selected ? AppColors.primaryPurple : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-            child: Row(
-              children: [
-                Icon(
-                  icon,
-                  size: 16,
-                  color: selected ? Colors.white : AppColors.textDark,
-                ),
-                const SizedBox(width: 9),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      color: selected ? Colors.white : AppColors.textDark,
-                      fontSize: 10,
-                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }

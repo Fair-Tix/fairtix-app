@@ -1,22 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../../widgets/admin_shell.dart';
-import '../../services/admin_auth_service.dart';
-import '../../services/admin_session.dart';
 import '../../theme/fairtix_palette.dart';
-import '../organizer/app_colors.dart';
-import 'admin-accounts.dart';
-import 'admin-dashboard.dart';
-import 'admin-events-tickets.dart';
-import 'admin-fraud-alerts.dart';
-import 'admin-login.dart';
-import 'admin-organizer-applications.dart';
-import 'admin-resale-monitoring.dart';
-import 'admin-revenue-reports.dart';
-import 'admin-route.dart';
+import '../../widgets/admin_shell.dart';
+import '../../widgets/admin_widgets.dart';
+import '../../widgets/organizer_ui.dart';
 import 'admin-subscription-plans-card.dart';
-import 'admin-user-registrations.dart';
-import 'admin-profile.dart';
 
 class AdminPlatformSettingsScreen extends StatefulWidget {
   const AdminPlatformSettingsScreen({super.key});
@@ -37,19 +25,6 @@ class _AdminPlatformSettingsScreenState
   bool _weeklyDigest = true;
   DateTime? _lastSavedAt;
 
-  static const _items = [
-    (Icons.grid_view_rounded, 'Dashboard'),
-    (Icons.business_outlined, 'Organizer Applications'),
-    (Icons.how_to_reg_outlined, 'User Registrations'),
-    (Icons.people_outline, 'Accounts'),
-    (Icons.calendar_today_outlined, 'Events & Tickets'),
-    (Icons.swap_vert_rounded, 'Resale Monitoring'),
-    (Icons.shield_outlined, 'Fraud Alerts'),
-    (Icons.bar_chart_rounded, 'Revenue & Reports'),
-    (Icons.settings_outlined, 'Platform Settings'),
-    (Icons.person_outline, 'Profile'),
-  ];
-
   @override
   void dispose() {
     _platformNameController.dispose();
@@ -58,75 +33,11 @@ class _AdminPlatformSettingsScreenState
     super.dispose();
   }
 
-  void _navigate(BuildContext context, int index) {
-    final pages = <int, Widget>{
-      0: const AdminDashboardScreen(),
-      1: const AdminOrganizerApplicationsScreen(),
-      2: const AdminUserRegistrationsScreen(),
-      3: const AdminAccountsScreen(),
-      4: const AdminEventsTicketsScreen(),
-      5: const AdminResaleMonitoringScreen(),
-      6: const AdminFraudAlertsScreen(),
-      7: const AdminRevenueReportsScreen(),
-      9: const AdminProfileScreen(),
-    };
-    final page = pages[index];
-    if (page != null) {
-      adminPushReplacement(context, page);
-    }
-  }
-
   void _saveChanges(String section) {
     setState(() => _lastSavedAt = DateTime.now());
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text('$section settings saved.')));
-  }
-
-  String _formatLastSaved(DateTime dt) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    final hour12 = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
-    final minute = dt.minute.toString().padLeft(2, '0');
-    final period = dt.hour >= 12 ? 'PM' : 'AM';
-    return 'Last saved: ${months[dt.month - 1]} ${dt.day}, ${dt.year} - $hour12:$minute $period';
-  }
-
-  Future<void> _confirmLogout() async {
-    final shouldLogout = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Log out?'),
-        content: const Text('Are you sure you want to log out?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Log out'),
-          ),
-        ],
-      ),
-    );
-
-    if (!mounted || shouldLogout != true) return;
-
-    AdminAuthService.instance.logout();
-    adminPushAndRemoveUntil(context, const AdminLoginScreen());
   }
 
   @override
@@ -139,209 +50,58 @@ class _AdminPlatformSettingsScreenState
     );
   }
 
-  Widget _buildSidebar(BuildContext context) {
-    final currentEmail =
-        AdminSession.instance.currentEmail ?? 'admin@fairtix.com';
-
-    return Container(
-      color: const Color(0xFFF3F1FD),
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 18, 12, 18),
-              child: _AdminLogo(),
-            ),
-            const Divider(height: 1, color: AppColors.borderLight),
-            const SizedBox(height: 14),
-            for (var index = 0; index < _items.length; index++)
-              _SidebarItem(
-                icon: _items[index].$1,
-                label: _items[index].$2,
-                selected: index == 8,
-                onTap: () => _navigate(context, index),
-              ),
-            const Spacer(),
-            const Divider(height: 1, color: AppColors.borderLight),
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                children: [
-                  const CircleAvatar(
-                    radius: 15,
-                    backgroundColor: Color(0xFFE8E6F1),
-                    child: Icon(
-                      Icons.person,
-                      size: 17,
-                      color: AppColors.textGray,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Admin', style: AppTextStyles.label),
-                        Text(
-                          currentEmail,
-                          style: const TextStyle(
-                            color: AppColors.textGray,
-                            fontSize: 9,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: _confirmLogout,
-                    icon: const Icon(
-                      Icons.logout,
-                      size: 17,
-                      color: AppColors.textGray,
-                    ),
-                    tooltip: 'Log out',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTopBar(BuildContext context, bool isWide) {
-    return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 18),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
-      ),
-      child: Row(
-        children: [
-          if (!isWide)
-            Builder(
-              builder: (context) => IconButton(
-                icon: const Icon(Icons.menu, size: 20),
-                onPressed: () => Scaffold.of(context).openDrawer(),
-              ),
-            ),
-          const Text('Platform Settings', style: AppTextStyles.label),
-          const Spacer(),
-          SizedBox(
-            width: isWide ? 270 : 130,
-            height: 32,
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Search users, events...',
-                hintStyle: const TextStyle(
-                  color: Color(0xFFA6A9B7),
-                  fontSize: 10,
-                ),
-                prefixIcon: const Icon(
-                  Icons.search,
-                  size: 16,
-                  color: Color(0xFFA6A9B7),
-                ),
-                filled: true,
-                fillColor: const Color(0xFFF3F3F6),
-                contentPadding: EdgeInsets.zero,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
-          const Icon(
-            Icons.notifications_none,
-            size: 19,
-            color: AppColors.textGray,
-          ),
-          const SizedBox(width: 14),
-          const CircleAvatar(
-            radius: 14,
-            backgroundColor: Color(0xFFE8E6F1),
-            child: Icon(Icons.person, size: 16, color: AppColors.textGray),
-          ),
-          if (isWide) ...[
-            const SizedBox(width: 8),
-            Text(
-              AdminSession.instance.currentEmail ?? 'admin@fairtix.com',
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-            ),
-            const Icon(Icons.keyboard_arrow_down, size: 16),
-          ],
-        ],
-      ),
-    );
-  }
-
   Widget _buildContent(bool isWide) {
-    final palette = FairTixPalette.of(context);
-    final settings = <Widget>[
-      _buildGeneralCard(),
-      Column(
-        children: [
-          _buildPaymentCard(),
-          const SizedBox(height: 14),
-          _buildSecurityCard(),
-          const SizedBox(height: 14),
-          _buildNotificationsCard(),
+    final p = FairTixPalette.of(context);
+    final general = _buildGeneralCard();
+    final payment = _buildPaymentCard();
+    final security = _buildSecurityCard();
+    final notifications = _buildNotificationsCard();
+
+    Widget stack(List<Widget> cards) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < cards.length; i++) ...[
+          if (i > 0) const SizedBox(height: 20),
+          cards[i],
         ],
-      ),
-    ];
+      ],
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Expanded(
-              child: Text(
-                'Platform Settings',
-                style: AppTextStyles.h2.copyWith(color: palette.textPrimary),
-              ),
-            ),
-            if (isWide && _lastSavedAt != null)
+        AdminPageHeader(
+          title: 'Platform Settings',
+          subtitle: 'Manage global application rules and pricing structures.',
+          actions: [
+            if (_lastSavedAt != null)
               Text(
-                _formatLastSaved(_lastSavedAt!),
-                style: TextStyle(color: palette.textSecondary, fontSize: 10),
+                'Last saved: ${formatAdminDateTime(_lastSavedAt!)}',
+                style: orgText(p, size: 12, color: p.textSecondary),
               ),
           ],
         ),
-        const SizedBox(height: 3),
-        Text(
-          'Manage global application rules and pricing structures.',
-          style: TextStyle(color: palette.textSecondary, fontSize: 10),
-        ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 24),
+        // Two balanced columns on wide screens; on narrow ones the cards
+        // stack in their logical order.
         if (isWide)
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: settings[0]),
-              const SizedBox(width: 14),
-              Expanded(child: settings[1]),
+              Expanded(child: stack([general, notifications])),
+              const SizedBox(width: 20),
+              Expanded(child: stack([payment, security])),
             ],
           )
         else
-          Column(
-            children: [settings[0], const SizedBox(height: 14), settings[1]],
-          ),
-        const SizedBox(height: 14),
+          stack([general, payment, security, notifications]),
+        const SizedBox(height: 20),
         const AdminSubscriptionPlansCard(),
       ],
     );
   }
 
   Widget _buildGeneralCard() => _SettingsCard(
-    icon: Icons.percent,
+    icon: Icons.tune_rounded,
     title: 'General',
     subtitle: 'Configure platform name and logo.',
     footer: 'Changes take effect immediately.',
@@ -349,25 +109,21 @@ class _AdminPlatformSettingsScreenState
     children: [
       _fieldLabel('Platform Name', 'Displayed in headers and emails.'),
       _input(_platformNameController, italic: true),
-      const SizedBox(height: 18),
+      const SizedBox(height: 20),
       _fieldLabel('Logo', 'Upload a square PNG (min 512x512).'),
       Align(
-        alignment: Alignment.centerRight,
-        child: OutlinedButton.icon(
+        alignment: Alignment.centerLeft,
+        child: AdminHeaderButton(
+          icon: Icons.upload_outlined,
+          label: 'Upload logo',
           onPressed: () => _saveChanges('Logo'),
-          icon: const Icon(Icons.upload_outlined, size: 14),
-          label: const Text('Upload logo', style: TextStyle(fontSize: 10)),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: AppColors.primaryPurple,
-            side: const BorderSide(color: AppColors.primaryPurple),
-          ),
         ),
       ),
     ],
   );
 
   Widget _buildPaymentCard() => _SettingsCard(
-    icon: Icons.bar_chart,
+    icon: Icons.payments_outlined,
     title: 'Payment',
     subtitle: 'Configure fee percentages and payout schedule.',
     footer: 'Resale fee (all tiers): flat 5% of resale price.',
@@ -375,17 +131,18 @@ class _AdminPlatformSettingsScreenState
     children: [
       _fieldLabel(
         'Primary Sale Fee Rates',
-        'Basic: 8% · Standard: 9% · Premium: 10% per ticket sold.',
+        'Basic: 8% \u00B7 Standard: 9% \u00B7 Premium: 10% per ticket sold.',
       ),
       _input(
         _saleRateController,
         suffix: '%',
         keyboardType: TextInputType.number,
       ),
-      const SizedBox(height: 18),
+      const SizedBox(height: 20),
       _fieldLabel('Payout Schedule', 'When payouts are sent to organizers.'),
       DropdownButtonFormField<String>(
         initialValue: _payoutSchedule,
+        dropdownColor: FairTixPalette.of(context).surface,
         items: const [
           DropdownMenuItem(
             value: 'Monthly (1st of month)',
@@ -400,10 +157,10 @@ class _AdminPlatformSettingsScreenState
         onChanged: (value) =>
             setState(() => _payoutSchedule = value ?? _payoutSchedule),
         decoration: _inputDecoration(),
-        style: TextStyle(
-          color: FairTixPalette.of(context).textPrimary,
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
+        style: orgText(
+          FairTixPalette.of(context),
+          size: 14,
+          weight: FontWeight.w600,
         ),
       ),
     ],
@@ -414,7 +171,7 @@ class _AdminPlatformSettingsScreenState
     title: 'Security',
     subtitle: 'Control session timeout and 2FA requirements.',
     footer: 'This affects all administrator sessions.',
-    footerColor: AppColors.dangerRed,
+    footerDanger: true,
     onSave: () => _saveChanges('Security'),
     children: [
       _fieldLabel(
@@ -422,7 +179,7 @@ class _AdminPlatformSettingsScreenState
         'Minutes before requiring re-authentication.',
       ),
       _input(_sessionTimeoutController, keyboardType: TextInputType.number),
-      const SizedBox(height: 14),
+      const SizedBox(height: 16),
       _switchRow(
         '2FA Required',
         'Enforce two-factor authentication for all admins.',
@@ -444,7 +201,7 @@ class _AdminPlatformSettingsScreenState
         _emailAlerts,
         (value) => setState(() => _emailAlerts = value),
       ),
-      const SizedBox(height: 14),
+      const SizedBox(height: 16),
       _switchRow(
         'Weekly Digest',
         'Send a weekly summary of revenue and activity.',
@@ -454,68 +211,62 @@ class _AdminPlatformSettingsScreenState
     ],
   );
 
-  Widget _fieldLabel(String title, String description) => Padding(
-    padding: const EdgeInsets.only(bottom: 7),
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(
-            title,
-            style: TextStyle(
-              color: FairTixPalette.of(context).textPrimary,
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        Expanded(
-          child: Text(
+  Widget _fieldLabel(String title, String description) {
+    final p = FairTixPalette.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: orgText(p, size: 14, weight: FontWeight.w700)),
+          const SizedBox(height: 2),
+          Text(
             description,
-            style: TextStyle(
-              color: FairTixPalette.of(context).textSecondary,
-              fontSize: 8,
-            ),
+            style: orgText(p, size: 12, color: p.textSecondary, height: 1.35),
           ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 
   Widget _input(
     TextEditingController controller, {
     String? suffix,
     bool italic = false,
     TextInputType? keyboardType,
-  }) => TextField(
-    controller: controller,
-    keyboardType: keyboardType,
-    textAlign: suffix == null ? TextAlign.left : TextAlign.right,
-    style: TextStyle(
-      color: FairTixPalette.of(context).textPrimary,
-      fontSize: 10,
-      fontWeight: FontWeight.w600,
-      fontStyle: italic ? FontStyle.italic : FontStyle.normal,
-    ),
-    decoration: _inputDecoration(suffix: suffix),
-  );
+  }) {
+    final p = FairTixPalette.of(context);
+    return TextField(
+      controller: controller,
+      keyboardType: keyboardType,
+      cursorColor: p.accentLabel,
+      textAlign: suffix == null ? TextAlign.left : TextAlign.right,
+      style: orgText(
+        p,
+        size: 14,
+        weight: FontWeight.w600,
+        fontStyle: italic ? FontStyle.italic : FontStyle.normal,
+      ),
+      decoration: _inputDecoration(suffix: suffix),
+    );
+  }
 
   InputDecoration _inputDecoration({String? suffix}) {
-    final palette = FairTixPalette.of(context);
+    final p = FairTixPalette.of(context);
+    OutlineInputBorder border(Color c) => OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: BorderSide(color: c),
+    );
     return InputDecoration(
       isDense: true,
       suffixText: suffix,
-      suffixStyle: TextStyle(color: palette.textSecondary, fontSize: 10),
+      suffixStyle: orgText(p, size: 14, color: p.textSecondary),
       filled: true,
-      fillColor: palette.surface,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(5),
-        borderSide: BorderSide(color: palette.border),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(5),
-        borderSide: BorderSide(color: palette.border),
-      ),
+      fillColor: p.surface,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+      border: border(p.border),
+      enabledBorder: border(p.border),
+      focusedBorder: border(p.accentLabel),
     );
   }
 
@@ -524,38 +275,38 @@ class _AdminPlatformSettingsScreenState
     String subtitle,
     bool value,
     ValueChanged<bool> onChanged,
-  ) => Row(
-    children: [
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: TextStyle(
-                color: FairTixPalette.of(context).textPrimary,
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
+  ) {
+    final p = FairTixPalette.of(context);
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: orgText(p, size: 14, weight: FontWeight.w700)),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: orgText(
+                  p,
+                  size: 12,
+                  color: p.textSecondary,
+                  height: 1.35,
+                ),
               ),
-            ),
-            Text(
-              subtitle,
-              style: TextStyle(
-                color: FairTixPalette.of(context).textSecondary,
-                fontSize: 8,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
-      Switch(
-        value: value,
-        onChanged: onChanged,
-        activeThumbColor: Colors.white,
-        activeTrackColor: AppColors.primaryPurple,
-      ),
-    ],
-  );
+        const SizedBox(width: 12),
+        Switch(
+          value: value,
+          onChanged: onChanged,
+          activeThumbColor: Colors.white,
+          activeTrackColor: p.primary,
+        ),
+      ],
+    );
+  }
 }
 
 class _SettingsCard extends StatelessWidget {
@@ -563,7 +314,7 @@ class _SettingsCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final String? footer;
-  final Color footerColor;
+  final bool footerDanger;
   final VoidCallback onSave;
   final List<Widget> children;
 
@@ -574,90 +325,76 @@ class _SettingsCard extends StatelessWidget {
     required this.onSave,
     required this.children,
     this.footer,
-    this.footerColor = AppColors.textGray,
+    this.footerDanger = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final palette = FairTixPalette.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: palette.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: palette.border),
-      ),
+    final p = FairTixPalette.of(context);
+    return AdminCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+            padding: const EdgeInsets.fromLTRB(22, 20, 22, 16),
             child: Row(
               children: [
                 Container(
-                  width: 20,
-                  height: 20,
+                  width: 36,
+                  height: 36,
                   decoration: BoxDecoration(
-                    color: AppColors.primaryPurple,
-                    borderRadius: BorderRadius.circular(5),
+                    gradient: FairTixPalette.buttonGradient,
+                    borderRadius: BorderRadius.circular(11),
                   ),
-                  child: Icon(icon, color: Colors.white, size: 13),
+                  child: Icon(icon, color: Colors.white, size: 19),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 12),
                 Text(
                   title,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: orgText(p, size: 16, weight: FontWeight.w700),
                 ),
               ],
             ),
           ),
-          Divider(height: 1, indent: 12, endIndent: 12, color: palette.border),
+          Divider(height: 1, color: p.border),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 9, 12, 12),
+            padding: const EdgeInsets.fromLTRB(22, 16, 22, 22),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
                   subtitle,
-                  style: TextStyle(color: palette.textSecondary, fontSize: 8),
+                  style: orgText(p, size: 13, color: p.textSecondary),
                 ),
-                const SizedBox(height: 15),
+                const SizedBox(height: 20),
                 ...children,
               ],
             ),
           ),
-          Divider(height: 1, color: palette.border),
+          Divider(height: 1, color: p.border),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+            padding: const EdgeInsets.fromLTRB(22, 14, 22, 14),
             child: Row(
               children: [
                 if (footer != null)
                   Expanded(
                     child: Text(
                       footer!,
-                      style: TextStyle(color: footerColor, fontSize: 8),
+                      style: orgText(
+                        p,
+                        size: 12,
+                        color: footerDanger ? p.danger : p.textSecondary,
+                        height: 1.35,
+                      ),
                     ),
-                  ),
-                if (footer == null) const Spacer(),
-                ElevatedButton(
+                  )
+                else
+                  const Spacer(),
+                const SizedBox(width: 12),
+                AdminHeaderButton(
+                  label: 'Save Changes',
+                  filled: true,
                   onPressed: onSave,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryPurple,
-                    foregroundColor: Colors.white,
-                    fixedSize: const Size(105, 32),
-                    minimumSize: const Size(105, 32),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    padding: EdgeInsets.zero,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(5),
-                    ),
-                  ),
-                  child: const Text(
-                    'Save Changes',
-                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700),
-                  ),
                 ),
               ],
             ),
@@ -666,93 +403,4 @@ class _SettingsCard extends StatelessWidget {
       ),
     );
   }
-}
-
-class _AdminLogo extends StatelessWidget {
-  const _AdminLogo();
-
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Container(
-        width: 22,
-        height: 22,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: AppColors.primaryPurple,
-          borderRadius: BorderRadius.circular(5),
-        ),
-        child: const Icon(
-          Icons.confirmation_number_outlined,
-          color: Colors.white,
-          size: 14,
-        ),
-      ),
-      const SizedBox(width: 6),
-      const Text(
-        'FairTix',
-        style: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w800,
-          fontStyle: FontStyle.italic,
-        ),
-      ),
-      const SizedBox(width: 3),
-      const Text(
-        'ADMIN',
-        style: TextStyle(fontSize: 8, color: AppColors.textGray),
-      ),
-    ],
-  );
-}
-
-class _SidebarItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _SidebarItem({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-    child: Material(
-      color: selected ? AppColors.primaryPurple : Colors.transparent,
-      borderRadius: BorderRadius.circular(7),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(7),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                size: 15,
-                color: selected ? Colors.white : AppColors.textGray,
-              ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    color: selected ? Colors.white : AppColors.textGray,
-                    fontSize: 10,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
 }

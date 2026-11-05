@@ -5,7 +5,7 @@ import '../../services/csv_export.dart';
 import '../../theme/fairtix_palette.dart';
 import '../../widgets/admin_shell.dart';
 import '../../widgets/admin_widgets.dart';
-import '../organizer/app_colors.dart';
+import '../../widgets/organizer_ui.dart';
 
 /// Every resale listing on the platform, with the price compared to what the
 /// seller originally paid, and the admin's one action: take a listing off
@@ -34,6 +34,10 @@ class _AdminResaleMonitoringScreenState
     'Canceled',
     'Expired',
   ];
+
+  /// Relative column widths (seller, event, original, resale, % of original,
+  /// status, action).
+  static const _flex = [3, 3, 2, 2, 2, 2, 2];
 
   final _searchController = TextEditingController();
   List<ResaleListingEntry> _listings = const [];
@@ -82,8 +86,9 @@ class _AdminResaleMonitoringScreenState
   List<ResaleListingEntry> get _filtered {
     final query = _searchController.text.trim().toLowerCase();
     return _listings.where((l) {
-      if (_statusFilter != 'All' && l.statusLabel != _statusFilter)
+      if (_statusFilter != 'All' && l.statusLabel != _statusFilter) {
         return false;
+      }
       if (_nearFloorOnly && !l.isNearFloor) return false;
       if (query.isEmpty) return true;
       return '${l.sellerName} ${l.sellerEmail} ${l.eventTitle}'
@@ -91,6 +96,10 @@ class _AdminResaleMonitoringScreenState
           .contains(query);
     }).toList();
   }
+
+  int _countFor(String filter) => filter == 'All'
+      ? _listings.length
+      : _listings.where((l) => l.statusLabel == filter).length;
 
   void _toast(String message) {
     if (!mounted) return;
@@ -100,51 +109,56 @@ class _AdminResaleMonitoringScreenState
   }
 
   Future<void> _removeListing(ResaleListingEntry listing) async {
+    final p = FairTixPalette.of(context);
     final reasonController = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Remove this listing?'),
+      builder: (ctx) => AdminDialog(
+        title: 'Remove this listing?',
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            AdminDialogText(
               '${listing.sellerName}\'s ${listing.tierName} ticket for "${listing.eventTitle}" '
               '(${formatPeso(listing.listingPrice)}) is taken off the market. The ticket '
               'goes back to their wallet as a normal valid ticket and they are notified.',
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
             TextField(
               controller: reasonController,
               maxLength: 200,
-              decoration: const InputDecoration(
-                labelText: 'Reason (shown to the seller, optional)',
-                border: OutlineInputBorder(),
+              style: orgText(p, size: 14, height: 1.3),
+              cursorColor: p.accentLabel,
+              decoration: adminInputDecoration(
+                ctx,
+                label: 'Reason (shown to the seller, optional)',
               ),
             ),
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+          AdminDialogButton(
+            label: 'Cancel',
+            onPressed: () => Navigator.pop(ctx, false),
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.dangerRed),
-            child: const Text('Remove Listing'),
+          AdminDialogButton(
+            label: 'Remove Listing',
+            color: p.danger,
+            onPressed: () => Navigator.pop(ctx, true),
           ),
         ],
       ),
     );
+    final reason = reasonController.text.trim();
+    reasonController.dispose();
     if (confirmed != true) return;
 
     setState(() => _busyListingId = listing.id);
     try {
       await AdminResaleService.instance.removeListing(
         listing.id,
-        reason: reasonController.text.trim(),
+        reason: reason,
       );
       await _load(showSpinner: false);
       _toast('Listing removed and the seller was notified.');
@@ -179,6 +193,7 @@ class _AdminResaleMonitoringScreenState
   }
 
   Widget _buildBody() {
+    final p = FairTixPalette.of(context);
     final active = _listings.where((l) => l.isActive).toList();
     final activeValue = active.fold<double>(
       0,
@@ -193,48 +208,44 @@ class _AdminResaleMonitoringScreenState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            const Expanded(
-              child: Text('Resale Monitoring', style: AppTextStyles.h2),
-            ),
-            IconButton(
+        AdminPageHeader(
+          title: 'Resale Monitoring',
+          subtitle:
+              'Every resale listing, compared with the price the seller originally paid.',
+          actions: [
+            AdminIconButton(
+              icon: Icons.refresh_rounded,
+              tooltip: 'Refresh data',
+              loading: _isLoading,
               onPressed: _isLoading ? null : _load,
-              icon: const Icon(Icons.refresh, size: 18),
-              tooltip: 'Refresh',
             ),
-            const SizedBox(width: 4),
-            OutlinedButton.icon(
+            AdminHeaderButton(
+              icon: Icons.download_outlined,
+              label: 'Export CSV',
               onPressed: _isLoading ? null : _exportCsv,
-              icon: const Icon(Icons.download_outlined, size: 14),
-              label: const Text('Export CSV', style: TextStyle(fontSize: 11)),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.primaryPurple,
-                side: const BorderSide(color: AppColors.primaryPurple),
-              ),
             ),
           ],
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 24),
         AdminSummaryRow(
           cards: [
             AdminSummaryCard(
               icon: Icons.swap_vert_rounded,
-              color: AppColors.primaryPurple,
+              color: p.accentLabel,
               label: 'Active Listings',
               value: '${active.length}',
               caption: '${_listings.length} listings in total',
             ),
             AdminSummaryCard(
               icon: Icons.payments_outlined,
-              color: AppColors.successGreen,
+              color: p.success,
               label: 'Active Listed Value',
               value: formatPeso(activeValue),
               caption: 'Asking prices, before the resale fee',
             ),
             AdminSummaryCard(
               icon: Icons.percent_outlined,
-              color: AppColors.infoBlue,
+              color: p.accentLabel,
               label: 'Avg Price vs Original',
               value: active.isEmpty
                   ? '\u2014'
@@ -243,14 +254,14 @@ class _AdminResaleMonitoringScreenState
             ),
             AdminSummaryCard(
               icon: Icons.flag_outlined,
-              color: AppColors.dangerRed,
+              color: p.danger,
               label: 'Near-Floor Listings',
               value: '$nearFloor',
               caption: 'Active, at or below 60% of original',
             ),
           ],
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 20),
         LayoutBuilder(
           builder: (context, constraints) {
             final sideBySide = constraints.maxWidth >= 1000;
@@ -259,7 +270,7 @@ class _AdminResaleMonitoringScreenState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(flex: 7, child: _buildListings()),
-                  const SizedBox(width: 18),
+                  const SizedBox(width: 20),
                   Expanded(flex: 3, child: _buildActivity()),
                 ],
               );
@@ -268,7 +279,7 @@ class _AdminResaleMonitoringScreenState
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _buildListings(),
-                const SizedBox(height: 18),
+                const SizedBox(height: 20),
                 _buildActivity(),
               ],
             );
@@ -279,153 +290,127 @@ class _AdminResaleMonitoringScreenState
   }
 
   Widget _buildListings() {
-    final palette = FairTixPalette.of(context);
+    final p = FairTixPalette.of(context);
     final filtered = _filtered;
-    return AdminCard(
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                SizedBox(
-                  width: 260,
-                  child: TextField(
-                    controller: _searchController,
-                    onChanged: (_) => setState(() {}),
-                    decoration: InputDecoration(
-                      hintText: 'Search seller or event...',
-                      hintStyle: const TextStyle(fontSize: 11),
-                      prefixIcon: Icon(
-                        Icons.search,
-                        size: 17,
-                        color: palette.textSecondary,
-                      ),
-                      isDense: true,
-                      filled: true,
-                      fillColor: palette.surface,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(7),
-                        borderSide: BorderSide(color: palette.border),
-                      ),
-                    ),
-                  ),
-                ),
-                DropdownButton<String>(
-                  value: _statusFilter,
-                  underline: const SizedBox.shrink(),
-                  items: [
-                    for (final f in _statusFilters)
-                      DropdownMenuItem(
-                        value: f,
-                        child: Text(f, style: const TextStyle(fontSize: 12)),
-                      ),
-                  ],
-                  onChanged: (value) =>
-                      setState(() => _statusFilter = value ?? 'All'),
-                ),
-                FilterChip(
-                  label: const Text(
-                    'Near floor only',
-                    style: TextStyle(fontSize: 11),
-                  ),
-                  selected: _nearFloorOnly,
-                  onSelected: (value) => setState(() => _nearFloorOnly = value),
-                  selectedColor: palette.dangerSurface,
-                  checkmarkColor: palette.danger,
-                ),
-              ],
-            ),
+    final ready = !_isLoading && _loadError == null;
+
+    final Widget table;
+    if (_isLoading) {
+      table = Padding(
+        padding: const EdgeInsets.all(48),
+        child: Center(
+          child: CircularProgressIndicator(
+            strokeWidth: 2.4,
+            color: p.accentLabel,
           ),
-          const Divider(height: 1),
-          if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.all(32),
-              child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
-            )
-          else if (_loadError != null)
-            AdminErrorBox(message: _loadError!, onRetry: _load)
-          else if (filtered.isEmpty)
-            AdminEmptyState(
-              icon: Icons.swap_vert_rounded,
-              title: _listings.isEmpty
-                  ? 'No resale listings yet'
-                  : 'No listings match your filters',
-              hint: _listings.isEmpty
-                  ? 'Listings will appear here when eventgoers put tickets up for resale.'
-                  : 'Try a different search or status.',
-            )
-          else
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final wide = constraints.maxWidth >= 640;
-                return Column(
-                  children: [
-                    if (wide)
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(16, 12, 16, 10),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              flex: 3,
-                              child: Text('SELLER', style: adminHeaderStyle),
-                            ),
-                            Expanded(
-                              flex: 3,
-                              child: Text('EVENT', style: adminHeaderStyle),
-                            ),
-                            Expanded(
-                              flex: 2,
-                              child: Text('ORIGINAL', style: adminHeaderStyle),
-                            ),
-                            Expanded(
-                              flex: 2,
-                              child: Text('RESALE', style: adminHeaderStyle),
-                            ),
-                            Expanded(
-                              flex: 2,
-                              child: Text(
-                                '% OF ORIG.',
-                                style: adminHeaderStyle,
-                              ),
-                            ),
-                            Expanded(
-                              flex: 2,
-                              child: Text('STATUS', style: adminHeaderStyle),
-                            ),
-                            SizedBox(width: 70),
-                          ],
-                        ),
-                      ),
-                    const Divider(height: 1),
-                    for (final listing in filtered)
-                      _ListingRow(
-                        listing: listing,
-                        wide: wide,
-                        busy: _busyListingId == listing.id,
-                        onRemove: () => _removeListing(listing),
-                      ),
-                    Padding(
-                      padding: const EdgeInsets.all(14),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          'Showing ${filtered.length} of ${_listings.length} listings',
-                          style: const TextStyle(
-                            color: AppColors.textGray,
-                            fontSize: 10,
-                          ),
-                        ),
-                      ),
-                    ),
+        ),
+      );
+    } else if (_loadError != null) {
+      table = AdminErrorBox(message: _loadError!, onRetry: _load);
+    } else if (filtered.isEmpty) {
+      table = AdminEmptyState(
+        icon: Icons.swap_vert_rounded,
+        title: _listings.isEmpty
+            ? 'No resale listings yet'
+            : 'No listings match your filters',
+        hint: _listings.isEmpty
+            ? 'Listings will appear here when eventgoers put tickets up for resale.'
+            : 'Try a different search or status.',
+      );
+    } else {
+      table = LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 760;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (wide)
+                const AdminTableHeader(
+                  labels: [
+                    'Seller',
+                    'Event',
+                    'Original',
+                    'Resale',
+                    '% of orig.',
+                    'Status',
+                    '',
                   ],
-                );
-              },
+                  flex: _flex,
+                ),
+              for (final listing in filtered)
+                _ListingRow(
+                  listing: listing,
+                  wide: wide,
+                  flex: _flex,
+                  busy: _busyListingId == listing.id,
+                  onRemove: () => _removeListing(listing),
+                ),
+              Divider(height: 1, color: p.border),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 16,
+                ),
+                child: Text(
+                  'Showing ${filtered.length} of ${_listings.length} listings',
+                  style: orgText(p, size: 12, color: p.textSecondary),
+                ),
+              ),
+            ],
+          );
+        },
+      );
+    }
+
+    return AdminCard(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(23),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AdminFilterChips(
+                    labels: _statusFilters,
+                    selected: _statusFilters.indexOf(_statusFilter),
+                    counts: [
+                      for (final f in _statusFilters)
+                        ready ? _countFor(f) : null,
+                    ],
+                    onSelected: (i) =>
+                        setState(() => _statusFilter = _statusFilters[i]),
+                  ),
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      AdminSearchField(
+                        hint: 'Search seller or event',
+                        width: 280,
+                        onChanged: (_) => setState(() {}),
+                      ),
+                      AdminToggleChip(
+                        label: 'Near floor only',
+                        icon: Icons.flag_outlined,
+                        selected: _nearFloorOnly,
+                        onChanged: (v) => setState(() => _nearFloorOnly = v),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-        ],
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 120),
+              child: table,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -434,6 +419,7 @@ class _AdminResaleMonitoringScreenState
   /// Resale purchases aren't built yet, so for now this is mostly new
   /// listings; "sold" lines appear once that flow exists.
   Widget _buildActivity() {
+    final p = FairTixPalette.of(context);
     final events = <({DateTime at, String text})>[];
     for (final l in _listings) {
       events.add((
@@ -454,16 +440,24 @@ class _AdminResaleMonitoringScreenState
     final latest = events.take(8).toList();
 
     return AdminCard(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(22, 20, 22, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('Recent Listing Activity', style: AppTextStyles.h3),
-          const Divider(),
+          Text(
+            'Recent Listing Activity',
+            style: orgText(p, size: 16, weight: FontWeight.w700),
+          ),
+          Divider(height: 24, color: p.border),
           if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Center(
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.4,
+                  color: p.accentLabel,
+                ),
+              ),
             )
           else if (latest.isEmpty)
             const AdminEmptyState(
@@ -474,18 +468,15 @@ class _AdminResaleMonitoringScreenState
           else
             for (final item in latest)
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 7),
+                padding: const EdgeInsets.symmetric(vertical: 9),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(item.text, style: const TextStyle(fontSize: 11.5)),
+                    Text(item.text, style: orgText(p, size: 13, height: 1.35)),
                     const SizedBox(height: 2),
                     Text(
                       formatAdminDateTime(item.at),
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: AppColors.textGray,
-                      ),
+                      style: orgText(p, size: 12, color: p.textSecondary),
                     ),
                   ],
                 ),
@@ -507,184 +498,184 @@ class _ListingRow extends StatelessWidget {
   const _ListingRow({
     required this.listing,
     required this.wide,
+    required this.flex,
     required this.busy,
     required this.onRemove,
   });
 
   final ResaleListingEntry listing;
   final bool wide;
+  final List<int> flex;
   final bool busy;
   final VoidCallback onRemove;
 
   Widget _percent(BuildContext context) {
-    final palette = FairTixPalette.of(context);
+    final p = FairTixPalette.of(context);
     final pct = '${(listing.fractionOfOriginal * 100).round()}%';
-    final color = listing.isNearFloor ? palette.danger : palette.textPrimary;
+    final color = listing.isNearFloor ? p.danger : p.textPrimary;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           pct,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: color,
-          ),
+          style: orgText(p, size: 13, weight: FontWeight.w700, color: color),
         ),
         if (listing.isNearFloor) ...[
-          const SizedBox(width: 4),
+          const SizedBox(width: 5),
           Tooltip(
             message: 'Near the 50% floor',
-            child: Icon(Icons.flag, size: 13, color: palette.danger),
+            child: Icon(Icons.flag, size: 14, color: p.danger),
           ),
         ],
       ],
     );
   }
 
-  Widget _removeButton() => listing.isActive
-      ? TextButton(
+  Widget _removeButton(BuildContext context) => listing.isActive
+      ? AdminRowAction(
+          label: busy ? 'Working...' : 'Remove',
+          color: FairTixPalette.of(context).danger,
           onPressed: busy ? null : onRemove,
-          style: TextButton.styleFrom(
-            foregroundColor: AppColors.dangerRed,
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            minimumSize: Size.zero,
-          ),
-          child: Text(
-            busy ? 'Working...' : 'Remove',
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-          ),
         )
       : const SizedBox.shrink();
 
   @override
   Widget build(BuildContext context) {
-    final palette = FairTixPalette.of(context);
-    final content = wide
-        ? Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        listing.sellerName,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      Text(
-                        listing.sellerEmail,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: palette.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  flex: 3,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        listing.eventTitle,
-                        style: const TextStyle(fontSize: 11.5),
-                      ),
-                      Text(
-                        listing.tierName,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: AppColors.textGray,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Text(
-                    formatPeso(listing.originalPrice),
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Text(
-                    formatPeso(listing.listingPrice),
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
+    final p = FairTixPalette.of(context);
+
+    if (wide) {
+      return AdminTableRow(
+        children: [
+          Expanded(
+            flex: flex[0],
+            child: Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    listing.sellerName,
+                    overflow: TextOverflow.ellipsis,
+                    style: orgText(
+                      p,
+                      size: 14,
+                      weight: FontWeight.w700,
+                      height: 1.3,
                     ),
                   ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: _percent(context),
+                  Text(
+                    listing.sellerEmail,
+                    overflow: TextOverflow.ellipsis,
+                    style: orgText(
+                      p,
+                      size: 12,
+                      color: p.textSecondary,
+                      height: 1.3,
+                    ),
                   ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: _listingStatusBadge(listing),
-                  ),
-                ),
-                SizedBox(width: 70, child: _removeButton()),
-              ],
+                ],
+              ),
             ),
-          )
-        : Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        listing.sellerName,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+          ),
+          Expanded(
+            flex: flex[1],
+            child: Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    listing.eventTitle,
+                    overflow: TextOverflow.ellipsis,
+                    style: orgText(p, size: 13, height: 1.3),
+                  ),
+                  Text(
+                    listing.tierName,
+                    overflow: TextOverflow.ellipsis,
+                    style: orgText(
+                      p,
+                      size: 12,
+                      color: p.textSecondary,
+                      height: 1.3,
                     ),
-                    _listingStatusBadge(listing),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${listing.eventTitle} \u2022 ${listing.tierName}',
-                  style: const TextStyle(fontSize: 11),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Text(
-                      '${formatPeso(listing.listingPrice)} of ${formatPeso(listing.originalPrice)}  ',
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                    _percent(context),
-                  ],
-                ),
-                _removeButton(),
-              ],
+                  ),
+                ],
+              ),
             ),
-          );
+          ),
+          adminCell(context, flex[2], formatPeso(listing.originalPrice)),
+          adminCell(
+            context,
+            flex[3],
+            formatPeso(listing.listingPrice),
+            bold: true,
+          ),
+          Expanded(
+            flex: flex[4],
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _percent(context),
+            ),
+          ),
+          Expanded(
+            flex: flex[5],
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _listingStatusBadge(listing),
+            ),
+          ),
+          Expanded(
+            flex: flex[6],
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _removeButton(context),
+            ),
+          ),
+        ],
+      );
+    }
+
     return Container(
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: p.border)),
       ),
-      child: content,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  listing.sellerName,
+                  style: orgText(p, size: 15, weight: FontWeight.w700),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _listingStatusBadge(listing),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '${listing.eventTitle} \u2022 ${listing.tierName}',
+            style: orgText(p, size: 13),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Text(
+                '${formatPeso(listing.listingPrice)} of ${formatPeso(listing.originalPrice)}  ',
+                style: orgText(p, size: 13, color: p.textSecondary),
+              ),
+              _percent(context),
+            ],
+          ),
+          if (listing.isActive) ...[
+            const SizedBox(height: 12),
+            _removeButton(context),
+          ],
+        ],
+      ),
     );
   }
 }

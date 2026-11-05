@@ -596,6 +596,52 @@ class _NotificationRow extends StatelessWidget {
 // Profile avatar + dropdown
 // ---------------------------------------------------------------------------
 
+/// Public entry points to the dropdown styling above, so other top bars (the
+/// admin shell) can reuse the exact same panel, positioning and menu rows.
+Future<void> showTopMenuDropdown(
+  BuildContext anchor, {
+  required double width,
+  required Widget Function(BuildContext ctx, FairTixPalette p, double maxHeight)
+  builder,
+}) => _showDropdown(anchor, width: width, builder: builder);
+
+BoxDecoration topMenuPanelDecoration(FairTixPalette p) => _panelDecoration(p);
+
+class TopMenuItem extends StatelessWidget {
+  const TopMenuItem({
+    super.key,
+    required this.p,
+    required this.icon,
+    required this.title,
+    required this.onTap,
+    this.subtitle,
+    this.badge,
+    this.badgeColor,
+    this.danger = false,
+  });
+
+  final FairTixPalette p;
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final String? badge;
+  final Color? badgeColor;
+  final bool danger;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => _MenuItem(
+    p: p,
+    icon: icon,
+    title: title,
+    subtitle: subtitle,
+    badge: badge,
+    badgeColor: badgeColor,
+    danger: danger,
+    onTap: onTap,
+  );
+}
+
 class OrganizerProfileMenuActions {
   const OrganizerProfileMenuActions({
     required this.onProfile,

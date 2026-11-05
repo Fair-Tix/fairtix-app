@@ -1,24 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../models/admin_user_summary.dart';
-import '../../services/admin_auth_service.dart';
-import '../../services/admin_session.dart';
 import '../../services/admin_user_service.dart';
 import '../../theme/fairtix_palette.dart';
-import '../../widgets/admin_document_viewer.dart';
+import '../../widgets/admin_document_viewer.dart'
+    show AdminReviewDocument, showAdminReviewDialog;
 import '../../widgets/admin_shell.dart';
-import '../organizer/app_colors.dart';
-import 'admin-dashboard.dart';
-import 'admin-login.dart';
-import 'admin-organizer-applications.dart';
-import 'admin-route.dart';
-import 'admin-user-registrations.dart';
-import 'admin-events-tickets.dart';
-import 'admin-fraud-alerts.dart';
-import 'admin-resale-monitoring.dart';
-import 'admin-revenue-reports.dart';
-import 'admin-platform-settings.dart';
-import 'admin-profile.dart';
+import '../../widgets/admin_widgets.dart';
+import '../../widgets/organizer_ui.dart';
 
 /// All registered accounts (buyers, organizers, admins) with manual ID
 /// verification review. Reads/writes `public.users` directly via
@@ -34,20 +23,11 @@ class AdminAccountsScreen extends StatefulWidget {
 }
 
 class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
-  static const _items = [
-    (Icons.grid_view_rounded, 'Dashboard'),
-    (Icons.business_outlined, 'Organizer Applications'),
-    (Icons.how_to_reg_outlined, 'User Registrations'),
-    (Icons.people_outline, 'Accounts'),
-    (Icons.calendar_today_outlined, 'Events & Tickets'),
-    (Icons.swap_vert_rounded, 'Resale Monitoring'),
-    (Icons.shield_outlined, 'Fraud Alerts'),
-    (Icons.bar_chart_rounded, 'Revenue & Reports'),
-    (Icons.settings_outlined, 'Platform Settings'),
-    (Icons.person_outline, 'Profile'),
-  ];
+  static const _roleFilters = ['All', 'Buyer', 'Organizer'];
 
-  static const _roleFilters = ['All', 'Buyer', 'Organizer', 'Admin'];
+  /// Relative column widths (user, email, role, verified, joined, status,
+  /// actions). Header and rows share these.
+  static const _flex = [3, 4, 2, 2, 2, 2, 4];
 
   List<AdminUserSummary> _users = [];
   bool _isLoading = true;
@@ -98,12 +78,15 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
     }).toList();
   }
 
+  static String _joinedOn(AdminUserSummary u) =>
+      u.createdAt != null ? formatAdminDate(u.createdAt!.toLocal()) : '\u2014';
+
   Future<void> _reviewUser(AdminUserSummary user) async {
     await showAdminReviewDialog(
       context: context,
       title: user.fullName,
       subtitle:
-          '${_roleLabel(user.role)} \u2022 Submitted ${user.createdAt != null ? formatFriendlyDate(user.createdAt!) : 'unknown date'}',
+          '${_roleLabel(user.role)} \u2022 Submitted ${user.createdAt != null ? _joinedOn(user) : 'unknown date'}',
       currentStatus: user.idVerificationStatus,
       documents: [
         AdminReviewDocument(
@@ -141,35 +124,48 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
   }
 
   Future<void> _toggleAccountStatus(AdminUserSummary user) async {
+    final p = FairTixPalette.of(context);
     final nextStatus = user.accountStatus == 'suspended'
         ? 'active'
         : 'suspended';
+    final suspending = nextStatus == 'suspended';
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
+        backgroundColor: p.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: p.border),
+        ),
         title: Text(
-          nextStatus == 'suspended'
-              ? 'Suspend account?'
-              : 'Reactivate account?',
+          suspending ? 'Suspend account?' : 'Reactivate account?',
+          style: orgText(p, size: 18, weight: FontWeight.w800),
         ),
         content: Text(
-          nextStatus == 'suspended'
+          suspending
               ? '${user.fullName} will not be able to log in until reactivated.'
               : '${user.fullName} will be able to log in again.',
+          style: orgText(p, size: 14, color: p.textSecondary),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: nextStatus == 'suspended'
-                  ? AppColors.dangerRed
-                  : AppColors.successGreen,
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              'Cancel',
+              style: orgText(p, size: 14, weight: FontWeight.w700),
             ),
-            child: Text(nextStatus == 'suspended' ? 'Suspend' : 'Reactivate'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              suspending ? 'Suspend' : 'Reactivate',
+              style: orgText(
+                p,
+                size: 14,
+                weight: FontWeight.w700,
+                color: suspending ? p.danger : p.success,
+              ),
+            ),
           ),
         ],
       ),
@@ -210,484 +206,162 @@ class _AdminAccountsScreenState extends State<AdminAccountsScreen> {
     );
   }
 
-  Widget _buildSidebar(BuildContext context) {
-    final currentEmail =
-        AdminSession.instance.currentEmail ?? 'admin@fairtix.com';
-
-    return Container(
-      color: const Color(0xFFF3F1FD),
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 18, 12, 18),
-              child: _AdminLogo(),
-            ),
-            const Divider(height: 1, color: AppColors.borderLight),
-            const SizedBox(height: 14),
-            for (var index = 0; index < _items.length; index++)
-              _SidebarItem(
-                icon: _items[index].$1,
-                label: _items[index].$2,
-                selected: index == 3,
-                onTap: () => _navigate(context, index),
-              ),
-            const Spacer(),
-            const Divider(height: 1, color: AppColors.borderLight),
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                children: [
-                  const CircleAvatar(
-                    radius: 15,
-                    backgroundColor: Color(0xFFE8E6F1),
-                    child: Icon(
-                      Icons.person,
-                      size: 17,
-                      color: AppColors.textGray,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Admin', style: AppTextStyles.label),
-                        Text(
-                          currentEmail,
-                          style: const TextStyle(
-                            color: AppColors.textGray,
-                            fontSize: 9,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => _logout(context),
-                    icon: const Icon(
-                      Icons.logout,
-                      size: 17,
-                      color: AppColors.textGray,
-                    ),
-                    tooltip: 'Log out',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _navigate(BuildContext context, int index) {
-    final pages = <int, Widget>{
-      0: const AdminDashboardScreen(),
-      1: const AdminOrganizerApplicationsScreen(),
-      2: const AdminUserRegistrationsScreen(),
-      4: const AdminEventsTicketsScreen(),
-      5: const AdminResaleMonitoringScreen(),
-      6: const AdminFraudAlertsScreen(),
-      7: const AdminRevenueReportsScreen(),
-      8: const AdminPlatformSettingsScreen(),
-      9: const AdminProfileScreen(),
-    };
-    final page = pages[index];
-    if (page != null) {
-      adminPushReplacement(context, page);
-    }
-  }
-
-  Widget _buildTopBar(BuildContext context, bool isWide) {
-    return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 18),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
-      ),
-      child: Row(
-        children: [
-          if (!isWide)
-            Builder(
-              builder: (context) => IconButton(
-                icon: const Icon(Icons.menu, size: 20),
-                onPressed: () => Scaffold.of(context).openDrawer(),
-              ),
-            ),
-          const Text('User Accounts', style: AppTextStyles.label),
-          const Spacer(),
-          SizedBox(
-            width: isWide ? 270 : 130,
-            height: 32,
-            child: TextField(
-              onChanged: (v) => setState(() => _searchQuery = v),
-              decoration: InputDecoration(
-                hintText: 'Search users, events...',
-                hintStyle: const TextStyle(
-                  color: Color(0xFFA6A9B7),
-                  fontSize: 10,
-                ),
-                prefixIcon: const Icon(
-                  Icons.search,
-                  size: 16,
-                  color: Color(0xFFA6A9B7),
-                ),
-                filled: true,
-                fillColor: const Color(0xFFF3F3F6),
-                contentPadding: EdgeInsets.zero,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
-          const Icon(
-            Icons.notifications_none,
-            size: 19,
-            color: AppColors.textGray,
-          ),
-          const SizedBox(width: 14),
-          const CircleAvatar(
-            radius: 14,
-            backgroundColor: Color(0xFFE8E6F1),
-            child: Icon(Icons.person, size: 16, color: AppColors.textGray),
-          ),
-          if (isWide) ...[
-            const SizedBox(width: 8),
-            Text(
-              AdminSession.instance.currentEmail ?? 'admin@fairtix.com',
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-            ),
-            const Icon(Icons.keyboard_arrow_down, size: 16),
-          ],
-        ],
-      ),
-    );
-  }
-
   Widget _buildContent(BuildContext context, bool isWide) {
-    final palette = FairTixPalette.of(context);
+    final p = FairTixPalette.of(context);
     final filtered = _filteredUsers;
+
+    final Widget content;
+    if (_isLoading) {
+      content = Padding(
+        padding: const EdgeInsets.all(48),
+        child: Center(
+          child: CircularProgressIndicator(
+            strokeWidth: 2.4,
+            color: p.accentLabel,
+          ),
+        ),
+      );
+    } else if (_loadError != null) {
+      content = AdminErrorBox(message: _loadError!, onRetry: _loadUsers);
+    } else {
+      content = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (isWide)
+            const AdminTableHeader(
+              labels: [
+                'User details',
+                'Email',
+                'Role',
+                'Verified',
+                'Joined',
+                'Status',
+                'Actions',
+              ],
+              flex: _flex,
+            ),
+          if (filtered.isEmpty)
+            const AdminEmptyState(
+              icon: Icons.people_outline,
+              title: 'No matching accounts',
+              hint: 'Try a different filter or check back once users register.',
+            )
+          else
+            for (final user in filtered)
+              _UserRow(user: user, isWide: isWide, flex: _flex, screen: this),
+          Divider(height: 1, color: p.border),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Text(
+              'Showing ${filtered.length} of ${_users.length} accounts',
+              style: orgText(p, size: 12, color: p.textSecondary),
+            ),
+          ),
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'User Accounts',
-                style: AppTextStyles.h2.copyWith(color: palette.textPrimary),
-              ),
-            ),
-            IconButton(
+        AdminPageHeader(
+          title: 'User Accounts',
+          subtitle: 'Approved, registered users only.',
+          actions: [
+            AdminIconButton(
+              icon: Icons.refresh_rounded,
+              tooltip: 'Refresh data',
+              loading: _isLoading,
               onPressed: _isLoading ? null : _loadUsers,
-              icon: const Icon(Icons.refresh, size: 18),
-              tooltip: 'Refresh',
             ),
           ],
         ),
-        const SizedBox(height: 18),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: palette.surface,
-            borderRadius: BorderRadius.circular(9),
-            border: Border.all(color: palette.border),
-            boxShadow: palette.isDark
-                ? null
-                : const [
-                    BoxShadow(
-                      color: Color(0x08000000),
-                      blurRadius: 8,
-                      offset: Offset(0, 3),
-                    ),
-                  ],
-          ),
-          child: Wrap(
-            spacing: 12,
-            runSpacing: 10,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(
-                'Role:',
-                style: TextStyle(color: palette.textSecondary, fontSize: 10),
-              ),
-              _filterMenu(
-                _roleFilter,
-                _roleFilters,
-                (v) => setState(() => _roleFilter = v),
-              ),
-              Text(
-                'Showing approved, registered users only',
-                style: TextStyle(color: palette.textSecondary, fontSize: 10),
-              ),
-            ],
+        const SizedBox(height: 24),
+        AdminFilterChips(
+          labels: _roleFilters,
+          selected: _roleFilters.indexOf(_roleFilter),
+          onSelected: (i) => setState(() => _roleFilter = _roleFilters[i]),
+        ),
+        const SizedBox(height: 14),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: AdminSearchField(
+            hint: 'Search name, username or email',
+            width: isWide ? 320 : 260,
+            onChanged: (v) => setState(() => _searchQuery = v),
           ),
         ),
-        const SizedBox(height: 18),
-        Container(
-          constraints: const BoxConstraints(minHeight: 200),
-          decoration: BoxDecoration(
-            color: palette.surface,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: palette.border),
-          ),
-          child: Column(
-            children: [
-              if (isWide)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  color: palette.progressTrack,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        flex: 2,
-                        child: Text(
-                          'USER DETAILS',
-                          style: _headerStyle.copyWith(
-                            color: palette.textSecondary,
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          'EMAIL',
-                          style: _headerStyle.copyWith(
-                            color: palette.textSecondary,
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          'ROLE',
-                          style: _headerStyle.copyWith(
-                            color: palette.textSecondary,
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          'VERIFIED',
-                          style: _headerStyle.copyWith(
-                            color: palette.textSecondary,
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          'JOINED',
-                          style: _headerStyle.copyWith(
-                            color: palette.textSecondary,
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          'STATUS',
-                          style: _headerStyle.copyWith(
-                            color: palette.textSecondary,
-                          ),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 150,
-                        child: Text(
-                          'ACTIONS',
-                          style: _headerStyle.copyWith(
-                            color: palette.textSecondary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              const Divider(height: 1),
-              if (_isLoading)
-                const Padding(
-                  padding: EdgeInsets.all(32),
-                  child: Center(
-                    child: CircularProgressIndicator(strokeWidth: 2.4),
-                  ),
-                )
-              else if (_loadError != null)
-                Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    children: [
-                      Text(
-                        _loadError!,
-                        style: TextStyle(color: palette.danger, fontSize: 12),
-                      ),
-                      const SizedBox(height: 10),
-                      OutlinedButton(
-                        onPressed: _loadUsers,
-                        child: const Text('Retry'),
-                      ),
-                    ],
-                  ),
-                )
-              else if (filtered.isEmpty)
-                const _EmptyAccounts()
-              else
-                Column(
-                  children: [
-                    for (final user in filtered)
-                      _UserRow(user: user, isWide: isWide, screen: this),
-                  ],
-                ),
-              const Divider(height: 1),
-              Padding(
-                padding: const EdgeInsets.all(14),
-                child: Row(
-                  children: [
-                    Text(
-                      'Showing ${filtered.length} of ${_users.length} accounts',
-                      style: TextStyle(
-                        color: palette.textSecondary,
-                        fontSize: 10,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+        const SizedBox(height: 20),
+        AdminCard(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(23),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 200),
+              child: content,
+            ),
           ),
         ),
       ],
     );
-  }
-
-  Widget _filterMenu(
-    String value,
-    List<String> options,
-    ValueChanged<String> onChanged,
-  ) {
-    return PopupMenuButton<String>(
-      initialValue: value,
-      onSelected: onChanged,
-      itemBuilder: (context) => [
-        for (final option in options)
-          PopupMenuItem(value: option, child: Text(option)),
-      ],
-      child: Container(
-        height: 30,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        decoration: BoxDecoration(
-          border: Border.all(color: AppColors.borderLight),
-          borderRadius: BorderRadius.circular(7),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(value, style: const TextStyle(fontSize: 10)),
-            const SizedBox(width: 14),
-            const Icon(
-              Icons.keyboard_arrow_down,
-              size: 14,
-              color: AppColors.textGray,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _logout(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Log out?'),
-        content: const Text('Are you sure you want to Log Out?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Log out'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true && context.mounted) {
-      AdminAuthService.instance.logout();
-      adminPushAndRemoveUntil(context, const AdminLoginScreen());
-    }
   }
 }
-
-const _headerStyle = TextStyle(
-  color: AppColors.textGray,
-  fontSize: 9,
-  fontWeight: FontWeight.w700,
-);
 
 class _UserRow extends StatelessWidget {
   const _UserRow({
     required this.user,
     required this.isWide,
+    required this.flex,
     required this.screen,
   });
 
   final AdminUserSummary user;
   final bool isWide;
+  final List<int> flex;
   final _AdminAccountsScreenState screen;
+
+  static AdminBadge _verificationBadge(String status) => switch (status) {
+    'verified' => AdminBadge.success('Verified'),
+    'rejected' => AdminBadge.danger('Rejected'),
+    _ => AdminBadge.warning('Pending'),
+  };
+
+  static AdminBadge _accountBadge(String status) => switch (status) {
+    'suspended' => AdminBadge.danger('Suspended'),
+    'deactivated' => AdminBadge.neutral('Deactivated'),
+    _ => AdminBadge.success('Active'),
+  };
 
   @override
   Widget build(BuildContext context) {
-    final verifiedBadge = _StatusBadge.verification(user.idVerificationStatus);
-    final statusBadge = _StatusBadge.account(user.accountStatus);
-    final joined = user.createdAt != null
-        ? formatFriendlyDate(user.createdAt!)
-        : '\u2014';
+    final p = FairTixPalette.of(context);
+    final verifiedBadge = _verificationBadge(user.idVerificationStatus);
+    final statusBadge = _accountBadge(user.accountStatus);
+    final joined = _AdminAccountsScreenState._joinedOn(user);
+    final suspended = user.accountStatus == 'suspended';
+    final pending = user.idVerificationStatus == 'pending';
 
-    final actions = Row(
-      mainAxisSize: MainAxisSize.min,
+    final actions = Wrap(
+      spacing: 8,
+      runSpacing: 8,
       children: [
-        TextButton(
+        AdminRowAction(
+          label: pending ? 'Review' : 'View',
+          filled: pending && user.canReview,
           onPressed: user.canReview ? () => screen._reviewUser(user) : null,
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            minimumSize: Size.zero,
-          ),
-          child: Text(
-            user.idVerificationStatus == 'pending' ? 'Review' : 'View',
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-          ),
         ),
-        TextButton(
+        AdminRowAction(
+          label: suspended ? 'Reactivate' : 'Suspend',
+          color: suspended ? p.success : p.danger,
           onPressed: () => screen._toggleAccountStatus(user),
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            minimumSize: Size.zero,
-            foregroundColor: user.accountStatus == 'suspended'
-                ? AppColors.successGreen
-                : AppColors.dangerRed,
-          ),
-          child: Text(
-            user.accountStatus == 'suspended' ? 'Reactivate' : 'Suspend',
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-          ),
         ),
       ],
     );
 
     if (!isWide) {
       return Container(
-        padding: const EdgeInsets.all(14),
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: AppColors.borderLight)),
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: p.border)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -700,297 +374,94 @@ class _UserRow extends StatelessWidget {
                     children: [
                       Text(
                         user.fullName,
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: orgText(p, size: 15, weight: FontWeight.w700),
                       ),
                       Text(
                         user.email,
-                        style: const TextStyle(
-                          fontSize: 10.5,
-                          color: AppColors.textGray,
-                        ),
+                        overflow: TextOverflow.ellipsis,
+                        style: orgText(p, size: 13, color: p.textSecondary),
                       ),
                     ],
                   ),
                 ),
+                const SizedBox(width: 8),
                 verifiedBadge,
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             Row(
               children: [
                 Text(
                   _AdminAccountsScreenState._roleLabel(user.role),
-                  style: const TextStyle(fontSize: 10.5),
+                  style: orgText(p, size: 13),
                 ),
                 const SizedBox(width: 10),
                 statusBadge,
                 const Spacer(),
                 Text(
                   joined,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: AppColors.textGray,
-                  ),
+                  style: orgText(p, size: 12, color: p.textSecondary),
                 ),
               ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 12),
             actions,
           ],
         ),
       );
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 2,
+    return AdminTableRow(
+      children: [
+        Expanded(
+          flex: flex[0],
+          child: Padding(
+            padding: const EdgeInsets.only(right: 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   user.fullName,
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
+                  overflow: TextOverflow.ellipsis,
+                  style: orgText(
+                    p,
+                    size: 14,
+                    weight: FontWeight.w700,
+                    height: 1.3,
                   ),
                 ),
                 if (user.username.isNotEmpty)
                   Text(
                     '@${user.username}',
-                    style: const TextStyle(
-                      fontSize: 10.5,
-                      color: AppColors.textGray,
+                    overflow: TextOverflow.ellipsis,
+                    style: orgText(
+                      p,
+                      size: 12,
+                      color: p.textSecondary,
+                      height: 1.3,
                     ),
                   ),
               ],
             ),
           ),
-          Expanded(
-            child: Text(
-              user.email,
-              style: const TextStyle(fontSize: 11),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Expanded(
-            child: Text(
-              _AdminAccountsScreenState._roleLabel(user.role),
-              style: const TextStyle(fontSize: 11),
-            ),
-          ),
-          Expanded(child: verifiedBadge),
-          Expanded(
-            child: Text(
-              joined,
-              style: const TextStyle(fontSize: 10.5, color: AppColors.textGray),
-            ),
-          ),
-          Expanded(child: statusBadge),
-          SizedBox(width: 150, child: actions),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({
-    required this.label,
-    required this.color,
-    required this.bgColor,
-  });
-
-  final String label;
-  final Color color;
-  final Color bgColor;
-
-  factory _StatusBadge.verification(String status) {
-    switch (status) {
-      case 'verified':
-        return const _StatusBadge(
-          label: 'Verified',
-          color: AppColors.successGreen,
-          bgColor: AppColors.successGreenBg,
-        );
-      case 'rejected':
-        return const _StatusBadge(
-          label: 'Rejected',
-          color: AppColors.dangerRed,
-          bgColor: AppColors.dangerRedBg,
-        );
-      default:
-        return const _StatusBadge(
-          label: 'Pending',
-          color: AppColors.warningOrange,
-          bgColor: AppColors.warningOrangeBg,
-        );
-    }
-  }
-
-  factory _StatusBadge.account(String status) {
-    switch (status) {
-      case 'suspended':
-        return const _StatusBadge(
-          label: 'Suspended',
-          color: AppColors.dangerRed,
-          bgColor: AppColors.dangerRedBg,
-        );
-      case 'deactivated':
-        return const _StatusBadge(
-          label: 'Deactivated',
-          color: AppColors.textGray,
-          bgColor: Color(0xFFF3F4F6),
-        );
-      default:
-        return const _StatusBadge(
-          label: 'Active',
-          color: AppColors.successGreen,
-          bgColor: AppColors.successGreenBg,
-        );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
         ),
-      ),
-    );
-  }
-}
-
-class _EmptyAccounts extends StatelessWidget {
-  const _EmptyAccounts();
-  @override
-  Widget build(BuildContext context) => const Padding(
-    padding: EdgeInsets.all(32),
-    child: Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.people_outline, size: 36, color: Color(0xFFD9D7E4)),
-          SizedBox(height: 10),
-          Text(
-            'No matching accounts',
-            style: TextStyle(color: AppColors.textGray, fontSize: 12),
-          ),
-          SizedBox(height: 4),
-          Text(
-            'Try a different filter or check back once users register.',
-            style: TextStyle(color: Color(0xFFA6A9B7), fontSize: 10),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-class _AdminLogo extends StatelessWidget {
-  const _AdminLogo();
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Container(
-        width: 22,
-        height: 22,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: AppColors.primaryPurple,
-          borderRadius: BorderRadius.circular(5),
+        adminCell(context, flex[1], user.email),
+        adminCell(
+          context,
+          flex[2],
+          _AdminAccountsScreenState._roleLabel(user.role),
         ),
-        child: const Icon(
-          Icons.confirmation_number_outlined,
-          color: Colors.white,
-          size: 14,
+        Expanded(
+          flex: flex[3],
+          child: Align(alignment: Alignment.centerLeft, child: verifiedBadge),
         ),
-      ),
-      const SizedBox(width: 6),
-      const Text(
-        'FairTix',
-        style: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w800,
-          fontStyle: FontStyle.italic,
+        adminCell(context, flex[4], joined, muted: true),
+        Expanded(
+          flex: flex[5],
+          child: Align(alignment: Alignment.centerLeft, child: statusBadge),
         ),
-      ),
-      const SizedBox(width: 3),
-      const Text(
-        'ADMIN',
-        style: TextStyle(fontSize: 8, color: AppColors.textGray),
-      ),
-    ],
-  );
-}
-
-class _SidebarItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _SidebarItem({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-      child: Material(
-        color: selected ? AppColors.primaryPurple : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-            child: Row(
-              children: [
-                Icon(
-                  icon,
-                  size: 16,
-                  color: selected ? Colors.white : AppColors.textDark,
-                ),
-                const SizedBox(width: 9),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      color: selected ? Colors.white : AppColors.textDark,
-                      fontSize: 10,
-                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+        Expanded(flex: flex[6], child: actions),
+      ],
     );
   }
 }

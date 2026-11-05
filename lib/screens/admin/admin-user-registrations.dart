@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import '../../models/admin_user_summary.dart';
 import '../../theme/fairtix_palette.dart';
 import '../../services/admin_user_service.dart';
-import '../../widgets/admin_document_viewer.dart';
+import '../../widgets/admin_document_viewer.dart'
+    show AdminReviewDocument, showAdminReviewDialog;
 import '../../widgets/admin_shell.dart';
-import '../organizer/app_colors.dart';
+import '../../widgets/admin_widgets.dart';
+import '../../widgets/organizer_ui.dart';
 
 /// Eventgoer (buyer) sign-ups waiting for, or already given, an admin
 /// decision. This is the review queue for the registration flow in the
@@ -40,6 +42,16 @@ _Stage _stageOf(AdminUserSummary user) {
   }
 }
 
+AdminBadge _stageBadge(_Stage stage) => switch (stage) {
+  _Stage.approved => AdminBadge.success('Approved'),
+  _Stage.rejected => AdminBadge.danger('Rejected'),
+  _Stage.incomplete => AdminBadge.neutral('Incomplete'),
+  _Stage.pending => AdminBadge.warning('Pending'),
+};
+
+String _registeredOn(AdminUserSummary u) =>
+    u.createdAt != null ? formatAdminDate(u.createdAt!.toLocal()) : '\u2014';
+
 class _AdminUserRegistrationsScreenState
     extends State<AdminUserRegistrationsScreen> {
   static const _filters = [
@@ -49,6 +61,10 @@ class _AdminUserRegistrationsScreenState
     'Incomplete',
     'All',
   ];
+
+  /// Relative column widths (name, email, ID type, registered, status,
+  /// action). Header and rows share these.
+  static const _flex = [3, 4, 2, 2, 2, 2];
 
   String _filter = 'Pending'; // the actionable queue
   String _search = '';
@@ -112,7 +128,7 @@ class _AdminUserRegistrationsScreenState
       context: context,
       title: user.fullName,
       subtitle:
-          '${user.email} \u2022 Registered ${user.createdAt != null ? formatFriendlyDate(user.createdAt!) : 'unknown date'}',
+          '${user.email} \u2022 Registered ${user.createdAt != null ? _registeredOn(user) : 'unknown date'}',
       currentStatus: user.idVerificationStatus,
       documents: [
         AdminReviewDocument(
@@ -151,219 +167,115 @@ class _AdminUserRegistrationsScreenState
 
   @override
   Widget build(BuildContext context) {
-    final palette = FairTixPalette.of(context);
+    final p = FairTixPalette.of(context);
     final isWide = MediaQuery.of(context).size.width >= 900;
     final visible = _visible;
+
+    final Widget content;
+    if (_isLoading) {
+      content = Padding(
+        padding: const EdgeInsets.all(48),
+        child: Center(
+          child: CircularProgressIndicator(
+            strokeWidth: 2.4,
+            color: p.accentLabel,
+          ),
+        ),
+      );
+    } else if (_loadError != null) {
+      content = AdminErrorBox(message: _loadError!, onRetry: _load);
+    } else {
+      content = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (isWide)
+            const AdminTableHeader(
+              labels: [
+                'Name',
+                'Email',
+                'ID type',
+                'Registered',
+                'Status',
+                'Action',
+              ],
+              flex: _flex,
+            ),
+          if (visible.isEmpty)
+            const AdminEmptyState(
+              icon: Icons.how_to_reg_outlined,
+              title: 'No matching registrations',
+              hint: 'Try a different filter, or check back once new users register.',
+            )
+          else
+            for (final user in visible)
+              _RegistrationRow(
+                user: user,
+                isWide: isWide,
+                flex: _flex,
+                onReview: () => _review(user),
+              ),
+          Divider(height: 1, color: p.border),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Text(
+              'Showing ${visible.length} of ${_users.length} registrations',
+              style: orgText(p, size: 12, color: p.textSecondary),
+            ),
+          ),
+        ],
+      );
+    }
+
     return AdminShell(
       active: AdminNavItem.userRegistrations,
       title: 'User Registrations',
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'User Registrations',
-                  style: AppTextStyles.h2.copyWith(color: palette.textPrimary),
-                ),
-              ),
-              IconButton(
+          AdminPageHeader(
+            title: 'User Registrations',
+            subtitle:
+                'Review the ID and selfie of new eventgoers before their accounts are activated.',
+            actions: [
+              AdminIconButton(
+                icon: Icons.refresh_rounded,
+                tooltip: 'Refresh data',
+                loading: _isLoading,
                 onPressed: _isLoading ? null : _load,
-                icon: const Icon(Icons.refresh, size: 18),
-                tooltip: 'Refresh',
               ),
             ],
           ),
-          const SizedBox(height: 3),
-          Text(
-            'Review the ID and selfie of new eventgoers before their accounts are activated.',
-            style: TextStyle(color: palette.textSecondary, fontSize: 10),
-          ),
-          const SizedBox(height: 18),
-          Wrap(
-            spacing: 10,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              for (final filter in _filters)
-                ChoiceChip(
-                  label: Text(
-                    _isLoading ? filter : '$filter (${_countFor(filter)})',
-                  ),
-                  selected: _filter == filter,
-                  onSelected: (_) => setState(() => _filter = filter),
-                  labelStyle: TextStyle(
-                    fontSize: 11,
-                    color: _filter == filter
-                        ? Colors.white
-                        : palette.textSecondary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  selectedColor: AppColors.primaryPurple,
-                  backgroundColor: palette.progressTrack,
-                  side: BorderSide.none,
-                  showCheckmark: false,
-                ),
-              SizedBox(
-                width: isWide ? 240 : 180,
-                height: 32,
-                child: TextField(
-                  onChanged: (v) => setState(() => _search = v),
-                  style: const TextStyle(fontSize: 11),
-                  decoration: InputDecoration(
-                    hintText: 'Search name or email',
-                    hintStyle: TextStyle(
-                      color: palette.textSecondary,
-                      fontSize: 10,
-                    ),
-                    prefixIcon: Icon(
-                      Icons.search,
-                      size: 16,
-                      color: palette.textSecondary,
-                    ),
-                    filled: true,
-                    fillColor: palette.surface,
-                    contentPadding: EdgeInsets.zero,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(20),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-              ),
+          const SizedBox(height: 24),
+          AdminFilterChips(
+            labels: _filters,
+            selected: _filters.indexOf(_filter),
+            counts: [
+              for (final f in _filters)
+                _isLoading || _loadError != null ? null : _countFor(f),
             ],
+            onSelected: (i) => setState(() => _filter = _filters[i]),
           ),
-          const SizedBox(height: 18),
-          Container(
-            constraints: const BoxConstraints(minHeight: 200),
-            decoration: BoxDecoration(
-              color: palette.surface,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: palette.border),
+          const SizedBox(height: 14),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: AdminSearchField(
+              hint: 'Search name or email',
+              width: isWide ? 320 : 260,
+              onChanged: (v) => setState(() => _search = v),
             ),
-            child: _isLoading
-                ? const Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Center(
-                      child: CircularProgressIndicator(strokeWidth: 2.4),
-                    ),
-                  )
-                : _loadError != null
-                ? Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      children: [
-                        Text(
-                          _loadError!,
-                          style: TextStyle(color: palette.danger, fontSize: 12),
-                        ),
-                        const SizedBox(height: 10),
-                        OutlinedButton(
-                          onPressed: _load,
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
-                  )
-                : Column(
-                    children: [
-                      if (isWide) const _TableHeader(),
-                      if (visible.isEmpty)
-                        const _EmptyState()
-                      else
-                        for (final user in visible)
-                          _RegistrationRow(
-                            user: user,
-                            isWide: isWide,
-                            onReview: () => _review(user),
-                          ),
-                      const Divider(height: 1),
-                      Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            'Showing ${visible.length} of ${_users.length} registrations',
-                            style: TextStyle(
-                              color: palette.textSecondary,
-                              fontSize: 10,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+          ),
+          const SizedBox(height: 20),
+          AdminCard(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(23),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 200),
+                child: content,
+              ),
+            ),
           ),
         ],
       ),
-    );
-  }
-}
-
-const _headerStyle = TextStyle(
-  color: AppColors.textGray,
-  fontSize: 9,
-  fontWeight: FontWeight.w700,
-);
-
-class _TableHeader extends StatelessWidget {
-  const _TableHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = FairTixPalette.of(context);
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          color: palette.progressTrack,
-          child: Row(
-            children: [
-              Expanded(
-                flex: 2,
-                child: Text(
-                  'NAME',
-                  style: _headerStyle.copyWith(color: palette.textSecondary),
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Text(
-                  'EMAIL',
-                  style: _headerStyle.copyWith(color: palette.textSecondary),
-                ),
-              ),
-              Expanded(
-                child: Text(
-                  'ID TYPE',
-                  style: _headerStyle.copyWith(color: palette.textSecondary),
-                ),
-              ),
-              Expanded(
-                child: Text(
-                  'REGISTERED',
-                  style: _headerStyle.copyWith(color: palette.textSecondary),
-                ),
-              ),
-              Expanded(
-                child: Text(
-                  'STATUS',
-                  style: _headerStyle.copyWith(color: palette.textSecondary),
-                ),
-              ),
-              SizedBox(
-                width: 90,
-                child: Text(
-                  'ACTION',
-                  style: _headerStyle.copyWith(color: palette.textSecondary),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const Divider(height: 1),
-      ],
     );
   }
 }
@@ -372,42 +284,36 @@ class _RegistrationRow extends StatelessWidget {
   const _RegistrationRow({
     required this.user,
     required this.isWide,
+    required this.flex,
     required this.onReview,
   });
 
   final AdminUserSummary user;
   final bool isWide;
+  final List<int> flex;
   final VoidCallback onReview;
 
   @override
   Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
     final stage = _stageOf(user);
-    final registered = user.createdAt != null
-        ? formatFriendlyDate(user.createdAt!)
-        : '\u2014';
+    final registered = _registeredOn(user);
     final idType = user.idType?.trim().isNotEmpty == true
         ? user.idType!
         : '\u2014';
 
-    final action = TextButton(
+    final action = AdminRowAction(
+      label: stage == _Stage.pending ? 'Review' : 'View',
+      filled: stage == _Stage.pending,
       // Nothing to look at until an ID has been uploaded.
       onPressed: stage == _Stage.incomplete ? null : onReview,
-      style: TextButton.styleFrom(
-        padding: EdgeInsets.zero,
-        minimumSize: Size.zero,
-        alignment: Alignment.centerLeft,
-      ),
-      child: Text(
-        stage == _Stage.pending ? 'Review' : 'View',
-        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-      ),
     );
 
     if (!isWide) {
       return Container(
-        padding: const EdgeInsets.all(14),
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: AppColors.borderLight)),
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: p.border)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -420,155 +326,50 @@ class _RegistrationRow extends StatelessWidget {
                     children: [
                       Text(
                         user.fullName,
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: orgText(p, size: 15, weight: FontWeight.w700),
                       ),
                       Text(
                         user.email,
-                        style: const TextStyle(
-                          fontSize: 10.5,
-                          color: AppColors.textGray,
-                        ),
+                        overflow: TextOverflow.ellipsis,
+                        style: orgText(p, size: 13, color: p.textSecondary),
                       ),
                     ],
                   ),
                 ),
-                _StageBadge(stage: stage),
+                const SizedBox(width: 8),
+                _stageBadge(stage),
               ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
               'ID: $idType \u2022 Registered $registered',
-              style: const TextStyle(fontSize: 10, color: AppColors.textGray),
+              style: orgText(p, size: 12, color: p.textSecondary),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 12),
             action,
           ],
         ),
       );
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: Text(
-              user.fullName,
-              style: const TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(
-              user.email,
-              style: const TextStyle(fontSize: 11),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Expanded(
-            child: Text(
-              idType,
-              style: const TextStyle(fontSize: 11),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Expanded(
-            child: Text(
-              registered,
-              style: const TextStyle(fontSize: 10.5, color: AppColors.textGray),
-            ),
-          ),
-          Expanded(child: _StageBadge(stage: stage)),
-          SizedBox(width: 90, child: action),
-        ],
-      ),
-    );
-  }
-}
-
-class _StageBadge extends StatelessWidget {
-  const _StageBadge({required this.stage});
-  final _Stage stage;
-
-  @override
-  Widget build(BuildContext context) {
-    final (label, color, bg) = switch (stage) {
-      _Stage.approved => (
-        'Approved',
-        AppColors.successGreen,
-        AppColors.successGreenBg,
-      ),
-      _Stage.rejected => (
-        'Rejected',
-        AppColors.dangerRed,
-        AppColors.dangerRedBg,
-      ),
-      _Stage.incomplete => (
-        'Incomplete',
-        AppColors.textGray,
-        const Color(0xFFF3F4F6),
-      ),
-      _Stage.pending => (
-        'Pending',
-        AppColors.warningOrange,
-        AppColors.warningOrangeBg,
-      ),
-    };
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: color,
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
+    return AdminTableRow(
+      children: [
+        adminCell(context, flex[0], user.fullName, bold: true),
+        adminCell(context, flex[1], user.email),
+        adminCell(context, flex[2], idType),
+        adminCell(context, flex[3], registered, muted: true),
+        Expanded(
+          flex: flex[4],
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: _stageBadge(stage),
           ),
         ),
-      ),
+        Expanded(
+          flex: flex[5],
+          child: Align(alignment: Alignment.centerLeft, child: action),
+        ),
+      ],
     );
   }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
-
-  @override
-  Widget build(BuildContext context) => const Padding(
-    padding: EdgeInsets.all(32),
-    child: Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.how_to_reg_outlined, size: 34, color: Color(0xFFD9D7E4)),
-          SizedBox(height: 10),
-          Text(
-            'No matching registrations',
-            style: TextStyle(color: AppColors.textGray, fontSize: 12),
-          ),
-          SizedBox(height: 4),
-          Text(
-            'Try a different filter, or check back once new users register.',
-            style: TextStyle(color: Color(0xFFA6A9B7), fontSize: 10),
-          ),
-        ],
-      ),
-    ),
-  );
 }

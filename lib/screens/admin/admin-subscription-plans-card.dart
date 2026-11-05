@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import '../../models/subscription_plan.dart';
 import '../../services/subscription_plan_service.dart';
 import '../../theme/fairtix_palette.dart';
-import '../organizer/app_colors.dart';
+import '../../widgets/admin_widgets.dart';
+import '../../widgets/organizer_ui.dart';
 
 /// Admin > Platform Settings > Subscription Plans.
 ///
@@ -13,6 +14,10 @@ import '../organizer/app_colors.dart';
 /// `admin_save_subscription_plans` function), which validates again on the
 /// server. The same rows drive what organizers see on the plan screen, the
 /// price PayMongo charges, and the limits each plan enforces.
+///
+/// The plans are laid out side by side like the organizer's "Choose your
+/// plan" screen (3 / 2 / 1 columns by width), each card being the editor for
+/// one plan, with a dashed "Add plan" tile at the end.
 ///
 /// A plan is never deleted: switching it off hides it from organizers while
 /// current subscribers keep it. Plans added here but not saved yet can be
@@ -198,50 +203,61 @@ class _AdminSubscriptionPlansCardState
     }
   }
 
+  // -------------------------------------------------------------------------
+  // UI
+  // -------------------------------------------------------------------------
+
   @override
   Widget build(BuildContext context) {
-    final palette = FairTixPalette.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: palette.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: palette.border),
-      ),
+    final p = FairTixPalette.of(context);
+    final disabled = _loading || _saving || _loadError != null;
+    final showSummary = !_loading && _loadError == null;
+    final activeCount = _drafts.where((d) => d.isActive).length;
+
+    return AdminCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+            padding: const EdgeInsets.fromLTRB(22, 20, 22, 16),
             child: Row(
               children: [
                 Container(
-                  width: 20,
-                  height: 20,
+                  width: 36,
+                  height: 36,
                   decoration: BoxDecoration(
-                    color: AppColors.primaryPurple,
-                    borderRadius: BorderRadius.circular(5),
+                    gradient: FairTixPalette.buttonGradient,
+                    borderRadius: BorderRadius.circular(11),
                   ),
                   child: const Icon(
                     Icons.workspace_premium_outlined,
                     color: Colors.white,
-                    size: 13,
+                    size: 19,
                   ),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  'Subscription Plans',
-                  style: TextStyle(
-                    color: palette.textPrimary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Subscription Plans',
+                    style: orgText(p, size: 16, weight: FontWeight.w700),
                   ),
                 ),
+                if (showSummary)
+                  _Pill(
+                    label:
+                        '${_drafts.length} ${_drafts.length == 1 ? 'plan' : 'plans'}'
+                        ' \u00B7 $activeCount active',
+                    color: p.accentLabel,
+                    background: p.primary.withValues(
+                      alpha: p.isDark ? 0.22 : 0.10,
+                    ),
+                  ),
               ],
             ),
           ),
-          Divider(height: 1, indent: 12, endIndent: 12, color: palette.border),
+          Divider(height: 1, color: p.border),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 9, 12, 12),
+            padding: const EdgeInsets.fromLTRB(22, 16, 22, 22),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -249,69 +265,44 @@ class _AdminSubscriptionPlansCardState
                   'The plans organizers can buy through PayMongo. Price, fee '
                   'rate and limits here are what is charged and enforced. '
                   'Leave a limit blank for unlimited.',
-                  style: TextStyle(color: palette.textSecondary, fontSize: 9),
+                  style: orgText(
+                    p,
+                    size: 13,
+                    color: p.textSecondary,
+                    height: 1.4,
+                  ),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 20),
                 _buildBody(),
               ],
             ),
           ),
-          Divider(height: 1, color: palette.border),
+          Divider(height: 1, color: p.border),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-            child: Row(
+            padding: const EdgeInsets.fromLTRB(22, 14, 22, 14),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              alignment: WrapAlignment.spaceBetween,
               children: [
-                Expanded(
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 520),
                   child: Text(
                     'Price changes apply to new purchases. Switched-off plans '
                     'stay with current subscribers.',
-                    style: TextStyle(color: palette.textSecondary, fontSize: 8),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                OutlinedButton.icon(
-                  onPressed: (_loading || _saving || _loadError != null)
-                      ? null
-                      : _addPlan,
-                  icon: const Icon(Icons.add, size: 14),
-                  label: const Text('Add Plan', style: TextStyle(fontSize: 10)),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.primaryPurple,
-                    side: const BorderSide(color: AppColors.primaryPurple),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: (_loading || _saving || _loadError != null)
-                      ? null
-                      : _save,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryPurple,
-                    foregroundColor: Colors.white,
-                    fixedSize: const Size(105, 32),
-                    minimumSize: const Size(105, 32),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    padding: EdgeInsets.zero,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(5),
+                    style: orgText(
+                      p,
+                      size: 12,
+                      color: p.textSecondary,
+                      height: 1.35,
                     ),
                   ),
-                  child: _saving
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text(
-                          'Save Changes',
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+                ),
+                AdminHeaderButton(
+                  label: _saving ? 'Saving...' : 'Save Changes',
+                  filled: true,
+                  onPressed: disabled ? null : _save,
                 ),
               ],
             ),
@@ -322,185 +313,347 @@ class _AdminSubscriptionPlansCardState
   }
 
   Widget _buildBody() {
-    final palette = FairTixPalette.of(context);
+    final p = FairTixPalette.of(context);
     if (_loading) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 24),
         child: Center(
           child: SizedBox(
-            width: 22,
-            height: 22,
+            width: 24,
+            height: 24,
             child: CircularProgressIndicator(
-              strokeWidth: 2.2,
-              color: palette.primary,
+              strokeWidth: 2.4,
+              color: p.accentLabel,
             ),
           ),
         ),
       );
     }
     if (_loadError != null) {
-      return Column(
-        children: [
-          Text(
-            _loadError!,
-            textAlign: TextAlign.center,
-            style: TextStyle(color: palette.danger, fontSize: 10),
-          ),
-          const SizedBox(height: 8),
-          TextButton(onPressed: _load, child: const Text('Try again')),
-        ],
-      );
+      return AdminErrorBox(message: _loadError!, onRetry: _load);
     }
-    if (_drafts.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        child: Text(
-          'No plans yet. Use "Add Plan" to create one.',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: palette.textSecondary, fontSize: 10),
-        ),
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (var i = 0; i < _drafts.length; i++) ...[
-          if (i > 0) const SizedBox(height: 12),
-          _planEditor(i, _drafts[i]),
-        ],
-      ],
+
+    return LayoutBuilder(
+      builder: (context, box) {
+        const gap = 20.0;
+        final columns = box.maxWidth >= 1080
+            ? 3
+            : (box.maxWidth >= 640 ? 2 : 1);
+
+        // The plan cards followed by the "Add plan" tile, laid out in rows
+        // whose cards all share the height of the tallest one.
+        final items = <Widget>[
+          for (var i = 0; i < _drafts.length; i++) _planCard(i, _drafts[i]),
+          _addTile(),
+        ];
+
+        final rows = <Widget>[];
+        for (var start = 0; start < items.length; start += columns) {
+          final end = start + columns < items.length
+              ? start + columns
+              : items.length;
+          final slice = items.sublist(start, end);
+          if (rows.isNotEmpty) rows.add(const SizedBox(height: gap));
+          rows.add(
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var j = 0; j < columns; j++) ...[
+                    if (j > 0) const SizedBox(width: gap),
+                    Expanded(
+                      child: j < slice.length ? slice[j] : const SizedBox(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: rows,
+        );
+      },
     );
   }
 
-  Widget _planEditor(int index, _PlanDraft d) {
-    final palette = FairTixPalette.of(context);
-    final title = d.name.text.trim().isEmpty ? 'New plan' : d.name.text.trim();
+  /// The dashed "+ Add plan" tile that ends the grid.
+  Widget _addTile() {
+    final p = FairTixPalette.of(context);
+    final enabled = !_saving;
+    return MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: enabled ? _addPlan : null,
+        child: CustomPaint(
+          painter: _DashedRRectPainter(color: p.border, radius: 20),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 180),
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: p.primary.withValues(
+                          alpha: p.isDark ? 0.22 : 0.10,
+                        ),
+                      ),
+                      child: Icon(Icons.add_rounded, color: p.accentLabel),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Add plan',
+                      style: orgText(p, size: 15, weight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Create a new subscription tier',
+                      textAlign: TextAlign.center,
+                      style: orgText(p, size: 12, color: p.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _planCard(int index, _PlanDraft d) {
+    final p = FairTixPalette.of(context);
+    final first = index == 0;
+    final last = index == _drafts.length - 1;
+    final isNew = d.id == null;
+
+    Widget iconButton({
+      required String tooltip,
+      required IconData icon,
+      required VoidCallback? onPressed,
+      Color? color,
+    }) {
+      final base = color ?? p.textSecondary;
+      return IconButton(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        icon: Icon(
+          icon,
+          size: 18,
+          color: onPressed == null ? base.withValues(alpha: 0.4) : base,
+        ),
+        visualDensity: VisualDensity.compact,
+        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+        padding: EdgeInsets.zero,
+      );
+    }
+
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: d.isActive ? palette.progressTrack : palette.background,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: palette.border),
+        color: d.isActive ? p.progressTrack : p.background,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isNew ? p.accentLabel : p.border,
+          width: isNew ? 1.5 : 1,
+        ),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Status + reorder + on/off.
           Row(
             children: [
-              Expanded(
-                child: Text(
-                  d.id == null ? '$title (not saved yet)' : title,
-                  style: TextStyle(
-                    color: palette.textPrimary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
+              _Pill(
+                label: d.isActive ? 'Active' : 'Off',
+                color: d.isActive ? p.success : p.textSecondary,
+                background: d.isActive
+                    ? p.successSurface
+                    : p.textSecondary.withValues(alpha: 0.14),
+              ),
+              if (isNew) ...[
+                const SizedBox(width: 6),
+                _Pill(
+                  label: 'Not saved yet',
+                  color: p.accentLabel,
+                  background: p.primary.withValues(
+                    alpha: p.isDark ? 0.22 : 0.10,
                   ),
                 ),
+              ],
+              const Spacer(),
+              iconButton(
+                tooltip: 'Move left',
+                icon: Icons.arrow_back_rounded,
+                onPressed: first ? null : () => _move(index, -1),
               ),
-              IconButton(
-                tooltip: 'Move up',
-                onPressed: index == 0 ? null : () => _move(index, -1),
-                icon: const Icon(Icons.arrow_upward, size: 16),
-                visualDensity: VisualDensity.compact,
+              iconButton(
+                tooltip: 'Move right',
+                icon: Icons.arrow_forward_rounded,
+                onPressed: last ? null : () => _move(index, 1),
               ),
-              IconButton(
-                tooltip: 'Move down',
-                onPressed: index == _drafts.length - 1
-                    ? null
-                    : () => _move(index, 1),
-                icon: const Icon(Icons.arrow_downward, size: 16),
-                visualDensity: VisualDensity.compact,
-              ),
-              if (d.id == null)
-                IconButton(
+              if (isNew)
+                iconButton(
                   tooltip: 'Remove',
+                  icon: Icons.delete_outline_rounded,
+                  color: p.danger,
                   onPressed: () => _removeNewPlan(index),
-                  icon: const Icon(
-                    Icons.delete_outline,
-                    size: 16,
-                    color: AppColors.dangerRed,
-                  ),
-                  visualDensity: VisualDensity.compact,
                 ),
-              const SizedBox(width: 4),
-              Text(
-                d.isActive ? 'Active' : 'Off',
-                style: TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                  color: d.isActive
-                      ? palette.accentLabel
-                      : palette.textSecondary,
-                ),
-              ),
               Switch(
                 value: d.isActive,
                 onChanged: (value) => setState(() => d.isActive = value),
                 activeThumbColor: Colors.white,
-                activeTrackColor: AppColors.primaryPurple,
+                activeTrackColor: p.primary,
               ),
             ],
           ),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _field(
-                'Plan name',
-                d.name,
-                width: 200,
-                onChanged: (_) => setState(() {}),
-              ),
-              _field('Monthly price', d.fee, prefix: '₱ ', number: true),
-              _field('Platform fee', d.rate, suffix: ' %', number: true),
-              _field(
-                'Events / month',
-                d.events,
-                hint: 'Unlimited',
-                whole: true,
-              ),
-              _field(
-                'Tickets / event day',
-                d.tickets,
-                hint: 'Unlimited',
-                whole: true,
-              ),
-              _field(
-                'Multi-day length (days)',
-                d.days,
-                hint: 'Unlimited',
-                whole: true,
-                width: 190,
-              ),
-              _field('Badge', d.badge, hint: 'e.g. BEST VALUE', width: 170),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Allow CSV / PDF report export',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
+          Opacity(
+            opacity: d.isActive ? 1 : 0.6,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _field('Plan name', d.name, size: 16, weight: FontWeight.w800),
+                const SizedBox(height: 12),
+                _field('Badge (optional)', d.badge, hint: 'e.g. BEST VALUE'),
+                const SizedBox(height: 18),
+                _sectionLabel('PRICING'),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: _field(
+                        'Monthly price',
+                        d.fee,
+                        prefix: '₱ ',
+                        suffix: ' /mo',
+                        number: true,
+                        size: 18,
+                        weight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: _field(
+                        'Platform fee',
+                        d.rate,
+                        suffix: ' %',
+                        number: true,
+                        size: 18,
+                        weight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              Switch(
-                value: d.canExport,
-                onChanged: (value) => setState(() => d.canExport = value),
-                activeThumbColor: Colors.white,
-                activeTrackColor: AppColors.primaryPurple,
-              ),
-            ],
+                const SizedBox(height: 18),
+                _sectionLabel('LIMITS', hint: 'Blank = unlimited'),
+                _limitRow('Events / month', d.events),
+                _limitRow('Tickets / event day', d.tickets),
+                _limitRow('Multi-day length (days)', d.days),
+                const SizedBox(height: 10),
+                Divider(height: 1, color: p.border),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'CSV / PDF report export',
+                          style: orgText(
+                            p,
+                            size: 13.5,
+                            weight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      Switch(
+                        value: d.canExport,
+                        onChanged: (value) =>
+                            setState(() => d.canExport = value),
+                        activeThumbColor: Colors.white,
+                        activeTrackColor: p.primary,
+                      ),
+                    ],
+                  ),
+                ),
+                Divider(height: 1, color: p.border),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: d.benefits,
+                  minLines: 4,
+                  maxLines: 8,
+                  cursorColor: p.accentLabel,
+                  style: orgText(p, size: 13, height: 1.4),
+                  decoration: _decoration(
+                    'Benefits shown on the plan card (one per line)',
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 6),
-          TextField(
-            controller: d.benefits,
-            minLines: 3,
-            maxLines: 8,
-            style: const TextStyle(fontSize: 10),
-            decoration: _decoration(
-              'Benefits shown on the plan card (one per line)',
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionLabel(String text, {String? hint}) {
+    final p = FairTixPalette.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Text(
+            text,
+            style: orgText(
+              p,
+              size: 11,
+              weight: FontWeight.w700,
+              color: p.textSecondary,
+              letterSpacing: 0.6,
+            ),
+          ),
+          if (hint != null) ...[
+            const Spacer(),
+            Text(hint, style: orgText(p, size: 11, color: p.textSecondary)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Label on the left, a small right-aligned number box on the right.
+  Widget _limitRow(String label, TextEditingController controller) {
+    final p = FairTixPalette.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: orgText(p, size: 13.5, weight: FontWeight.w600),
+            ),
+          ),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 120,
+            child: TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.right,
+              cursorColor: p.accentLabel,
+              style: orgText(p, size: 14, weight: FontWeight.w600),
+              decoration: _decoration(null, hint: 'Unlimited'),
             ),
           ),
         ],
@@ -515,62 +668,121 @@ class _AdminSubscriptionPlansCardState
     String? prefix,
     String? suffix,
     bool number = false,
-    bool whole = false,
-    double width = 150,
-    ValueChanged<String>? onChanged,
+    double size = 14,
+    FontWeight weight = FontWeight.w600,
   }) {
-    final palette = FairTixPalette.of(context);
-    return SizedBox(
-      width: width,
-      child: TextField(
-        controller: controller,
-        onChanged: onChanged,
-        keyboardType: (number || whole)
-            ? TextInputType.numberWithOptions(decimal: number)
-            : TextInputType.text,
-        style: TextStyle(
-          color: palette.textPrimary,
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-        ),
-        decoration: _decoration(
-          label,
-          hint: hint,
-          prefix: prefix,
-          suffix: suffix,
-        ),
+    final p = FairTixPalette.of(context);
+    return TextField(
+      controller: controller,
+      cursorColor: p.accentLabel,
+      keyboardType: number
+          ? const TextInputType.numberWithOptions(decimal: true)
+          : TextInputType.text,
+      style: orgText(p, size: size, weight: weight),
+      decoration: _decoration(
+        label,
+        hint: hint,
+        prefix: prefix,
+        suffix: suffix,
       ),
     );
   }
 
   InputDecoration _decoration(
-    String label, {
+    String? label, {
     String? hint,
     String? prefix,
     String? suffix,
   }) {
-    final palette = FairTixPalette.of(context);
+    final p = FairTixPalette.of(context);
+    OutlineInputBorder border(Color c) => OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: BorderSide(color: c),
+    );
     return InputDecoration(
       isDense: true,
       labelText: label,
-      labelStyle: TextStyle(color: palette.textSecondary, fontSize: 10),
+      labelStyle: orgText(p, size: 13, color: p.textSecondary),
       hintText: hint,
-      hintStyle: TextStyle(color: palette.textSecondary, fontSize: 10),
+      hintStyle: orgText(p, size: 13, color: p.textSecondary),
       prefixText: prefix,
+      prefixStyle: orgText(p, size: 14, color: p.textSecondary),
       suffixText: suffix,
+      suffixStyle: orgText(p, size: 13, color: p.textSecondary),
       filled: true,
-      fillColor: palette.surface,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(5),
-        borderSide: BorderSide(color: palette.border),
+      fillColor: p.surface,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+      border: border(p.border),
+      enabledBorder: border(p.border),
+      focusedBorder: border(p.accentLabel),
+    );
+  }
+}
+
+/// Small rounded status chip.
+class _Pill extends StatelessWidget {
+  const _Pill({
+    required this.label,
+    required this.color,
+    required this.background,
+  });
+
+  final String label;
+  final Color color;
+  final Color background;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(999),
       ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(5),
-        borderSide: BorderSide(color: palette.border),
+      child: Text(
+        label,
+        style: orgText(
+          p,
+          size: 11,
+          weight: FontWeight.w700,
+          color: color,
+          height: 1.2,
+        ),
       ),
     );
   }
+}
+
+/// Dashed rounded-rectangle outline for the "Add plan" tile.
+class _DashedRRectPainter extends CustomPainter {
+  const _DashedRRectPainter({required this.color, required this.radius});
+
+  final Color color;
+  final double radius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    final path = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)),
+      );
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        canvas.drawPath(metric.extractPath(distance, distance + 6), paint);
+        distance += 11;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedRRectPainter old) =>
+      old.color != color || old.radius != radius;
 }
 
 /// Blank means unlimited; anything else must be a positive whole number.

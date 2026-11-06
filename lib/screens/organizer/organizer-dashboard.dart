@@ -521,13 +521,18 @@ class _HeroRow extends StatelessWidget {
     }
 
     if (featuredCard == null) {
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(child: SizedBox(height: 170, child: revenueCard)),
-          const SizedBox(width: 24),
-          Expanded(child: stats),
-        ],
+      // The page sits in a scroll view (unbounded height), so a stretching Row
+      // needs an explicit height or its children get no size.
+      return SizedBox(
+        height: 170,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: revenueCard),
+            const SizedBox(width: 24),
+            Expanded(child: stats),
+          ],
+        ),
       );
     }
 
@@ -1097,6 +1102,21 @@ class _EventCard extends StatelessWidget {
     final fraction = total == 0 ? 0.0 : (soldCount / total).clamp(0.0, 1.0);
     final bannerUrl = EventRepository.instance.publicBannerUrl(e.bannerUrl);
 
+    // Purple strip: no banner uploaded, or while it loads / fails to load.
+    Widget bannerPlaceholder() => const SizedBox(
+          width: double.infinity,
+          height: 110,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF6D35D8), Color(0xFF2A1366)],
+              ),
+            ),
+          ),
+        );
+
     return Container(
       decoration: BoxDecoration(
         color: p.surface,
@@ -1116,25 +1136,26 @@ class _EventCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(
-            height: 110,
-            child: Stack(
-              fit: StackFit.expand,
+          // The poster is shown whole at its own proportions (full card width,
+          // height follows the picture, capped at 240 with side bars).
+          Stack(
               children: [
-                const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Color(0xFF6D35D8), Color(0xFF2A1366)],
+                if (bannerUrl == null)
+                  bannerPlaceholder()
+                else
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 240),
+                    child: ColoredBox(
+                      color: const Color(0xFF1B0F3F),
+                      child: Image.network(
+                        bannerUrl,
+                        width: double.infinity,
+                        fit: BoxFit.contain,
+                        loadingBuilder: (context, child, progress) =>
+                            progress == null ? child : bannerPlaceholder(),
+                        errorBuilder: (_, _, _) => bannerPlaceholder(),
+                      ),
                     ),
-                  ),
-                ),
-                if (bannerUrl != null)
-                  Image.network(
-                    bannerUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
                   ),
                 Positioned(
                   left: 14,
@@ -1165,7 +1186,6 @@ class _EventCard extends StatelessWidget {
                   ),
                 ),
               ],
-            ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),

@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
 
-import 'app_colors.dart';
+import '../../widgets/organizer_ui.dart';
 import '../../services/photon_venue_service.dart';
 import '../../theme/fairtix_palette.dart';
 
-// Theme-aware pieces so these fields stay readable in dark mode.
+// Theme-aware pieces so these fields stay readable in dark mode. They use the
+// same Plus Jakarta Sans / 14px-radius look as the Dashboard and auth screens.
 TextStyle _labelStyle(FairTixPalette p) =>
-    AppTextStyles.label.copyWith(color: p.textPrimary);
-TextStyle _bodyStyle(FairTixPalette p) =>
-    AppTextStyles.body.copyWith(color: p.textPrimary);
+    orgText(p, size: 13, weight: FontWeight.w600, height: 1.3);
+TextStyle _bodyStyle(FairTixPalette p) => orgText(p, size: 14, height: 1.3);
 TextStyle _hintStyle(FairTixPalette p) =>
-    AppTextStyles.bodyGray.copyWith(color: p.textSecondary);
+    orgText(p, size: 14, height: 1.3, color: p.textSecondary);
 
 OutlineInputBorder _border(Color color) => OutlineInputBorder(
-  borderRadius: BorderRadius.circular(10),
+  borderRadius: BorderRadius.circular(14),
   borderSide: BorderSide(color: color),
 );
 
@@ -108,15 +108,19 @@ class TierNameDropdown extends StatelessWidget {
             hintText: 'Select a tier',
             hintStyle: _hintStyle(p),
             errorText: errorText,
+            errorStyle: orgText(p, size: 12, color: p.danger),
+            isDense: true,
             filled: true,
             fillColor: p.surface,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
-              vertical: 14,
+              vertical: 18,
             ),
             border: _border(p.border),
             enabledBorder: _border(p.border),
             focusedBorder: _border(p.accentLabel),
+            errorBorder: _border(p.danger),
+            focusedErrorBorder: _border(p.danger),
           ),
         ),
       ],
@@ -132,21 +136,24 @@ class FieldWarning extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (message == null) return const SizedBox.shrink();
+    final p = FairTixPalette.of(context);
 
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.error_outline, size: 16, color: AppColors.dangerRed),
+          Icon(Icons.error_outline_rounded, size: 16, color: p.danger),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
               message!,
-              style: const TextStyle(
-                color: AppColors.dangerRed,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+              style: orgText(
+                p,
+                size: 12,
+                weight: FontWeight.w600,
+                color: p.danger,
+                height: 1.3,
               ),
             ),
           ),
@@ -278,15 +285,17 @@ class _OrganizerAutocompleteFieldState
                 hintText: widget.hint,
                 hintStyle: _hintStyle(p),
                 errorText: widget.errorText ?? _lookupError,
+                errorStyle: orgText(p, size: 12, color: p.danger),
+                isDense: true,
                 prefixIcon: widget.prefixIcon,
                 suffixIcon: Icon(Icons.arrow_drop_down, color: p.textSecondary),
-                errorBorder: _border(AppColors.dangerRed),
-                focusedErrorBorder: _border(AppColors.dangerRed),
+                errorBorder: _border(p.danger),
+                focusedErrorBorder: _border(p.danger),
                 filled: true,
                 fillColor: widget.enabled ? p.surface : p.background,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
-                  vertical: 14,
+                  vertical: 18,
                 ),
                 border: _border(p.border),
                 enabledBorder: _border(p.border),

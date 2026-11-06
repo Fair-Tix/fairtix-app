@@ -17,6 +17,30 @@
 -- so "per event day" is simply "per events.event_id".
 -- =============================================================================
 
+-- ── Which event rows share one "event day" slot? ───────────────────────
+-- A day of a per-day multi-day event can have several showings (events rows
+-- with the same parent_event_id and event_start_date but different
+-- start_time). The one-ticket-per-account-per-day limit counts ALL showings
+-- of that day together, so this returns the event itself plus its sibling
+-- showings on the same date. For any other event it is just the event.
+create or replace function public.event_slot_ids(p_event_id uuid)
+returns setof uuid
+language sql stable
+security definer set search_path = public
+as $$
+  select e.event_id
+  from public.events e
+  join public.events target on target.event_id = p_event_id
+  where e.event_id = target.event_id
+     or (
+       target.parent_event_id is not null
+       and e.parent_event_id = target.parent_event_id
+       and e.event_start_date = target.event_start_date
+     );
+$$;
+
+revoke all on function public.event_slot_ids(uuid) from public, anon, authenticated;
+
 -- ── Has this user already used their ticket slot for this event day? ────
 -- True if they currently hold a ticket for it (valid, listed or used), OR
 -- they already resold their ticket for it (the slot is not given back).
@@ -32,7 +56,7 @@ as $$
       from public.tickets t
       join public.ticket_tiers tt on tt.tier_id = t.tier_id
       where t.owner_id = p_user_id
-        and tt.event_id = p_event_id
+        and tt.event_id in (select public.event_slot_ids(p_event_id))
         and t.ticket_status <> 'canceled'
     )
     or exists (
@@ -43,7 +67,7 @@ as $$
       where tr.transaction_type = 'resale'
         and tr.seller_id = p_user_id
         and tr.status = 'completed'
-        and tt.event_id = p_event_id
+        and tt.event_id in (select public.event_slot_ids(p_event_id))
     );
 $$;
 

@@ -98,10 +98,17 @@ class OrganizerEventAvatar extends StatelessWidget {
         height: height,
         child: bannerUrl == null
             ? fallback
-            : Image.network(
-                bannerUrl!,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => fallback,
+            // The whole poster is shown (not cropped to fill the tile); any
+            // spare space around it is a neutral background.
+            : ColoredBox(
+                color: p.progressTrack,
+                child: Image.network(
+                  bannerUrl!,
+                  width: width,
+                  height: height,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, _, _) => fallback,
+                ),
               ),
       ),
     );

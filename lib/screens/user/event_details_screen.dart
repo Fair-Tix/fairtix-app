@@ -117,7 +117,35 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
   /// blocks the current user from buying a ticket for this event day
   /// because they already hold one. (A user who already RESOLD their ticket
   /// is refused by the server when they try to buy; see isPurchaseLimitReached.)
-  bool get _limitReached => !widget.readOnly && isPurchaseLimitReached(_activeEvent.id);
+  bool get _limitReached {
+    if (widget.readOnly) return false;
+    // One ticket per account per event DAY: every showing of the selected day
+    // counts together (the server enforces the same rule).
+    final active = _activeEvent;
+    final ids = <String>{
+      active.id,
+      for (final d in _event.days)
+        if (d.dayLabel == active.dayLabel) d.id,
+    };
+    return ids.any(isPurchaseLimitReached);
+  }
+
+  /// The distinct days of a multi-day event, in order (several showings on the
+  /// same date make ONE day).
+  List<String> _distinctDayLabels(EventSummary e) {
+    final labels = <String>[];
+    for (final d in e.days) {
+      if (!labels.contains(d.dayLabel)) labels.add(d.dayLabel);
+    }
+    return labels;
+  }
+
+  /// Every showing on the currently selected day, in time order.
+  List<EventSummary> _showingsOnSelectedDay(EventSummary e) {
+    final label = _selectedDay?.dayLabel;
+    if (label == null) return const [];
+    return [for (final d in e.days) if (d.dayLabel == label) d];
+  }
 
   Future<void> _handleBuyTicket() async {
     final selected = _selectedTier;
@@ -227,19 +255,42 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
                                 ),
                                 if (event.isMultiDay) ...[
                                   const SizedBox(height: 22),
-                                  _SectionLabel('Event days (${event.days.length})'),
+                                  _SectionLabel('Event days (${_distinctDayLabels(event).length})'),
                                   const SizedBox(height: 12),
                                   Wrap(
                                     spacing: 8,
                                     runSpacing: 8,
                                     children: [
-                                      for (var i = 0; i < event.days.length; i++)
+                                      for (var i = 0; i < _distinctDayLabels(event).length; i++)
                                         _DayChip(
-                                          label: 'Day ${i + 1} \u2022 ${event.days[i].dateLabel}',
-                                          selected: _selectedDay?.id == event.days[i].id,
+                                          label: 'Day ${i + 1} \u2022 ${_distinctDayLabels(event)[i]}',
+                                          selected: _selectedDay?.dayLabel == _distinctDayLabels(event)[i],
                                           onTap: () => setState(() {
-                                            _selectedDay = event.days[i];
+                                            _selectedDay = event.days.firstWhere(
+                                              (d) => d.dayLabel == _distinctDayLabels(event)[i],
+                                            );
                                             _selectedTier = null; // tiers differ per day
+                                          }),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                                if (event.isMultiDay &&
+                                    _showingsOnSelectedDay(event).any((s) => s.timeLabel != null)) ...[
+                                  const SizedBox(height: 22),
+                                  const _SectionLabel('Showtime'),
+                                  const SizedBox(height: 12),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: [
+                                      for (final s in _showingsOnSelectedDay(event))
+                                        _DayChip(
+                                          label: s.timeLabel ?? 'Showing',
+                                          selected: _selectedDay?.id == s.id,
+                                          onTap: () => setState(() {
+                                            _selectedDay = s;
+                                            _selectedTier = null; // each showtime has its own tickets
                                           }),
                                         ),
                                     ],
@@ -247,6 +298,15 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
                                 ],
                                 const SizedBox(height: 22),
                                 const _SectionLabel('Tickets'),
+                                if (event.isFullRunPass) ...[
+                                  const SizedBox(height: 12),
+                                  const _Notice(
+                                    icon: Icons.confirmation_number_outlined,
+                                    title: 'One pass for all days',
+                                    message:
+                                        'One ticket covers every day of this event. Your QR code is scanned once per day.',
+                                  ),
+                                ],
                                 const SizedBox(height: 12),
                                 if (lock != null) ...[
                                   _Notice(
@@ -260,7 +320,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
                                   _Notice(
                                     icon: Icons.info_outline_rounded,
                                     title: 'You already have a ticket for this event',
-                                    message: 'FairTix allows one ticket per account per event.',
+                                    message: 'FairTix allows one ticket per account per event day. All showtimes of a day count together.',
                                     actionLabel: 'View My Ticket',
                                     onAction: _handleViewMyTicket,
                                   ),
@@ -449,46 +509,64 @@ class _EventBanner extends StatelessWidget {
       ),
     );
 
-    return SizedBox(
-      width: double.infinity,
-      height: height,
-      child: Stack(
-        fit: StackFit.expand,
+    const shade = Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 110,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0x66000000), Color(0x00000000)],
+          ),
+        ),
+      ),
+    );
+
+    // No banner (or it can't load): the purple placeholder at the usual height.
+    Widget fallback() => SizedBox(
+          width: double.infinity,
+          height: height,
+          child: Stack(fit: StackFit.expand, children: [placeholder, shade]),
+        );
+    if (url == null) return fallback();
+
+    // The organizer's picture is shown whole: full width, height follows the
+    // picture. A very tall one is capped at 1.25x the width and shown without
+    // cropping (bars at the sides).
+    return LayoutBuilder(
+      builder: (context, constraints) => Stack(
         children: [
-          placeholder,
-          if (url != null)
-            Image.network(
-              url!,
-              fit: BoxFit.cover,
-              frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-                if (wasSynchronouslyLoaded) return child;
-                return AnimatedOpacity(
-                  opacity: frame == null ? 0 : 1,
-                  duration: reduce ? Duration.zero : const Duration(milliseconds: 250),
-                  curve: Curves.easeOut,
-                  child: child,
-                );
-              },
-              // If the banner can't load, the placeholder underneath stays.
-              errorBuilder: (_, _, _) => const SizedBox.shrink(),
-            ),
-          // Soft shade at the top so the back button stays visible on
-          // bright photos.
-          const Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 110,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0x66000000), Color(0x00000000)],
-                ),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: constraints.maxWidth * 1.25),
+            child: ColoredBox(
+              color: const Color(0xFF0E0829),
+              child: Image.network(
+                url!,
+                fit: BoxFit.contain,
+                width: double.infinity,
+                frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                  if (wasSynchronouslyLoaded) return child;
+                  return AnimatedOpacity(
+                    opacity: frame == null ? 0 : 1,
+                    duration: reduce ? Duration.zero : const Duration(milliseconds: 250),
+                    curve: Curves.easeOut,
+                    child: child,
+                  );
+                },
+                // While loading: the placeholder at the usual height.
+                loadingBuilder: (context, child, progress) => progress == null
+                    ? child
+                    : SizedBox(width: double.infinity, height: height, child: placeholder),
+                errorBuilder: (_, _, _) => fallback(),
               ),
             ),
           ),
+          // Soft shade at the top so the back button stays visible on
+          // bright photos.
+          shade,
         ],
       ),
     );

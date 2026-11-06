@@ -42,6 +42,14 @@
 -- =============================================================================
 
 -- ── get_resale_market ───────────────────────────────────────────────────
+-- A showing's start time (also added in organizer_event_functions.sql; repeated
+-- here because get_resale_market below is a SQL function and needs the column
+-- to exist when it is created). event_start_time is a NEW output column and a
+-- function's return type can't change under create or replace, so the old
+-- version is dropped first.
+alter table public.events add column if not exists start_time time;
+drop function if exists public.get_resale_market();
+
 create or replace function public.get_resale_market()
 returns table (
   listing_id      uuid,
@@ -57,7 +65,8 @@ returns table (
   venue           text,
   event_start_date date,
   event_end_date  date,
-  event_type      text
+  event_type      text,
+  event_start_time time
 )
 language sql stable
 security definer set search_path = public
@@ -78,7 +87,8 @@ as $$
     e.venue,
     e.event_start_date,
     e.event_end_date,
-    e.event_type::text
+    e.event_type::text,
+    e.start_time
   from public.resale_listings rl
   join public.tickets t       on t.ticket_id = rl.ticket_id
   join public.ticket_tiers tt on tt.tier_id = t.tier_id
@@ -90,7 +100,7 @@ as $$
     and t.ticket_status = 'listed'
     and e.status = 'published'
     -- Same cutoff as list_ticket_for_resale / expire_resale_listings.
-    and now() <= ((e.event_start_date::timestamp at time zone 'Asia/Manila') - interval '24 hours')
+    and now() <= (((e.event_start_date + coalesce(e.start_time, time '00:00')) at time zone 'Asia/Manila') - interval '24 hours')
   order by rl.listed_at desc;
 $$;
 

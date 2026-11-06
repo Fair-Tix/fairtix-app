@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/event.dart';
+import '../models/showtime.dart';
 
 /// Thrown when loading the public event catalogue fails.
 class PublicEventRepositoryException implements Exception {
@@ -74,6 +75,23 @@ class PublicEventRepository {
 
       final parentIds = parentRows.map((row) => row['event_id'] as String).toList();
 
+      // Organizer name + verified flag for the Home feed's post header. Only
+      // cosmetic, so a failure here (e.g. supabase/event_feed.sql not applied
+      // yet) must never block the catalogue from loading.
+      final organizersByEvent = <String, Map<String, dynamic>>{};
+      if (parentIds.isNotEmpty) {
+        try {
+          final orgRows = await client.rpc(
+            'event_feed_organizers',
+            params: {'p_event_ids': parentIds},
+          ) as List;
+          for (final r in orgRows) {
+            final m = r as Map<String, dynamic>;
+            organizersByEvent[m['event_id'] as String] = m;
+          }
+        } catch (_) {}
+      }
+
       // Per-day child rows of multi-day events.
       List childRows = const [];
       if (parentIds.isNotEmpty) {
@@ -84,6 +102,7 @@ class PublicEventRepository {
                     .eq('status', 'published')
                     .inFilter('parent_event_id', parentIds)
                     .order('day_number', ascending: true)
+                    .order('start_time', ascending: true)
                 as List;
       }
 
@@ -133,6 +152,7 @@ class PublicEventRepository {
               row as Map<String, dynamic>,
               tiersByEvent,
               days: daysByParent[row['event_id'] as String] ?? const [],
+              organizer: organizersByEvent[row['event_id'] as String],
             ),
           )
           .toList();
@@ -173,14 +193,25 @@ class PublicEventRepository {
     Map<String, dynamic> row,
     Map<String, List<TicketTier>> tiersByEvent, {
     List<EventSummary> days = const [],
+    Map<String, dynamic>? organizer,
   }) {
     final eventId = row['event_id'] as String;
     final startDate = DateTime.parse(row['event_start_date'] as String);
     final endDateRaw = row['event_end_date'] as String?;
     final isMulti = row['event_type'] == 'multi_day';
-    final dateLabel = isMulti && endDateRaw != null
+    var dayLabel = isMulti && endDateRaw != null
         ? '${_formatDate(startDate)} \u2013 ${_formatDate(DateTime.parse(endDateRaw))}'
         : _formatDate(startDate);
+    // Non-consecutive dates (e.g. Nov 28-30 then Dec 3-5): say how many days it
+    // really runs instead of implying every date in the range.
+    if (isMulti && endDateRaw != null && days.isNotEmpty) {
+      final distinct = days.map((d) => d.dayLabel).toSet().length;
+      final spanDays = DateTime.parse(endDateRaw).difference(startDate).inDays + 1;
+      if (distinct < spanDays) dayLabel = '$distinct days \u00b7 $dayLabel';
+    }
+    final startTimeRaw = row['start_time'] as String?;
+    final timeLabel = formatClockTime(startTimeRaw);
+    final dateLabel = timeLabel == null ? dayLabel : '$dayLabel \u00b7 $timeLabel';
     final tiers = tiersByEvent[eventId] ?? const [];
     final cheapest = tiers.isEmpty
         ? null
@@ -191,13 +222,19 @@ class PublicEventRepository {
       title: row['title'] as String,
       venue: row['venue'] as String,
       dateLabel: dateLabel,
-      eventDateTime: startDate,
+      dateOnlyLabel: dayLabel,
+      timeLabel: timeLabel,
+      eventDateTime: combineDateAndTime(startDate, startTimeRaw),
       priceLabel: cheapest == null ? 'TBA' : formatPeso(cheapest.price),
       accentColor: _colorForEvent(eventId),
       description: row['description'] as String?,
       tiers: tiers,
       bannerUrl: _bannerUrl(row['banner_image_url'] as String?),
       days: days,
+      isFullRunPass: isMulti && row['ticket_scope'] == 'full_run',
+      organizerName: organizer?['organizer_name'] as String?,
+      isOrganizerVerified: organizer?['is_verified'] == true,
+      postedAt: DateTime.tryParse((row['created_at'] as String?) ?? '')?.toLocal(),
     );
   }
 

@@ -68,7 +68,12 @@ begin
     where e.event_id = p_event_id or e.parent_event_id = p_event_id
   ),
   scope_tickets as (
-    select t.ticket_id, t.ticket_status
+    select t.ticket_id, t.ticket_status,
+           -- A whole-run pass stays 'valid' between days, so it counts as
+           -- checked in once it has been scanned on any day.
+           (t.ticket_status = 'used' or exists (
+             select 1 from public.ticket_checkins c where c.ticket_id = t.ticket_id
+           )) as was_checked_in
     from public.tickets t
     join public.ticket_tiers tt on tt.tier_id = t.tier_id
     where tt.event_id in (select event_id from scope)
@@ -92,10 +97,10 @@ begin
     coalesce((select sum(amount) from primary_sales), 0),
     coalesce((select sum(platform_fee) from primary_sales), 0),
     coalesce((select sum(amount - platform_fee) from primary_sales), 0),
-    (select count(*) from scope_tickets where ticket_status = 'used')::integer,
+    (select count(*) from scope_tickets where was_checked_in)::integer,
     greatest(
       (select count(*) from primary_sales)
-      - (select count(*) from scope_tickets where ticket_status = 'used'),
+      - (select count(*) from scope_tickets where was_checked_in),
       0
     )::integer,
     (select n from resales);

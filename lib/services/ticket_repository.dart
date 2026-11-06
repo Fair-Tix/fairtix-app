@@ -149,7 +149,7 @@ class TicketRepository {
           purchase_price, service_fee, purchased_at, used_at,
           ticket_tiers!inner(
             tier_id, tier_name, base_price, event_id,
-            events!inner(event_id, title, venue, event_start_date, event_end_date, event_type)
+            events!inner(event_id, title, venue, event_start_date, event_end_date, event_type, start_time)
           )
         ''')
         .eq('owner_id', userId)

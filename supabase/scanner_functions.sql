@@ -34,6 +34,8 @@
 --   * Invalidated / canceled tickets are rejected as invalid.
 --   * Tickets for a day of a multi-day event are accepted by the parent
 --     event's session, but only on that day.
+--   * Whole-run passes (events.ticket_scope = 'full_run') are accepted on
+--     every day of the run, once per day (ticket_checkins).
 --   * New get_scan_activity() so the organizer can see the live scan feed.
 -- =============================================================================
 
@@ -43,6 +45,27 @@
 -- kept so the organizer can still see what was presented.
 alter table public.qr_scan_logs alter column ticket_id drop not null;
 alter table public.qr_scan_logs add column if not exists scanned_token text;
+
+-- Whole-run passes (one ticket valid on every day of a multi-day event, like a
+-- convention). Same statements as in organizer_event_functions.sql so either
+-- file can be run first.
+alter table public.events
+  add column if not exists ticket_scope text not null default 'per_day'
+  check (ticket_scope in ('per_day', 'full_run'));
+
+-- A showing's start time (see organizer_event_functions.sql). Repeated so
+-- either file can be run first.
+alter table public.events add column if not exists start_time time;
+
+create table if not exists public.ticket_checkins (
+  checkin_id    uuid primary key default gen_random_uuid(),
+  ticket_id     uuid not null references public.tickets(ticket_id) on delete cascade,
+  checkin_date  date not null,
+  checked_in_at timestamptz not null default now(),
+  unique (ticket_id, checkin_date)
+);
+alter table public.ticket_checkins enable row level security;
+revoke all on public.ticket_checkins from public, anon, authenticated;
 
 -- ── 1. Generate a scanner session (organizer only) ──────────────────────
 -- Roadmap item 24. Creates a fresh session_token + 4-digit session_pin for
@@ -255,6 +278,14 @@ begin
       join public.ticket_tiers tt on tt.event_id = e.event_id
       where tt.tier_id = v_ticket.tier_id;
 
+    -- Tell the staff which showing the ticket is for (e.g. "General · 7:00 PM")
+    -- so a 3 PM ticket shown at the 7 PM door is easy to spot. Tickets are
+    -- accepted anywhere on their date; this is information only.
+    if v_ticket_event.start_time is not null then
+      v_tier_name := coalesce(v_tier_name, 'Ticket') || ' · '
+        || to_char(v_ticket_event.start_time, 'FMHH12:MI AM');
+    end if;
+
     if v_ticket_event.event_id is distinct from v_session_event.event_id
        and not (
          -- A ticket for one day of a multi-day run is good at the parent
@@ -265,6 +296,46 @@ begin
       v_result := 'wrong_event';
     elsif v_ticket.qr_status = 'invalidated' or v_ticket.ticket_status = 'canceled' then
       v_result := 'invalid';
+    elsif v_ticket_event.ticket_scope = 'full_run' then
+      -- Whole-run pass: good on every day from the start to the end date,
+      -- admitted once per day. It is NOT marked 'used' (it stays valid for the
+      -- next day); each day's entry is recorded in ticket_checkins instead.
+      if v_today < v_ticket_event.event_start_date
+         or v_today > coalesce(v_ticket_event.event_end_date, v_ticket_event.event_start_date) then
+        v_result := 'wrong_event';
+      elsif exists (
+        select 1 from public.ticket_checkins c
+        where c.ticket_id = v_ticket.ticket_id and c.checkin_date = v_today
+      ) then
+        v_result := 'already_used';
+      else
+        v_result := 'valid';
+
+        insert into public.ticket_checkins (ticket_id, checkin_date)
+        values (v_ticket.ticket_id, v_today);
+
+        -- Keep used_at as the FIRST entry; a pass still listed for resale on
+        -- its first day goes back to plain 'valid'.
+        update public.tickets
+          set used_at = coalesce(used_at, now()),
+              ticket_status = case
+                when ticket_status = 'listed' then 'valid'::ticket_status
+                else ticket_status
+              end
+          where ticket_id = v_ticket.ticket_id;
+
+        -- First accepted entry releases the escrow (no-op on later days).
+        update public.transactions
+          set escrow_status = 'released'
+          where ticket_id = v_ticket.ticket_id
+            and transaction_type = 'purchase'
+            and status = 'completed'
+            and escrow_status = 'held';
+
+        update public.resale_listings
+          set listing_status = 'canceled'
+          where ticket_id = v_ticket.ticket_id and listing_status = 'active';
+      end if;
     elsif v_ticket.ticket_status = 'used' or v_ticket.qr_status = 'used' then
       v_result := 'already_used';
     else

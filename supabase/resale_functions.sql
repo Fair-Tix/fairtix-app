@@ -31,7 +31,7 @@ declare
   v_user_id uuid := auth.uid();
   v_ticket public.tickets;
   v_event_status event_status;
-  v_event_start date;
+  v_event_start timestamp;
   v_event_title text;
   v_tier_name text;
   v_price numeric(10,2);
@@ -63,7 +63,7 @@ begin
     raise exception 'This ticket is already listed for resale.';
   end if;
 
-  select e.status, e.event_start_date, e.title, tt.tier_name
+  select e.status, (e.event_start_date + coalesce(e.start_time, time '00:00')), e.title, tt.tier_name
     into v_event_status, v_event_start, v_event_title, v_tier_name
     from public.ticket_tiers tt
     join public.events e on e.event_id = tt.event_id
@@ -213,7 +213,7 @@ begin
     where rl.listing_status = 'active'
       -- Same cutoff list_ticket_for_resale uses: event_start_date is a plain
       -- date, read as midnight Philippine time, minus 24 hours.
-      and now() > ((e.event_start_date::timestamp at time zone 'Asia/Manila') - interval '24 hours')
+      and now() > (((e.event_start_date + coalesce(e.start_time, time '00:00')) at time zone 'Asia/Manila') - interval '24 hours')
     for update of rl
   ),
   expired as (

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show VoidCallback;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/organizer_event.dart';
+import '../models/showtime.dart';
 
 /// Thrown when an event-related Supabase read/write fails.
 class EventRepositoryException implements Exception {
@@ -83,14 +84,16 @@ class EventRepository {
         await Supabase.instance.client.rpc('complete_finished_events');
       } catch (_) {}
 
-      final eventRows =
-          await Supabase.instance.client
-                  .from('events')
-                  .select()
-                  .eq('organizer_id', userId)
-                  .isFilter('parent_event_id', null)
-                  .order('created_at', ascending: false)
-              as List;
+      // Soft-deleted events (see delete_event) stay in the database for
+      // reporting but no longer show up for the organizer.
+      final eventRows = (await Supabase.instance.client
+              .from('events')
+              .select()
+              .eq('organizer_id', userId)
+              .isFilter('parent_event_id', null)
+              .order('created_at', ascending: false) as List)
+          .where((row) => row['deleted_at'] == null)
+          .toList();
 
       final eventIds = eventRows
           .map((row) => row['event_id'] as String)
@@ -211,12 +214,25 @@ class EventRepository {
   ///
   /// Refreshes the local cache before returning, so the newly created event
   /// is immediately visible via [events] / [getById].
+  ///
+  /// [fullRunPass] (multi-day only): sell ONE ticket valid on every day of the
+  /// run (e.g. a convention) instead of a separate ticket per day. The event
+  /// is then a single row with its own tiers (quantity = total passes) and no
+  /// per-day children.
+  ///
+  /// [startTime] ("HH:MM", Philippine time) is an optional start time for a
+  /// single-day event or a whole-run pass. [showtimes] (per-day multi-day only)
+  /// lists every showing, e.g. Nov 28 at 15:00 and Nov 28 at 19:00; each one
+  /// becomes its own ticket pool. Empty = one untimed showing per day.
   Future<OrganizerEvent> createEvent({
     required String name,
     required String venue,
     required DateTime startDate,
     DateTime? endDate,
     EventSpan span = EventSpan.singleDay,
+    bool fullRunPass = false,
+    String? startTime,
+    List<Showtime> showtimes = const [],
     String description = '',
     EventStatus status = EventStatus.published,
     List<TicketTier> tiers = const [],
@@ -247,6 +263,18 @@ class EventRepository {
           'p_start_date': _isoDate(startDate),
           'p_end_date': span == EventSpan.multiDay ? _isoDate(endDate!) : null,
           'p_status': _statusToRow(status),
+          'p_ticket_scope': span == EventSpan.multiDay && fullRunPass
+              ? 'full_run'
+              : 'per_day',
+          'p_start_time': span == EventSpan.singleDay ||
+                  (span == EventSpan.multiDay && fullRunPass)
+              ? startTime
+              : null,
+          'p_showtimes': span == EventSpan.multiDay &&
+                  !fullRunPass &&
+                  showtimes.isNotEmpty
+              ? [for (final s in showtimes) s.toJson()]
+              : null,
           'p_tiers': [
             for (final t in tiers)
               {'name': t.name, 'price': t.price, 'quantity': t.quantity},
@@ -277,6 +305,7 @@ class EventRepository {
                   .select()
                   .eq('parent_event_id', parentId)
                   .order('day_number', ascending: true)
+                  .order('start_time', ascending: true)
               as List;
       final ids = rows.map((r) => r['event_id'] as String).toList();
       final tiersByEvent = <String, List<TicketTier>>{};
@@ -444,17 +473,19 @@ class EventRepository {
     }
   }
 
-  /// Permanently deletes [id]. Fails (and says so) if tickets were already
-  /// sold — those events must be canceled so buyers get refunded instead.
+  /// Deletes [id] (a draft or canceled event) via the `delete_event` RPC.
+  /// Events that never had tickets are removed outright; a canceled event
+  /// with sales is hidden but kept so revenue and refund records stay intact.
+  /// The server refuses anything else (published, completed, or a draft that
+  /// already has ticket sales).
   Future<void> deleteEvent(String id) async {
     try {
-      await Supabase.instance.client.from('events').delete().eq('event_id', id);
-    } on PostgrestException catch (e) {
-      throw EventRepositoryException(
-        e.code == '23503'
-            ? 'This event already has ticket sales. Cancel it instead so buyers are refunded.'
-            : 'Could not delete the event: ${e.message}',
+      await Supabase.instance.client.rpc(
+        'delete_event',
+        params: {'p_event_id': id},
       );
+    } on PostgrestException catch (e) {
+      throw EventRepositoryException(e.message);
     }
     await refresh();
   }
@@ -511,6 +542,8 @@ class EventRepository {
       status: _statusFromRow(row['status'] as String),
       tiers: tiersByEvent[eventId] ?? const [],
       span: isMulti ? EventSpan.multiDay : EventSpan.singleDay,
+      fullRunPass: isMulti && row['ticket_scope'] == 'full_run',
+      startTime: row['start_time'] as String?,
       parentEventId: row['parent_event_id'] as String?,
       dayNumber: row['day_number'] as int?,
       bannerUrl: row['banner_image_url'] as String?,

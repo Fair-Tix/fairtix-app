@@ -7,6 +7,36 @@
 alter table public.events
   add column if not exists supporting_document_urls text[] not null default '{}';
 
+-- Who a multi-day event's tickets are for:
+--   'per_day'  = a separate ticket for each day (one child event per day, like
+--                cinema showings of the same show);
+--   'full_run' = ONE ticket (a pass) valid on every day of the run, scanned
+--                once per day (like a convention). No child events.
+-- Single-day events are always 'per_day'. Same statements also appear in
+-- scanner_functions.sql so either file can be run first.
+alter table public.events
+  add column if not exists ticket_scope text not null default 'per_day'
+  check (ticket_scope in ('per_day', 'full_run'));
+
+-- Start time of a showing, as a Manila (Asia/Manila) wall-clock time. Used by:
+--   * single-day events and whole-run passes: the event's start time (optional);
+--   * a per-day multi-day event: each generated child row is ONE SHOWING, so a
+--     day can have several children (same event_start_date and day_number,
+--     different start_time), each with its own ticket pool.
+-- Null = no set time (treated as midnight by the resale cutoff).
+alter table public.events add column if not exists start_time time;
+
+-- One row per ticket per day it was scanned in (full_run passes only).
+create table if not exists public.ticket_checkins (
+  checkin_id    uuid primary key default gen_random_uuid(),
+  ticket_id     uuid not null references public.tickets(ticket_id) on delete cascade,
+  checkin_date  date not null,
+  checked_in_at timestamptz not null default now(),
+  unique (ticket_id, checkin_date)
+);
+alter table public.ticket_checkins enable row level security;
+revoke all on public.ticket_checkins from public, anon, authenticated;
+
 insert into storage.buckets (id, name, public)
 values ('event_documents', 'event_documents', false)
 on conflict (id) do nothing;
@@ -228,6 +258,14 @@ $$;
 revoke all on function public._check_event_tiers(uuid, jsonb, integer)
   from public, anon, authenticated;
 
+drop function if exists public.create_event_with_days(
+  text, text, text, event_type, date, date, event_status, jsonb
+);
+
+drop function if exists public.create_event_with_days(
+  text, text, text, event_type, date, date, event_status, jsonb, text
+);
+
 create or replace function public.create_event_with_days(
   p_title text,
   p_venue text,
@@ -236,7 +274,10 @@ create or replace function public.create_event_with_days(
   p_start_date date,
   p_end_date date,
   p_status event_status,
-  p_tiers jsonb
+  p_tiers jsonb,
+  p_ticket_scope text default 'per_day',
+  p_start_time time default null,
+  p_showtimes jsonb default null
 )
 returns uuid
 language plpgsql
@@ -256,6 +297,16 @@ declare
   v_day_id uuid;
   v_day date;
   v_day_number integer := 0;
+  v_scope text;
+  v_has_times boolean := false;
+  v_times time[];
+  v_time time;
+  v_tier_total integer := 0;
+  v_showings integer;
+  v_now_manila timestamp := (now() at time zone 'Asia/Manila');
+  v_start date;
+  v_end date;
+  v_dates date[];
 begin
   if v_user_id is null then
     raise exception 'You need to be signed in to create an event.';
@@ -307,15 +358,57 @@ begin
   if p_status not in ('draft', 'published') then
     raise exception 'New events can only be created as drafts or published events.';
   end if;
-  if p_start_date < current_date then
+  if p_ticket_scope is not null
+     and p_ticket_scope not in ('per_day', 'full_run') then
+    raise exception 'The ticket type for this event is invalid.';
+  end if;
+  -- Only a multi-day event can be a whole-run pass.
+  v_scope := case
+    when p_event_type = 'multi_day' then coalesce(p_ticket_scope, 'per_day')
+    else 'per_day'
+  end;
+  v_start := p_start_date;
+  v_end := p_end_date;
+  -- A per-day multi-day event with listed showings runs on EXACTLY the dates
+  -- listed (they need not be consecutive, e.g. Nov 28-30 then Dec 3-5). The
+  -- event's span is the earliest to the latest listed date, and the plan's
+  -- day limit counts the distinct dates, not the span.
+  if p_event_type = 'multi_day' and v_scope = 'per_day'
+     and coalesce(jsonb_array_length(p_showtimes), 0) > 0 then
+    if exists (
+      select 1 from jsonb_array_elements(p_showtimes) as s(value)
+      where s.value->>'date' is null or s.value->>'time' is null
+    ) then
+      raise exception 'Every showtime needs a date and a time.';
+    end if;
+    select array_agg(x.d order by x.d) into v_dates
+    from (
+      select distinct (s.value->>'date')::date as d
+      from jsonb_array_elements(p_showtimes) as s(value)
+    ) x;
+    v_start := v_dates[1];
+    v_end := v_dates[cardinality(v_dates)];
+  end if;
+  if v_start < current_date then
     raise exception 'Event dates cannot be in the past.';
+  end if;
+  if p_start_time is not null
+     and (v_start + p_start_time) < v_now_manila then
+    raise exception 'The event start time cannot be in the past.';
   end if;
 
   if p_event_type = 'multi_day' then
-    if p_end_date is null or p_end_date <= p_start_date then
-      raise exception 'Multi-day events need an end date after the start date.';
+    if v_dates is not null then
+      if cardinality(v_dates) < 2 then
+        raise exception 'Add showings on at least 2 different dates for a multi-day event.';
+      end if;
+      v_day_count := cardinality(v_dates);
+    else
+      if v_end is null or v_end <= v_start then
+        raise exception 'Multi-day events need an end date after the start date.';
+      end if;
+      v_day_count := v_end - v_start + 1;
     end if;
-    v_day_count := p_end_date - p_start_date + 1;
     if v_day_limit is not null and v_day_count > v_day_limit then
       raise exception 'Your plan allows multi-day events up to % days.',
         v_day_limit;
@@ -333,42 +426,116 @@ begin
 
   insert into public.events (
     event_type, event_start_date, event_end_date, organizer_id,
-    title, description, venue, status
+    title, description, venue, status, ticket_scope, start_time
   )
   values (
-    p_event_type, p_start_date,
-    case when p_event_type = 'multi_day' then p_end_date else null end,
+    p_event_type, v_start,
+    case when p_event_type = 'multi_day' then v_end else null end,
     v_user_id, btrim(p_title), nullif(btrim(p_description), ''),
-    btrim(p_venue), p_status
+    btrim(p_venue), p_status, v_scope,
+    case when p_event_type = 'single_day' or v_scope = 'full_run'
+         then p_start_time else null end
   )
   returning event_id into v_parent_id;
   update public.organizer_event_monthly_usage
   set event_count = event_count + 1
   where organizer_id = v_user_id and month_start = v_month_start;
 
-  if p_event_type = 'single_day' then
+  -- Single-day events and whole-run passes are ONE event row with its own
+  -- tiers (a pass's quantity is the total number of passes, and counts
+  -- against the plan's tickets-per-day cap because every pass holder can
+  -- attend every day). Only per-day multi-day events get one child per day.
+  if p_event_type = 'single_day' or v_scope = 'full_run' then
     perform public._check_event_tiers(v_parent_id, p_tiers, v_ticket_cap);
   else
+    -- Per-day tickets. p_showtimes is an optional list of showings:
+    --   [{"date": "2026-11-28", "time": "15:00"}, ...]
+    -- Each one becomes its own child event (its own ticket pool). Without it,
+    -- every day is a single showing with no set time. When given, EVERY day in
+    -- the range needs at least one showing.
+    v_has_times := coalesce(jsonb_array_length(p_showtimes), 0) > 0;
+    if v_has_times then
+      if exists (
+        select 1 from jsonb_array_elements(p_showtimes) as s(value)
+        where s.value->>'date' is null or s.value->>'time' is null
+           or (s.value->>'date')::date < v_start
+           or (s.value->>'date')::date > v_end
+      ) then
+        raise exception 'Every showtime needs a date inside the event dates and a time.';
+      end if;
+      if exists (
+        select 1 from jsonb_array_elements(p_showtimes) as s(value)
+        group by (s.value->>'date')::date, (s.value->>'time')::time
+        having count(*) > 1
+      ) then
+        raise exception 'The same showtime is listed twice.';
+      end if;
+      if exists (
+        select 1 from jsonb_array_elements(p_showtimes) as s(value)
+        where ((s.value->>'date')::date + (s.value->>'time')::time) < v_now_manila
+      ) then
+        raise exception 'Showtimes cannot be in the past.';
+      end if;
+    end if;
+
+    select coalesce(sum((i.value->>'quantity')::integer), 0)
+      into v_tier_total
+    from jsonb_array_elements(p_tiers) as i(value);
+
+    -- Listed dates only when showings were given, otherwise every day of the range.
     for v_day in
-      select generated_day::date
-      from generate_series(
-        p_start_date::timestamp,
-        p_end_date::timestamp,
-        interval '1 day'
-      ) as generated_day
+      select days.d
+      from (
+        select u.d::date as d from unnest(v_dates) as u(d)
+        where v_dates is not null
+        union all
+        select g::date from generate_series(
+          v_start::timestamp, v_end::timestamp, interval '1 day'
+        ) as g
+        where v_dates is null
+      ) as days
+      order by days.d
     loop
       v_day_number := v_day_number + 1;
-      insert into public.events (
-        event_type, parent_event_id, day_number, event_start_date,
-        event_end_date, organizer_id, title, description, venue, status
-      )
-      values (
-        'single_day', v_parent_id, v_day_number, v_day, null,
-        v_user_id, btrim(p_title), nullif(btrim(p_description), ''),
-        btrim(p_venue), p_status
-      )
-      returning event_id into v_day_id;
-      perform public._check_event_tiers(v_day_id, p_tiers, v_ticket_cap);
+
+      if v_has_times then
+        select coalesce(
+                 array_agg((s.value->>'time')::time
+                           order by (s.value->>'time')::time),
+                 '{}')
+          into v_times
+        from jsonb_array_elements(p_showtimes) as s(value)
+        where (s.value->>'date')::date = v_day;
+        if cardinality(v_times) = 0 then
+          raise exception 'Every day needs at least one showtime.';
+        end if;
+      else
+        v_times := array[null::time];
+      end if;
+      v_showings := cardinality(v_times);
+
+      -- The plan's tickets-per-day limit counts every showing of a day together.
+      if v_ticket_cap is not null and v_tier_total * v_showings > v_ticket_cap then
+        raise exception
+          'This plan allows up to % tickets per event day, counting all showtimes of that day together.',
+          v_ticket_cap;
+      end if;
+
+      foreach v_time in array v_times
+      loop
+        insert into public.events (
+          event_type, parent_event_id, day_number, event_start_date,
+          event_end_date, organizer_id, title, description, venue, status,
+          start_time
+        )
+        values (
+          'single_day', v_parent_id, v_day_number, v_day, null,
+          v_user_id, btrim(p_title), nullif(btrim(p_description), ''),
+          btrim(p_venue), p_status, v_time
+        )
+        returning event_id into v_day_id;
+        perform public._check_event_tiers(v_day_id, p_tiers, null::integer);
+      end loop;
     end loop;
   end if;
 
@@ -377,10 +544,10 @@ end;
 $$;
 
 revoke all on function public.create_event_with_days(
-  text, text, text, event_type, date, date, event_status, jsonb
+  text, text, text, event_type, date, date, event_status, jsonb, text, time, jsonb
 ) from public, anon;
 grant execute on function public.create_event_with_days(
-  text, text, text, event_type, date, date, event_status, jsonb
+  text, text, text, event_type, date, date, event_status, jsonb, text, time, jsonb
 ) to authenticated;
 
 create or replace function public.set_event_banner(
@@ -471,6 +638,7 @@ declare
   v_plan public.subscription_plans%rowtype;
   v_ticket_cap integer;
   v_day_id uuid;
+  v_total integer;
 begin
   select * into v_event
   from public.events
@@ -523,7 +691,22 @@ begin
       v_plan.max_multiday_days;
   end if;
 
-  if v_event.event_type = 'multi_day' then
+  if v_event.event_type = 'multi_day' and v_event.ticket_scope = 'per_day' then
+    -- The same tiers go to every showing; the plan's tickets-per-day limit
+    -- counts all showings of one day together.
+    select coalesce(sum((i.value->>'quantity')::integer), 0)
+      into v_total
+    from jsonb_array_elements(p_tiers) as i(value);
+    if v_ticket_cap is not null and exists (
+      select 1 from public.events e
+      where e.parent_event_id = p_event_id and e.status <> 'canceled'
+      group by e.event_start_date
+      having count(*) * v_total > v_ticket_cap
+    ) then
+      raise exception
+        'This plan allows up to % tickets per event day, counting all showtimes of that day together.',
+        v_ticket_cap;
+    end if;
     for v_day_id in
       select e.event_id
       from public.events e
@@ -531,7 +714,7 @@ begin
       order by e.day_number
       for update
     loop
-      perform public._check_event_tiers(v_day_id, p_tiers, v_ticket_cap);
+      perform public._check_event_tiers(v_day_id, p_tiers, null::integer);
     end loop;
   else
     perform public._check_event_tiers(p_event_id, p_tiers, v_ticket_cap);
@@ -625,6 +808,97 @@ $$;
 
 revoke all on function public.cancel_event(uuid, text) from public, anon;
 grant execute on function public.cancel_event(uuid, text) to authenticated;
+
+-- Organizer "Delete event": only a draft or a canceled event, and only a
+-- top-level event (a multi-day run is deleted from its parent).
+--   * No tickets ever issued  -> the event, its days and tiers are deleted.
+--   * Canceled WITH tickets   -> kept in the database (deleted_at is set) and
+--     hidden from the organizer's list, so purchases, refunds, escrow and
+--     reports still match the recorded transactions.
+--   * Draft WITH tickets (e.g. unpublished by an admin) -> refused; cancel it
+--     first so buyers are refunded.
+alter table public.events add column if not exists deleted_at timestamptz;
+
+create or replace function public.delete_event(p_event_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_event public.events%rowtype;
+  v_has_tickets boolean;
+begin
+  select * into v_event
+  from public.events
+  where event_id = p_event_id
+  for update;
+  if not found or v_event.deleted_at is not null then
+    raise exception 'This event could not be found.';
+  end if;
+  if auth.uid() is null or (
+    not public.is_admin() and v_event.organizer_id <> auth.uid()
+  ) then
+    raise exception 'You are not allowed to delete this event.';
+  end if;
+  if not public.is_admin() and not exists (
+    select 1 from public.users u
+    where u.id = auth.uid()
+      and u.id_verification_status = 'verified'
+      and u.account_status = 'active'
+  ) then
+    raise exception 'Only approved, active organizers can delete events.';
+  end if;
+  if v_event.parent_event_id is not null then
+    raise exception 'Delete a multi-day event from its parent event.';
+  end if;
+  if v_event.status not in ('draft', 'canceled') then
+    raise exception 'Only draft or canceled events can be deleted.';
+  end if;
+
+  select exists (
+    select 1
+    from public.tickets t
+    join public.ticket_tiers tt on tt.tier_id = t.tier_id
+    join public.events e on e.event_id = tt.event_id
+    where e.event_id = p_event_id or e.parent_event_id = p_event_id
+  ) into v_has_tickets;
+
+  if v_has_tickets then
+    if v_event.status <> 'canceled' then
+      raise exception
+        'This event has ticket sales. Cancel it first so buyers are refunded.';
+    end if;
+    update public.events
+    set deleted_at = now(), updated_at = now()
+    where event_id = p_event_id or parent_event_id = p_event_id;
+    return;
+  end if;
+
+  begin
+    delete from public.ticket_tiers
+    where event_id in (
+      select e.event_id from public.events e
+      where e.event_id = p_event_id or e.parent_event_id = p_event_id
+    );
+    delete from public.events where parent_event_id = p_event_id;
+    delete from public.events where event_id = p_event_id;
+    return;
+  exception when foreign_key_violation then
+    -- Some other record still points at this event: keep it, hide it.
+    if v_event.status = 'canceled' then
+      update public.events
+      set deleted_at = now(), updated_at = now()
+      where event_id = p_event_id or parent_event_id = p_event_id;
+      return;
+    end if;
+    raise exception 'This event is linked to other records and cannot be deleted.';
+  end;
+end;
+$$;
+
+revoke all on function public.delete_event(uuid) from public, anon;
+grant execute on function public.delete_event(uuid) to authenticated;
 
 create or replace function public.admin_review_account(
   p_user_id uuid,

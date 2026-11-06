@@ -42,6 +42,12 @@ class EventSummary {
     this.tiers = const [],
     this.bannerUrl,
     this.days = const [],
+    this.isFullRunPass = false,
+    this.timeLabel,
+    this.dateOnlyLabel,
+    this.organizerName,
+    this.isOrganizerVerified = false,
+    this.postedAt,
   });
 
   /// Stable identifier for this event — mirrors EVENTS.event_id in the
@@ -52,6 +58,29 @@ class EventSummary {
   final String title;
   final String venue;
   final String dateLabel;
+
+  /// Start time of this showing / event, e.g. "3:00 PM" (Philippine time), or
+  /// null when the organizer set none. When set, [dateLabel] already ends with
+  /// it ("Nov 28, 2026 · 3:00 PM") and [eventDateTime] includes it, so the
+  /// resale cutoff follows the real start time.
+  final String? timeLabel;
+
+  /// [dateLabel] without the time, for grouping showings by day. Falls back to
+  /// [dateLabel] when not set.
+  final String? dateOnlyLabel;
+  String get dayLabel => dateOnlyLabel ?? dateLabel;
+
+  /// Public organizer name for the Home feed post header (from
+  /// `event_feed_organizers`, see supabase/event_feed.sql). Null when it
+  /// couldn't be loaded.
+  final String? organizerName;
+
+  /// True when the organizer's account is approved by an admin.
+  final bool isOrganizerVerified;
+
+  /// When the event was published to the catalogue (`events.created_at`),
+  /// used for "Posted 2h ago" and to order the Home feed newest first.
+  final DateTime? postedAt;
 
   /// Structured start date/time for this event, used to compute the
   /// resale-listing closing window (24 hours before the event starts,
@@ -79,6 +108,18 @@ class EventSummary {
   /// True for a multi-day event whose per-day child events were loaded.
   bool get isMultiDay => days.isNotEmpty;
 
+  /// The ticket tiers to price this event by. A per-day multi-day event is a
+  /// parent with no tiers of its own (every day carries a copy), so its price
+  /// comes from its days' tiers.
+  List<TicketTier> get pricingTiers =>
+      tiers.isNotEmpty ? tiers : days.expand((d) => d.tiers).toList();
+
+  /// True for a multi-day event sold as ONE pass valid on every day (e.g. a
+  /// convention). It is a single event row with its own tiers (no per-day
+  /// [days]) and its QR is accepted once per day. Mirrors
+  /// `public.events.ticket_scope = 'full_run'`.
+  final bool isFullRunPass;
+
   /// Resale listings for this event automatically close 24 hours before
   /// it starts (system-enforced, per the study's resale rules).
   DateTime get resaleListingCloseTime => eventDateTime.subtract(const Duration(hours: 24));
@@ -94,8 +135,9 @@ class EventSummary {
   /// real lowest price and always matches what they see at checkout.
   /// Falls back to the raw [priceLabel] field if no tiers are set.
   String get startingPriceLabel {
-    if (tiers.isEmpty) return priceLabel;
-    final lowestTierPrice = tiers.map((t) => t.price).reduce((a, b) => a < b ? a : b);
+    final priced = pricingTiers;
+    if (priced.isEmpty) return priceLabel;
+    final lowestTierPrice = priced.map((t) => t.price).reduce((a, b) => a < b ? a : b);
     if (lowestTierPrice <= 0) return 'Free';
     return 'From ${formatPeso(lowestTierPrice)}';
   }

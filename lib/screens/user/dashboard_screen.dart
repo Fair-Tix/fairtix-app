@@ -24,6 +24,7 @@ import 'notifications_screen.dart';
 /// owns tickets). Events, notifications, search and navigation are the same
 /// as before, and the ticket numbers come from the existing
 /// [TicketRepository], the same data the My Tickets tab shows.
+/// Events are shown as post-style cards ([FtEventPostCard]).
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
@@ -210,8 +211,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         : UserAuthService.instance.profilePhotoPublicUrl(photoPath);
 
     final events = _events;
-    final featured = events.isEmpty ? null : events.first;
-    final upcoming = events.skip(1).take(_upcomingLimit).toList();
+    final upcoming = events.take(_upcomingLimit).toList();
 
     final tickets = TicketRepository.instance.tickets;
     final listedCount =
@@ -231,34 +231,40 @@ class _DashboardScreenState extends State<DashboardScreen>
         body: FtPaletteBackground(
           child: SafeArea(
             bottom: false,
-            child: RefreshIndicator(
+            child: Column(
+              children: [
+                // Pinned header: stays put while the content below scrolls.
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(19, 14, 19, 10),
+                  child: FtReveal(
+                    animation: _entrance,
+                    startMs: 0,
+                    endMs: 300,
+                    totalMs: _entranceMs,
+                    child: ValueListenableBuilder<int>(
+                      valueListenable: NotificationRepository.instance.unreadCount,
+                      builder: (context, unread, _) => FtDashboardHeader(
+                        hasUnread: unread > 0 ||
+                            sampleNotifications.any((n) => !n.isRead),
+                        onBell: _openNotifications,
+                        onProfile: () => _goToTab(3),
+                        initial: _userFirstName.substring(0, 1).toUpperCase(),
+                        photoUrl: photoUrl,
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: RefreshIndicator(
               color: p.tileAccent,
               backgroundColor: p.surface,
               onRefresh: _refreshAll,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(19, 14, 19, 28),
+                padding: const EdgeInsets.fromLTRB(19, 12, 19, 28),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    FtReveal(
-                      animation: _entrance,
-                      startMs: 0,
-                      endMs: 300,
-                      totalMs: _entranceMs,
-                      child: ValueListenableBuilder<int>(
-                        valueListenable: NotificationRepository.instance.unreadCount,
-                        builder: (context, unread, _) => FtDashboardHeader(
-                          hasUnread: unread > 0 ||
-                              sampleNotifications.any((n) => !n.isRead),
-                          onBell: _openNotifications,
-                          onProfile: () => _goToTab(3),
-                          initial: _userFirstName.substring(0, 1).toUpperCase(),
-                          photoUrl: photoUrl,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 22),
                     FtReveal(
                       animation: _entrance,
                       startMs: 60,
@@ -289,13 +295,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                     else if (_errorMessage != null && events.isEmpty)
                       _loadingOrMessage(_errorMessage!, retry: _loadEvents)
                     else ...[
-                      if (featured != null) ...[
-                        FtFeaturedCard(
-                          event: featured,
-                          onTap: () => _openEvent(featured),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
                       FtTicketSection(
                         ready: _ticketsReady,
                         ticketCount: tickets.length,
@@ -317,17 +316,22 @@ class _DashboardScreenState extends State<DashboardScreen>
                               ? 'No events available yet. Check back soon!'
                               : 'No events match your search.',
                         )
-                      else if (upcoming.isEmpty)
-                        _loadingOrMessage('No other upcoming events yet.')
                       else
                         for (final e in upcoming) ...[
-                          FtUpcomingCard(event: e, onTap: () => _openEvent(e)),
-                          const SizedBox(height: 12),
+                          FtEventPostCard(
+                            key: ValueKey(e.id),
+                            event: e,
+                            onTap: () => _openEvent(e),
+                          ),
+                          const SizedBox(height: 16),
                         ],
                     ],
                   ],
                 ),
               ),
+            ),
+                ),
+              ],
             ),
           ),
         ),

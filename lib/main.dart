@@ -356,13 +356,16 @@ class MyApp extends StatelessWidget {
       scrollBehavior: const _AppScrollBehavior(),
       builder: (context, child) {
         final media = MediaQuery.of(context);
+        // Phone app only (web = organizer/admin is unchanged): the user's font
+        // size, capped, then trimmed slightly so the UI feels like a proper
+        // app and not oversized. Change _phoneTextShrink to tune it (1.0 = off).
+        final userScale = (media.textScaler.scale(14) / 14).clamp(0.85, 1.2);
         var data = media.copyWith(
           // Respect the user's font size, but cap it so fixed-height pieces
           // (buttons, nav bars, cards) don't break on very large text.
-          textScaler: media.textScaler.clamp(
-            minScaleFactor: 0.85,
-            maxScaleFactor: 1.2,
-          ),
+          textScaler: kIsWeb
+              ? media.textScaler.clamp(minScaleFactor: 0.85, maxScaleFactor: 1.2)
+              : TextScaler.linear(userScale * _phoneTextShrink),
         );
         Widget content = child ?? const SizedBox.shrink();
 
@@ -387,6 +390,9 @@ class MyApp extends StatelessWidget {
 
 /// Widest the phone (eventgoer) app is allowed to get, in logical pixels.
 const double _phoneMaxWidth = 560;
+
+/// How much smaller the phone app's text is drawn (0.92 = 8% smaller).
+const double _phoneTextShrink = 0.92;
 
 /// Lets mouse and trackpad users drag-scroll as well as touch users, so every
 /// scrolling screen behaves the same on web, desktop and phones.

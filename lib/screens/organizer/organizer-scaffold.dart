@@ -22,6 +22,9 @@ import 'organizer-splash.dart';
 import 'organizer-subscription-plan.dart';
 import 'organizer-subscription.dart';
 
+/// How much smaller organizer page text is drawn (0.9 = 10% smaller).
+const double organizerTextShrink = 0.9;
+
 enum OrganizerNavItem {
   dashboard,
   myEvents,
@@ -75,7 +78,16 @@ class OrganizerScaffold extends StatelessWidget {
     final account = OrganizerSession.instance.account;
     final initial = avatarInitial ?? account?.avatarInitial ?? '?';
 
-    return Scaffold(
+    // Organizer pages are drawn a little smaller than the raw text sizes (the
+    // user's own font setting is kept). Tune [organizerTextShrink] (1.0 = off).
+    final media = MediaQuery.of(context);
+    final userScale = media.textScaler.scale(14) / 14;
+
+    return MediaQuery(
+      data: media.copyWith(
+        textScaler: TextScaler.linear(userScale * organizerTextShrink),
+      ),
+      child: Scaffold(
       backgroundColor: p.background,
       body: Stack(
         children: [
@@ -139,6 +151,7 @@ class OrganizerScaffold extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }

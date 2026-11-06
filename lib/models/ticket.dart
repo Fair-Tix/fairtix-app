@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'event.dart';
+import 'showtime.dart';
 
 /// Lifecycle state of an owned ticket instance.
 /// Mirrors the `ticket_status` enum in `public.tickets` (see
@@ -91,9 +92,11 @@ class Ticket {
     final startDate = DateTime.parse(eventRow['event_start_date'] as String);
     final endDateRaw = eventRow['event_end_date'] as String?;
     final isMulti = eventRow['event_type'] == 'multi_day';
-    final dateLabel = isMulti && endDateRaw != null
+    final timeLabel = formatClockTime(eventRow['start_time'] as String?);
+    final dayLabel = isMulti && endDateRaw != null
         ? '${_formatShortDate(startDate)} – ${_formatShortDate(DateTime.parse(endDateRaw))}'
         : _formatShortDate(startDate);
+    final dateLabel = timeLabel == null ? dayLabel : '$dayLabel · $timeLabel';
 
     final tier = TicketTier(
       id: tierRow['tier_id'] as String,
@@ -107,7 +110,9 @@ class Ticket {
       title: eventRow['title'] as String,
       venue: eventRow['venue'] as String,
       dateLabel: dateLabel,
-      eventDateTime: startDate,
+      dateOnlyLabel: dayLabel,
+      timeLabel: timeLabel,
+      eventDateTime: combineDateAndTime(startDate, eventRow['start_time'] as String?),
       priceLabel: formatPeso(tier.price),
       accentColor: _colorForId(eventRow['event_id'] as String),
     );
@@ -141,9 +146,11 @@ class Ticket {
     final startDate = DateTime.parse(row['event_start_date'] as String);
     final endDateRaw = row['event_end_date'] as String?;
     final isMulti = row['event_type'] == 'multi_day';
-    final dateLabel = isMulti && endDateRaw != null
+    final timeLabel = formatClockTime(row['event_start_time'] as String?);
+    final dayLabel = isMulti && endDateRaw != null
         ? '${_formatShortDate(startDate)} – ${_formatShortDate(DateTime.parse(endDateRaw))}'
         : _formatShortDate(startDate);
+    final dateLabel = timeLabel == null ? dayLabel : '$dayLabel · $timeLabel';
 
     final tier = TicketTier(
       id: row['tier_id'] as String,
@@ -157,7 +164,9 @@ class Ticket {
       title: row['event_title'] as String,
       venue: row['venue'] as String,
       dateLabel: dateLabel,
-      eventDateTime: startDate,
+      dateOnlyLabel: dayLabel,
+      timeLabel: timeLabel,
+      eventDateTime: combineDateAndTime(startDate, row['event_start_time'] as String?),
       priceLabel: formatPeso(tier.price),
       accentColor: _colorForId(row['event_id'] as String),
     );

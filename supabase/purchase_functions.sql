@@ -139,7 +139,11 @@ begin
   -- backstop for two checkouts racing. The advisory lock makes simultaneous
   -- purchases by the same buyer for the same event run one after another, so
   -- the second one sees the first one's ticket.
-  perform pg_advisory_xact_lock(hashtextextended(p_buyer_id::text || v_event_id::text, 0));
+  -- The lock key is the same for every showing of one event day (see
+  -- event_slot_ids in checkout_guard.sql), so two showings of the same day
+  -- can't be bought at the same instant.
+  perform pg_advisory_xact_lock(hashtextextended(
+    p_buyer_id::text || (select min(s::text) from public.event_slot_ids(v_event_id) s), 0));
 
   -- Re-check idempotency now that we hold the locks: if verify and the webhook
   -- raced on the SAME payment, the other one has just created this ticket, so

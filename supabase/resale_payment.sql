@@ -83,7 +83,10 @@ begin
   if v_event_status <> 'published' then
     raise exception 'This event is no longer open for resale.';
   end if;
-  if now() > ((v_event_start::timestamp at time zone 'Asia/Manila') - interval '24 hours') then
+  -- Closes 24 hours before the SHOWING starts (date + start_time, Manila).
+  if now() > (((select e2.event_start_date + coalesce(e2.start_time, time '00:00')
+                  from public.events e2 where e2.event_id = v_event_id)
+               at time zone 'Asia/Manila') - interval '24 hours') then
     raise exception 'Resale for this event has closed. It closes 24 hours before the event starts.';
   end if;
   if public.ticket_slot_used(p_buyer_id, v_event_id) then
@@ -162,11 +165,16 @@ begin
   if v_event_status <> 'published' then
     raise exception 'This event is no longer open for resale.';
   end if;
-  if now() > ((v_event_start::timestamp at time zone 'Asia/Manila') - interval '24 hours') then
+  -- Closes 24 hours before the SHOWING starts (date + start_time, Manila).
+  if now() > (((select e2.event_start_date + coalesce(e2.start_time, time '00:00')
+                  from public.events e2 where e2.event_id = v_event_id)
+               at time zone 'Asia/Manila') - interval '24 hours') then
     raise exception 'Resale for this event has closed. It closes 24 hours before the event starts.';
   end if;
 
-  perform pg_advisory_xact_lock(hashtextextended(p_buyer_id::text || v_event_id::text, 0));
+  -- Same lock key as _do_ticket_purchase: every showing of one event day shares it.
+  perform pg_advisory_xact_lock(hashtextextended(
+    p_buyer_id::text || (select min(s::text) from public.event_slot_ids(v_event_id) s), 0));
   if public.ticket_slot_used(p_buyer_id, v_event_id) then
     raise exception 'You can only hold one ticket per event day. You already have (or have resold) a ticket for this one.';
   end if;

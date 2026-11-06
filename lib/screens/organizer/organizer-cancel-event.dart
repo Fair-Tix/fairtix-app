@@ -238,7 +238,8 @@ class _OrganizerCancelEventScreenState
                         DropdownMenuItem<String?>(
                           value: d.id,
                           child: Text(
-                            'Day ${d.dayNumber ?? ''} only \u2022 ${d.date}',
+                            'Day ${d.dayNumber ?? ''} only \u2022 ${d.date}'
+                            '${d.startTimeLabel == null ? '' : ' \u2022 ${d.startTimeLabel}'}',
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),

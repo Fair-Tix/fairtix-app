@@ -1,3 +1,5 @@
+import 'showtime.dart';
+
 /// Lifecycle status of an organizer's event.
 enum EventStatus {
   draft,
@@ -52,7 +54,9 @@ class TicketTier {
 
 /// Whether an event is a single-day event or the multi-day *parent* of a
 /// generated run of per-day child events (see [OrganizerEvent.parentEventId]
-/// / [OrganizerEvent.dayNumber], and `EventRepository.createEvent`).
+/// / [OrganizerEvent.dayNumber], and `EventRepository.createEvent`). A
+/// multi-day event may instead be sold as one whole-run pass (see
+/// [OrganizerEvent.fullRunPass]).
 /// Mirrors `public.events.event_type` (schema.sql).
 enum EventSpan { singleDay, multiDay }
 
@@ -98,8 +102,25 @@ class OrganizerEvent {
   final List<String> supportingDocumentUrls;
 
   /// For a multi-day parent: how many live (non-canceled) days it has, so
-  /// roll-up tier figures can be shown per day. 0 for single-day events.
+  /// roll-up tier figures can be shown per day. 0 for single-day events and
+  /// for whole-run passes (which have no per-day rows).
   final int dayCount;
+
+  /// True for a multi-day event sold as ONE ticket (a pass) valid on every
+  /// day of the run, e.g. a convention. It is a single event row with its own
+  /// tiers (no per-day children) and is scanned once per day. False for
+  /// single-day events and for multi-day events with a separate ticket per
+  /// day (e.g. cinema showings). Mirrors `public.events.ticket_scope =
+  /// 'full_run'`.
+  final bool fullRunPass;
+
+  /// Start time ("HH:MM", Philippine time) of a single-day event, a pass, or
+  /// ONE showing of a per-day multi-day event (a day-child row). Null when no
+  /// time was set, and always null for a per-day multi-day parent.
+  final String? startTime;
+
+  /// "3:00 PM" form of [startTime], or null.
+  String? get startTimeLabel => formatClockTime(startTime);
 
   /// Set when an admin unpublished this event (status is then draft).
   /// The organizer must upload valid documents before [complianceDeadline].
@@ -124,6 +145,8 @@ class OrganizerEvent {
     this.bannerUrl,
     this.supportingDocumentUrls = const [],
     this.dayCount = 0,
+    this.fullRunPass = false,
+    this.startTime,
     this.unpublishedAt,
     this.unpublishReason,
     this.complianceDeadline,
@@ -205,6 +228,8 @@ class OrganizerEvent {
       supportingDocumentUrls:
           supportingDocumentUrls ?? this.supportingDocumentUrls,
       dayCount: dayCount ?? this.dayCount,
+      fullRunPass: fullRunPass,
+      startTime: startTime,
       unpublishedAt: unpublishedAt,
       unpublishReason: unpublishReason,
       complianceDeadline: complianceDeadline,

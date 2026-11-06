@@ -980,6 +980,444 @@ class FtSectionHeader extends StatelessWidget {
   }
 }
 
+/// Short "Posted ..." age for a feed post, or null when the publish time
+/// is unknown (the header then just omits the line).
+String? ftPostedAgo(DateTime? postedAt, {DateTime? now}) {
+  if (postedAt == null) return null;
+  final diff = (now ?? DateTime.now()).difference(postedAt);
+  if (diff.inMinutes < 1) return 'Posted just now';
+  if (diff.inMinutes < 60) return 'Posted ${diff.inMinutes}m ago';
+  if (diff.inHours < 24) return 'Posted ${diff.inHours}h ago';
+  if (diff.inDays == 1) return 'Posted yesterday';
+  if (diff.inDays < 7) return 'Posted ${diff.inDays}d ago';
+  if (diff.inDays < 30) return 'Posted ${diff.inDays ~/ 7}w ago';
+  const months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+  return 'Posted ${months[postedAt.month - 1]} ${postedAt.day}, ${postedAt.year}';
+}
+
+/// One event as a feed post (Facebook-style): organizer header, 4:5 poster,
+/// title / date / venue, the organizer's description as a caption, and a
+/// footer with the starting price and a "Get tickets" button. Everything shown
+/// comes from the real [EventSummary]; the caption is omitted when the
+/// organizer wrote no description. Tapping the poster, the title block or the
+/// button calls [onTap] (the dashboard's existing open-event action).
+class FtEventPostCard extends StatelessWidget {
+  const FtEventPostCard({super.key, required this.event, required this.onTap});
+
+  final EventSummary event;
+  final VoidCallback onTap;
+
+  /// (small label, price text) for the footer, from the real ticket tiers.
+  (String, String) get _priceParts {
+    final tiers = event.pricingTiers;
+    if (tiers.isEmpty) return ('Tickets', 'Price TBA');
+    final prices = tiers.map((t) => t.price).toSet();
+    final lowest = prices.reduce((a, b) => a < b ? a : b);
+    if (lowest <= 0 && prices.length == 1) return ('Tickets', 'Free');
+    // Several different prices: show the lowest as "Starting at".
+    return (prices.length > 1 ? 'Starts at' : 'Price', formatPeso(lowest));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
+    final reduce = MediaQuery.disableAnimationsOf(context);
+    final name = (event.organizerName ?? '').trim().isEmpty
+        ? 'Organizer'
+        : event.organizerName!.trim();
+    final posted = ftPostedAgo(event.postedAt);
+    final (priceLabel, priceText) = _priceParts;
+    final caption = (event.description ?? '').trim();
+
+    final card = Container(
+      width: double.infinity,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: p.card,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: p.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Organizer header.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  alignment: Alignment.center,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [FtColors.progressStart, FtColors.otpButtonEnd],
+                    ),
+                  ),
+                  child: Text(
+                    name.substring(0, 1).toUpperCase(),
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 16,
+                                height: 1.2,
+                                fontWeight: FontWeight.w800,
+                                color: p.textStrong,
+                              ),
+                            ),
+                          ),
+                          if (event.isOrganizerVerified) ...[
+                            const SizedBox(width: 5),
+                            Icon(
+                              Icons.verified_rounded,
+                              size: 17,
+                              color: p.tileAccent,
+                              semanticLabel: 'Verified organizer',
+                            ),
+                          ],
+                        ],
+                      ),
+                      if (posted != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          posted,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 13,
+                            height: 1.2,
+                            color: p.textSoft,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Poster (4:5) and title block open the event.
+          Semantics(
+            button: true,
+            label: '${event.title}, ${event.dateLabel}, ${event.venue}. View event',
+            excludeSemantics: true,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onTap,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _poster(),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          event.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 20,
+                            height: 1.25,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.3,
+                            color: p.textStrong,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(top: 1),
+                              child: Icon(
+                                Icons.calendar_today_outlined,
+                                size: 15,
+                                color: p.textSoft,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                event.dateLabel,
+                                style: _metaStyle(p),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(top: 1),
+                              child: Icon(
+                                Icons.location_on_outlined,
+                                size: 16,
+                                color: p.textSoft,
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            Flexible(
+                              child: Text(
+                                event.venue,
+                                style: _metaStyle(p),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (caption.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: _PostCaption(text: caption),
+            ),
+          const SizedBox(height: 16),
+          Divider(height: 1, thickness: 1, color: p.border),
+          // Footer: price + Get tickets.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        priceLabel,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13,
+                          height: 1.2,
+                          color: p.textSoft,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        priceText,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 24,
+                          height: 1.15,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.4,
+                          color: p.textStrong,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Semantics(
+                  button: true,
+                  label: 'Get tickets for ${event.title}',
+                  excludeSemantics: true,
+                  child: FtPressScale(
+                    onTap: onTap,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 15),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        gradient: const LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [FtColors.buttonStart, FtColors.buttonEnd],
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Get tickets',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 15,
+                              height: 1.2,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Icon(
+                            Icons.arrow_forward_rounded,
+                            size: 18,
+                            color: Colors.white,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: reduce ? 1 : 0, end: 1),
+      duration: reduce ? Duration.zero : const Duration(milliseconds: 450),
+      curve: Curves.easeOut,
+      child: card,
+      builder: (context, t, child) => Opacity(
+        opacity: t,
+        child: Transform.translate(offset: Offset(0, 16 * (1 - t)), child: child),
+      ),
+    );
+  }
+
+  TextStyle _metaStyle(FairTixPalette p) => GoogleFonts.plusJakartaSans(
+        fontSize: 14,
+        height: 1.3,
+        fontWeight: FontWeight.w500,
+        color: p.textSoft,
+      );
+
+  /// The organizer's banner at its own proportions (never cropped): full
+  /// card width, height follows the picture. Very tall pictures are capped at
+  /// the old 4:5 height and shown whole, with side bars. Without a banner (or
+  /// while loading / on error) a 4:5 accent block with an image icon shows.
+  Widget _poster() {
+    Widget placeholder() => AspectRatio(
+          aspectRatio: 4 / 5,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  event.accentColor.withValues(alpha: 0.55),
+                  FtColors.bgTop,
+                ],
+              ),
+            ),
+            child: const Center(
+              child: Icon(
+                Icons.image_outlined,
+                size: 40,
+                color: FtColors.lavenderBright,
+              ),
+            ),
+          ),
+        );
+    if (event.bannerUrl == null) return placeholder();
+    return LayoutBuilder(
+      builder: (context, constraints) => ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: constraints.maxWidth * 1.25),
+        child: ColoredBox(
+          color: FtColors.bgTop,
+          child: Image.network(
+            event.bannerUrl!,
+            fit: BoxFit.contain,
+            width: double.infinity,
+            loadingBuilder: (context, child, progress) =>
+                progress == null ? child : placeholder(),
+            errorBuilder: (_, _, _) => placeholder(),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Caption under a post: up to three lines, with a "See more" / "See less"
+/// toggle only when the text is actually longer than that.
+class _PostCaption extends StatefulWidget {
+  const _PostCaption({required this.text});
+
+  final String text;
+
+  @override
+  State<_PostCaption> createState() => _PostCaptionState();
+}
+
+class _PostCaptionState extends State<_PostCaption> {
+  static const int _collapsedLines = 3;
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
+    final style = GoogleFonts.plusJakartaSans(
+      fontSize: 15,
+      height: 1.4,
+      color: p.textStrong.withValues(alpha: 0.9),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          text: TextSpan(text: widget.text, style: style),
+          maxLines: _collapsedLines,
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+        )..layout(maxWidth: constraints.maxWidth);
+        final overflows = painter.didExceedMaxLines;
+        painter.dispose();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.text,
+              style: style,
+              maxLines: _expanded ? null : _collapsedLines,
+              overflow: _expanded ? TextOverflow.clip : TextOverflow.ellipsis,
+            ),
+            if (overflows)
+              Semantics(
+                button: true,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => setState(() => _expanded = !_expanded),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Text(
+                      _expanded ? 'See less' : 'See more',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 15,
+                        height: 1.2,
+                        fontWeight: FontWeight.w700,
+                        color: p.tileAccent,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 /// One row in the Upcoming Events list: thumbnail, name, date, venue and a
 /// small price badge.
 class FtUpcomingCard extends StatelessWidget {

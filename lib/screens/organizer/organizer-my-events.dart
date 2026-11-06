@@ -130,6 +130,75 @@ class _OrganizerMyEventsScreenState extends State<OrganizerMyEventsScreen> {
     );
   }
 
+  /// Deletes a draft or canceled event after confirmation. The server
+  /// enforces the same rule and decides whether the row is removed or kept
+  /// (hidden) to preserve sales and refund records.
+  Future<void> _delete(OrganizerEvent e) async {
+    if (!await ensureOrganizerAccess(
+      context,
+      OrganizerRequirement.approval,
+    )) {
+      return;
+    }
+    if (!mounted) return;
+    final p = FairTixPalette.of(context);
+    final isDraft = e.status == EventStatus.draft;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: p.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: p.border),
+        ),
+        title: Text(
+          'Delete this event?',
+          style: orgText(p, size: 18, weight: FontWeight.w800),
+        ),
+        content: Text(
+          isDraft
+              ? '"${e.name}" is a draft and will be permanently deleted. '
+                  'This cannot be undone.'
+              : '"${e.name}" will be removed from My Events. Past ticket sales '
+                  'and refund records are kept for your reports.',
+          style: orgText(p, size: 14, color: p.textSecondary, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              'Keep',
+              style: orgText(p, size: 14, weight: FontWeight.w600),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              'Delete',
+              style: orgText(
+                p,
+                size: 14,
+                weight: FontWeight.w700,
+                color: p.danger,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    String message;
+    try {
+      await EventRepository.instance.deleteEvent(e.id);
+      message = 'Event deleted.';
+    } on EventRepositoryException catch (err) {
+      message = err.message;
+    }
+    if (!mounted) return;
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   /// Lets the organizer send proper documents for an event an admin
   /// unpublished. The admin reviews them and republishes.
   Future<void> _uploadDocuments(OrganizerEvent e) async {
@@ -335,6 +404,7 @@ class _OrganizerMyEventsScreenState extends State<OrganizerMyEventsScreen> {
             onManage: () => _manage(e),
             onScan: () => _scan(e),
             onCancel: () => _cancel(e),
+            onDelete: () => _delete(e),
             onUploadDocs: () => _uploadDocuments(e),
           ),
           const SizedBox(height: 14),
@@ -606,6 +676,7 @@ class _EventCard extends StatelessWidget {
     required this.onManage,
     required this.onScan,
     required this.onCancel,
+    required this.onDelete,
     required this.onUploadDocs,
   });
 
@@ -613,6 +684,7 @@ class _EventCard extends StatelessWidget {
   final VoidCallback onManage;
   final VoidCallback onScan;
   final VoidCallback onCancel;
+  final VoidCallback onDelete;
   final VoidCallback onUploadDocs;
 
   @override
@@ -788,8 +860,11 @@ class _EventCard extends StatelessWidget {
         const SizedBox(width: 8),
         _MoreMenu(
           canCancel: e.status != EventStatus.cancelled,
+          canDelete: e.status == EventStatus.draft ||
+              e.status == EventStatus.cancelled,
           canUploadDocs: e.isUnpublishedByAdmin,
           onCancel: onCancel,
+          onDelete: onDelete,
           onUploadDocs: onUploadDocs,
         ),
       ],
@@ -923,14 +998,18 @@ class _ManageButton extends StatelessWidget {
 class _MoreMenu extends StatelessWidget {
   const _MoreMenu({
     required this.canCancel,
+    required this.canDelete,
     required this.canUploadDocs,
     required this.onCancel,
+    required this.onDelete,
     required this.onUploadDocs,
   });
 
   final bool canCancel;
+  final bool canDelete;
   final bool canUploadDocs;
   final VoidCallback onCancel;
+  final VoidCallback onDelete;
   final VoidCallback onUploadDocs;
 
   @override
@@ -948,6 +1027,7 @@ class _MoreMenu extends StatelessWidget {
       ),
       onSelected: (v) {
         if (v == 'cancel') onCancel();
+        if (v == 'delete') onDelete();
         if (v == 'docs') onUploadDocs();
       },
       itemBuilder: (_) => [
@@ -984,6 +1064,25 @@ class _MoreMenu extends StatelessWidget {
             ],
           ),
         ),
+        if (canDelete)
+          PopupMenuItem(
+            value: 'delete',
+            child: Row(
+              children: [
+                Icon(Icons.delete_outline_rounded, size: 18, color: p.danger),
+                const SizedBox(width: 10),
+                Text(
+                  'Delete event',
+                  style: orgText(
+                    p,
+                    size: 14,
+                    weight: FontWeight.w600,
+                    color: p.danger,
+                  ),
+                ),
+              ],
+            ),
+          ),
       ],
       child: Container(
         width: 40,

@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../data/sample_notifications.dart';
 import '../../data/sample_tickets.dart';
 import '../../models/app_notification.dart';
 import '../../models/ticket.dart';
 import '../../services/notification_repository.dart';
-import '../../theme/app_theme.dart';
 import '../../theme/fairtix_palette.dart';
 import '../../theme/page_transitions.dart';
 import '../../widgets/ft_dark_ui.dart';
-import '../../widgets/ft_verified_ui.dart';
+import '../../widgets/ft_subpage_ui.dart';
 import 'account_activated_screen.dart';
 import 'ticket_sold_screen.dart';
 
@@ -20,8 +21,30 @@ import 'ticket_sold_screen.dart';
 /// ("Account activated") and "You're verified".
 bool isVerificationSuccessNotification(AppNotification n) {
   if (!n.isRemote || n.type != AppNotificationType.system) return false;
-  final title = n.title.toLowerCase().replaceAll('\u2019', "'").trim();
+  final title = n.title.toLowerCase().replaceAll('’', "'").trim();
   return title == 'account activated' || title.startsWith("you're verified");
+}
+
+/// Which notifications the list shows.
+enum _NotifFilter {
+  all('All'),
+  tickets('Tickets'),
+  resale('Resale'),
+  system('System');
+
+  const _NotifFilter(this.label);
+
+  final String label;
+
+  bool matches(AppNotification n) => switch (this) {
+        _NotifFilter.all => true,
+        _NotifFilter.tickets => n.type == AppNotificationType.ticket,
+        _NotifFilter.resale =>
+          n.type == AppNotificationType.resale || n.type == AppNotificationType.ticketSold,
+        _NotifFilter.system => n.type == AppNotificationType.system ||
+            n.type == AppNotificationType.general ||
+            n.type == AppNotificationType.promo,
+      };
 }
 
 /// In-app notification feed, shared by event goers, organizers and admins.
@@ -36,6 +59,9 @@ bool isVerificationSuccessNotification(AppNotification n) {
 /// ([sampleNotifications]) are still listed first and keep their original
 /// behavior (tap opens the Ticket Sold confirmation) until resale itself
 /// is backed by Supabase.
+///
+/// Dark design: round back button, "Read all", All / Tickets / Resale /
+/// System chips, and one grouped card with an unread dot per new item.
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
 
@@ -47,6 +73,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   List<AppNotification> _remote = [];
   bool _isLoading = true;
   String? _errorMessage;
+  _NotifFilter _filter = _NotifFilter.all;
 
   @override
   void initState() {
@@ -164,285 +191,313 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
-  Widget _emptyState(FairTixPalette p) {
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      children: [
-        const SizedBox(height: 120),
-        Center(
+  List<Widget> _content(FtAuthTheme t, List<AppNotification> all) {
+    if (_isLoading) {
+      return [
+        Padding(
+          padding: const EdgeInsets.only(top: 80),
+          child: Center(child: CircularProgressIndicator(color: t.activeAccent)),
+        ),
+      ];
+    }
+
+    if (_errorMessage != null && all.isEmpty) {
+      return [
+        Padding(
+          padding: const EdgeInsets.only(top: 60),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.notifications_none_rounded, size: 48, color: p.accentLabel.withValues(alpha: 0.5)),
+              Text(_errorMessage!, textAlign: TextAlign.center, style: t.subtitle()),
+              const SizedBox(height: 10),
+              TextButton(onPressed: _load, child: Text('Try again', style: t.link())),
+            ],
+          ),
+        ),
+      ];
+    }
+
+    final visible = all.where(_filter.matches).toList();
+    if (visible.isEmpty) {
+      return [
+        Padding(
+          padding: const EdgeInsets.only(top: 60),
+          child: Column(
+            children: [
+              Icon(
+                Icons.notifications_none_rounded,
+                size: 48,
+                color: t.activeAccent.withValues(alpha: 0.5),
+              ),
               const SizedBox(height: 14),
               Text(
-                'No notifications yet',
-                style: AppTextStyles.sectionHeading.copyWith(color: p.textPrimary),
+                all.isEmpty ? 'No notifications yet' : 'Nothing under ${_filter.label} yet',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: t.titleColor,
+                ),
               ),
             ],
           ),
         ),
-      ],
-    );
-  }
+      ];
+    }
 
-  Widget _errorState(FairTixPalette p) {
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      children: [
-        const SizedBox(height: 120),
-        Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  _errorMessage!,
-                  style: AppTextStyles.bodyMuted.copyWith(color: p.textSecondary),
-                  textAlign: TextAlign.center,
+    return [
+      Container(
+        decoration: BoxDecoration(
+          color: t.surfaceFill,
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: t.surfaceBorder),
+        ),
+        clipBehavior: Clip.antiAlias,
+        // The Material sits above the card's fill so the tap ripple shows.
+        child: Material(
+          type: MaterialType.transparency,
+          child: Column(
+            children: [
+              for (var i = 0; i < visible.length; i++) ...[
+                if (i > 0)
+                  Divider(height: 1, thickness: 1, indent: 22, endIndent: 22, color: t.divider),
+                _NotificationRow(
+                  notification: visible[i],
+                  onTap: () => _handleTap(visible[i]),
                 ),
-                const SizedBox(height: 10),
-                TextButton(onPressed: _load, child: const Text('Try again')),
               ],
-            ),
+            ],
           ),
         ),
-      ],
-    );
+      ),
+    ];
   }
 
   @override
   Widget build(BuildContext context) {
-    final p = FairTixPalette.of(context);
-    final notifications = [...sampleNotifications, ..._remote];
-    return Scaffold(
-      backgroundColor: p.background,
-      appBar: AppBar(
-        backgroundColor: p.background,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          onPressed: () => Navigator.of(context).maybePop(),
-          icon: Icon(Icons.arrow_back, color: p.textPrimary),
-        ),
-        title: Text(
-          'Notifications',
-          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: p.textPrimary),
-        ),
-        actions: [
-          if (_hasUnread)
-            TextButton(
-              onPressed: _markAllRead,
-              child: const Text('Mark all read', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
-            ),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: () => _load(showSpinner: false),
-        child: _isLoading
-            ? Center(child: CircularProgressIndicator(color: p.accentLabel))
-            : (_errorMessage != null && notifications.isEmpty)
-                ? _errorState(p)
-                : notifications.isEmpty
-                    ? _emptyState(p)
-                    : Center(
-                        // Keep the feed readable on wide web screens instead of
-                        // stretching each card edge to edge.
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 820),
-                          child: ListView.separated(
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            padding: const EdgeInsets.all(20),
-                            itemCount: notifications.length,
-                            separatorBuilder: (_, _) => const SizedBox(height: 10),
-                            itemBuilder: (context, index) {
-                              final notification = notifications[index];
-                              return _NotificationTile(
-                                notification: notification,
-                                onTap: () => _handleTap(notification),
-                              );
-                            },
-                          ),
+    final t = FtAuthTheme.live(context);
+    final all = [...sampleNotifications, ..._remote];
+
+    return FtAuthThemeScope(
+      theme: t,
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: t.overlayStyle,
+        child: Scaffold(
+          backgroundColor: t.bgBottom,
+          body: FtAuthBackground(
+            theme: t,
+            child: SafeArea(
+              child: Center(
+                // Keep the feed readable on wide web screens instead of
+                // stretching each card edge to edge.
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 820),
+                  child: RefreshIndicator(
+                    color: t.activeAccent,
+                    backgroundColor: t.surfaceFill,
+                    onRefresh: () => _load(showSpinner: false),
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(22, 14, 22, 24),
+                      children: [
+                        Stack(
+                          children: [
+                            FtPageHeader(
+                              title: 'Notifications',
+                              onBack: () => Navigator.of(context).maybePop(),
+                            ),
+                            if (_hasUnread)
+                              Positioned(
+                                right: 0,
+                                top: 0,
+                                bottom: 0,
+                                child: Center(
+                                  child: TextButton(
+                                    onPressed: _markAllRead,
+                                    child: Text(
+                                      'Read all',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w800,
+                                        color: t.accent,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
-                      ),
+                        const SizedBox(height: 22),
+                        _FilterChips(
+                          selected: _filter,
+                          onSelected: (f) => setState(() => _filter = f),
+                        ),
+                        const SizedBox(height: 22),
+                        ..._content(t, all),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
 }
 
-/// Dark card for the "you're verified" notification: green shield icon,
-/// white title, lavender message, and a green outline + dot while unread so
-/// it stands out from the other entries. Tapping opens the success screen
-/// (wired in [_NotificationsScreenState._handleTap]).
-class _VerifiedNotificationTile extends StatelessWidget {
-  const _VerifiedNotificationTile({required this.notification, required this.onTap});
+/// The All / Tickets / Resale / System pills. The selected one is filled
+/// with the brand purple gradient.
+class _FilterChips extends StatelessWidget {
+  const _FilterChips({required this.selected, required this.onSelected});
+
+  final _NotifFilter selected;
+  final ValueChanged<_NotifFilter> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
+    // Scales down only on very narrow screens so no chip gets cut off.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final filter in _NotifFilter.values) ...[
+            if (filter != _NotifFilter.all) const SizedBox(width: 8),
+            _chip(t, filter),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _chip(FtAuthTheme t, _NotifFilter filter) {
+    final isSelected = filter == selected;
+    final radius = BorderRadius.circular(22);
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      label: filter.label,
+      excludeSemantics: true,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: radius,
+          gradient: isSelected ? FairTixPalette.buttonGradient : null,
+          color: isSelected ? null : t.surfaceFill,
+          border: isSelected ? null : Border.all(color: t.surfaceBorder),
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            borderRadius: radius,
+            onTap: () => onSelected(filter),
+            child: Container(
+              height: 40,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              alignment: Alignment.center,
+              child: Text(
+                filter.label,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 15,
+                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w700,
+                  color: isSelected ? Colors.white : t.secondaryText,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One notification: unread dot, title, time, and the message underneath.
+/// The "you're verified" notification keeps its green dot and opens the
+/// success screen when tapped (see [_NotificationsScreenState._handleTap]).
+class _NotificationRow extends StatelessWidget {
+  const _NotificationRow({required this.notification, required this.onTap});
 
   final AppNotification notification;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     final unread = !notification.isRead;
+    final verified = isVerificationSuccessNotification(notification);
+    final dotColor = verified ? t.success : t.activeAccent;
+
     return Semantics(
       button: true,
-      hint: 'Opens your verification status',
+      label: '${unread ? 'Unread. ' : ''}${notification.title}. ${notification.message}',
+      hint: verified ? 'Opens your verification status' : null,
+      excludeSemantics: true,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: FtColors.otpFill,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: unread ? FtVerifiedColors.green.withValues(alpha: 0.55) : FtColors.otpBorder,
-            ),
-          ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(22, 18, 22, 18),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: const BoxDecoration(color: FtVerifiedColors.badge, shape: BoxShape.circle),
-                child: const Icon(Icons.verified_user_rounded, color: FtVerifiedColors.green, size: 21),
+              SizedBox(
+                width: 22,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: unread
+                      ? Container(
+                          width: 11,
+                          height: 11,
+                          decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+                        )
+                      : null,
+                ),
               ),
-              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
                           child: Text(
                             notification.title,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: unread ? FontWeight.w800 : FontWeight.w600,
-                              color: Colors.white,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 19,
+                              height: 1.25,
+                              fontWeight: unread ? FontWeight.w800 : FontWeight.w700,
+                              color: t.titleColor,
                             ),
                           ),
                         ),
-                        if (unread)
-                          Container(
-                            width: 8,
-                            height: 8,
-                            margin: const EdgeInsets.only(left: 6, top: 4),
-                            decoration: const BoxDecoration(color: FtVerifiedColors.green, shape: BoxShape.circle),
+                        const SizedBox(width: 10),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 3),
+                          child: Text(
+                            notification.timeLabel,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 14.5,
+                              color: t.subtitleColor,
+                            ),
                           ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 4),
                     Text(
                       notification.message,
-                      style: const TextStyle(fontSize: 12.5, height: 1.35, color: FtColors.otpSecondary),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      notification.timeLabel,
-                      style: const TextStyle(fontSize: 11, color: FtColors.hint),
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 17,
+                        height: 1.4,
+                        color: t.subtitleColor,
+                      ),
                     ),
                   ],
                 ),
               ),
-              const Padding(
-                padding: EdgeInsets.only(left: 6, top: 10),
-                child: Icon(Icons.chevron_right_rounded, color: FtColors.otpSecondary, size: 20),
-              ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _NotificationTile extends StatelessWidget {
-  const _NotificationTile({required this.notification, required this.onTap});
-
-  final AppNotification notification;
-  final VoidCallback onTap;
-
-  IconData get _icon => switch (notification.type) {
-        AppNotificationType.ticketSold => Icons.sell_rounded,
-        AppNotificationType.resale => Icons.sell_rounded,
-        AppNotificationType.ticket => Icons.confirmation_number_rounded,
-        AppNotificationType.system => Icons.verified_user_rounded,
-        AppNotificationType.promo => Icons.local_offer_rounded,
-        AppNotificationType.general => Icons.info_outline_rounded,
-      };
-
-  @override
-  Widget build(BuildContext context) {
-    if (isVerificationSuccessNotification(notification)) {
-      return _VerifiedNotificationTile(notification: notification, onTap: onTap);
-    }
-    final p = FairTixPalette.of(context);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: p.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: p.isDark ? Border.all(color: p.border) : null,
-          boxShadow: p.isDark
-              ? null
-              : [
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 12, offset: const Offset(0, 4)),
-                ],
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: p.accentLabel.withValues(alpha: p.isDark ? 0.2 : 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(_icon, color: p.accentLabel, size: 20),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          notification.title,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: notification.isRead ? FontWeight.w600 : FontWeight.w800,
-                            color: p.textPrimary,
-                          ),
-                        ),
-                      ),
-                      if (!notification.isRead)
-                        Container(
-                          width: 8,
-                          height: 8,
-                          margin: const EdgeInsets.only(left: 6, top: 4),
-                          decoration: BoxDecoration(color: p.accentLabel, shape: BoxShape.circle),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(notification.message, style: AppTextStyles.bodyMuted.copyWith(fontSize: 12.5, height: 1.35, color: p.textSecondary)),
-                  const SizedBox(height: 6),
-                  Text(notification.timeLabel, style: AppTextStyles.bodyMuted.copyWith(fontSize: 11, color: p.textSecondary)),
-                ],
-              ),
-            ),
-          ],
         ),
       ),
     );

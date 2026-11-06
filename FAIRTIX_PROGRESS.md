@@ -83,6 +83,16 @@ Manual dark-mode test: toggle dark mode, open Create Event, Edit Event, Cancel E
 - Organizer Profile: removed the "Security" (Change password) card; it already lives on Settings > Sign-in & security. Edited `organizer-profile.dart` (not compiled).
 - Manual tests still NOT done: access restrictions (1), revenue after cancel (5), resubmission (7), dark mode (8) + remaining unchecked screens.
 
+## UI rework: Transactions screens (2026-11-05), NOT compiled/run
+Rebuilt in the dark design from the mockups, following the existing Ft* system (`FtAuthTheme`, `FtPageHeader`, `FtSubpageScaffold`); both screens follow the Light/Dark switch.
+- `lib/screens/user/transactions_screen.dart`: All/Purchases/Sales/Refunds chips, one grouped card (type, event · date, amount, status badge), footer count, pull-to-refresh kept.
+- `lib/screens/user/transaction_detail_screen.dart`: amount + status card; Event, Date, Paid with, Buyer fees (resale fee for a sale; none for refunds), Reference with copy button.
+- NEW `lib/widgets/ft_transaction_ui.dart`: `FtTransactionStatusPill`, `formatPesoShort`.
+- `lib/models/transaction.dart`: added `formatShortDate`, `formatMediumDate`.
+- Not done: mockup's "Escrow: Held until <date>" row (model/RPC has no escrow or release date). `TransactionTile` is now unused by the list (left in place).
+- Still to restyle from the mockups: Help & Support, Resale listing/checkout/market, Notifications, Notification preferences, Ticket listed/sold confirmations.
+- Manual test: `flutter analyze`, open Profile > Transactions, try each filter, tap a row, tap the copy icon, toggle Light mode.
+
 ## Admin UI redesign (2026-11-05) - Phase 1 done in code, NOT compiled/run
 Goal: admin looks like the organizer (Plus Jakarta Sans, FairTixMark, pill nav, gradient active state, 1600px content, fade-in).
 - `lib/widgets/admin_shell.dart`: rewritten. Wide (>=1280px): logo + ADMIN chip, centered pill nav (9 items, short labels), ThemeModeSwitch, bell, gradient avatar menu. Narrower: menu button opens a styled Drawer (full labels, theme switch, account/logout). Phones (<700px): mark-only logo, theme toggle moves into avatar menu. Public API unchanged (`active`, `title`, `body`, `AdminNavItem`). Old `_Sidebar` removed.
@@ -131,3 +141,22 @@ Goal: admin looks like the organizer (Plus Jakarta Sans, FairTixMark, pill nav, 
 
 ## Exact next step
 User: run `supabase/refund_functions.sql` in the SQL Editor, then cancel a test event that has a normal purchase and a resold ticket and check: refunds rows are 'processed', buyer/current holder got the notification, Analytics/Escrow/Dashboard agree, Admin refund log looks right. Then run the pending manual tests and send results. Later: notification preferences (still undecided), My Events net-sold fix, dark mode on remaining screens.
+
+## UI rework: eventgoer mockups, part 2 (2026-11-05), NOT compiled/run
+Restyled to the dark mockups (Plus Jakarta Sans, `FtAuthTheme`, follow the Light/Dark switch). Logic unchanged unless noted.
+- `help_support_screen.dart`: expandable FAQ card (5 answers, written from the project's rules: 50-100% band, 5% seller fee, new QR on resale, refunds to current holder), "Still need help?" card with the real support email (tap = open mail app, falls back to copying), Terms & Privacy row kept. Old "Contact Support"/"Report a Problem" placeholder rows removed (the email card replaces them).
+- `notification_preferences_screen.dart`: titled "Notifications" like the mockup; custom purple switches. In-app, Tickets and Account are locked ON (tap = explanation) because they are transactional; Email, Push, Resale, Promotions use `notificationSettings` as before. Still NOT persisted/enforced server-side (see Step 9 notes).
+- `notifications_screen.dart`: grouped card with unread dots, "Read all", All/Tickets/Resale/System chips (Resale also holds local "ticket sold" items; System also holds general + promo). Tap behaviour, mark-read, pull-to-refresh, max width 820 kept.
+- `resale_listing_screen.dart`: price text field replaced by slider + 4 quick prices (floor to ceiling, so it can't leave the 50-100% band); live fee/receive breakdown using `kResaleSellerFeeRate`; free tickets show a banner and can't be listed.
+- `resale_confirmation_screen.dart` ("Your ticket is listed") and `ticket_sold_screen.dart` ("Your ticket sold"): new shared `FtResultScaffold`. Ticket sold now shows listing price, 5% fee and amount received; buttons are Done + View transactions (the old sampleTransactions lookup was dead code).
+- `resale_checkout_screen.dart`: same PayMongo flow; restyled. Seller name is masked (H•••n). The GCash/Maya/Card pills only LIST methods; the real choice is made on the PayMongo page.
+- `resale_market_screen.dart` + `market_listing_card.dart`, `my_listing_card.dart`, `resale_filter_chip.dart`: dark market. NEW: "Cancel listing" on My Listed Tickets (confirm dialog, then `ResaleRepository.cancelListing`). The round filter button next to the avatar is decorative (as before).
+- NEW `lib/widgets/ft_resale_ui.dart`: `FtSurfaceCard`, `FtSectionLabel`, `FtSummaryRow`, `FtNote`, `FtResultScaffold`, `formatClosesAt`.
+- Manual test: `flutter analyze`; Profile > Help & Support, Notifications settings; bell > Notifications (try each chip, Read all); My Tickets > list a ticket (move slider, tap quick prices, list) > confirmation > View My Listings > Cancel listing; buy a listing with a second account (checkout screen); tap a "ticket sold" notification; toggle Light mode on each.
+
+## UI rework: light-mode alignment + payment method pills (2026-11-06), NOT compiled/run
+- Light mode follows the same Ft* theme; four tweaks to match the light mockups: `FtSubpageScaffold`/`FtPageHeader` got `titleAtEnd` (right-aligned title, used by "List for resale"); pending status pill color (`ft_transaction_ui.dart`); notification switch off-track color; checkout pills.
+- `resale_checkout_screen.dart`: GCash / Maya / Card pills are now SELECTABLE (default GCash, gradient when selected, disabled once payment starts). The app sends `paymentMethod` to the edge function.
+- `supabase/functions/paymongo-checkout/index.ts`: reads `paymentMethod` (allowlist gcash/paymaya/card) and uses it as `payment_method_types` for ticket/resale checkout; missing/unknown value keeps all four methods; organizer plan checkout unchanged. MUST REDEPLOY: `supabase functions deploy paymongo-checkout`.
+- Supersedes the earlier note that the pills only list methods.
+- Open question: Transaction detail "Escrow: held until <date>" row needs `get_my_transactions()` + model changes + SQL run; not done.

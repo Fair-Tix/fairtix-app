@@ -1,160 +1,208 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 
-import '../../models/event.dart';
 import '../../models/transaction.dart';
-import '../../theme/app_theme.dart';
-import '../../widgets/dashed_divider.dart';
-import '../../widgets/purple_header_bar.dart';
+import '../../widgets/ft_dark_ui.dart';
+import '../../widgets/ft_subpage_ui.dart';
+import '../../widgets/ft_transaction_ui.dart';
 
-/// Receipt-style detail view for a single transaction — amount, date &
-/// time, category, and payment method. Shows only the final total the
-/// buyer paid or received; the platform-fee split is internal
-/// (organizer/admin) accounting and isn't shown here.
+/// Detail view for a single transaction: the amount and status on top, then
+/// event, date, payment method, fees and the reference number (tap the copy
+/// icon to copy it). Shows only the final total the buyer paid or received;
+/// the platform-fee split is internal (organizer/admin) accounting, except
+/// for the flat resale fee a seller sees on their own sale.
 class TransactionDetailScreen extends StatelessWidget {
   const TransactionDetailScreen({super.key, required this.transaction});
 
   final AppTransaction transaction;
 
-  Color get _statusColor => switch (transaction.status) {
-        TransactionStatus.completed => AppColors.success,
-        TransactionStatus.pending => AppColors.warning,
-        TransactionStatus.failed => AppColors.error,
-        TransactionStatus.refunded => AppColors.warning,
-      };
+  /// The fee line for this kind of transaction, or null when none applies
+  /// (refunds). Buyers never pay a fee; a seller sees what FairTix kept.
+  ({String label, String value})? get _feeRow {
+    switch (transaction.category) {
+      case TransactionCategory.refund:
+        return null;
+      case TransactionCategory.resaleSale:
+        final fee = transaction.platformFee;
+        if (fee == null) return null;
+        return (label: 'Resale fee', value: '−${formatPesoShort(fee)}');
+      case TransactionCategory.ticketPurchase:
+      case TransactionCategory.resalePurchase:
+        return (label: 'Buyer fees', value: 'None');
+    }
+  }
 
-  IconData get _statusIcon => switch (transaction.status) {
-        TransactionStatus.completed => Icons.check_circle_rounded,
-        TransactionStatus.pending => Icons.schedule_rounded,
-        TransactionStatus.failed => Icons.cancel_rounded,
-        TransactionStatus.refunded => Icons.undo_rounded,
-      };
+  Future<void> _copyReference(BuildContext context) async {
+    await Clipboard.setData(ClipboardData(text: transaction.referenceNumber));
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('Reference copied'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final amountColor = transaction.isCredit ? AppColors.success : AppColors.textDark;
-    final amountPrefix = transaction.isCredit ? '+' : '-';
-
-    return Scaffold(
-      backgroundColor: AppColors.pageBackground,
-      appBar: PurpleHeaderBar(
-        title: 'Receipt',
-        onBack: () => Navigator.of(context).maybePop(),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
-        child: Column(
-          children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: AppColors.accentPurple.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(transaction.categoryIcon, color: AppColors.accentPurple, size: 26),
+    final fee = _feeRow;
+    return FtSubpageScaffold(
+      title: 'Transaction',
+      onBack: () => Navigator.of(context).maybePop(),
+      followTheme: true,
+      body: [
+        _SummaryCard(transaction: transaction),
+        const SizedBox(height: 18),
+        _DetailsCard(
+          rows: [
+            _DetailRow(
+              label: 'Event',
+              value: '${transaction.eventTitle} · ${transaction.tierName}',
             ),
-            const SizedBox(height: 16),
-            Text(
-              '$amountPrefix${formatPeso(transaction.amount)}',
-              style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900, color: amountColor),
-            ),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-              decoration: BoxDecoration(
-                color: _statusColor.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(_statusIcon, size: 13, color: _statusColor),
-                  const SizedBox(width: 5),
-                  Text(transaction.statusLabel, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _statusColor)),
-                ],
-              ),
-            ),
-            const SizedBox(height: 28),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.cardWhite,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 20, offset: const Offset(0, 8)),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${transaction.tierName} \u2013 ${transaction.eventTitle}',
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textDark),
-                  ),
-                  const SizedBox(height: 18),
-                  _receiptRow('Reference No.', transaction.referenceNumber),
-                  const SizedBox(height: 12),
-                  _receiptRow('Date & Time', formatDateTime(transaction.dateTime)),
-                  const SizedBox(height: 12),
-                  _receiptRow('Category', transaction.categoryLabel),
-                  const SizedBox(height: 12),
-                  _receiptRow('Payment Method', transaction.paymentMethod),
-                  const SizedBox(height: 18),
-                  const DashedDivider(),
-                  const SizedBox(height: 18),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Total', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800, color: AppColors.textDark)),
-                      Text(
-                        '$amountPrefix${formatPeso(transaction.amount)}',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: AppColors.accentPurple),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 18),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.inputFillLight,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.info_outline, size: 16, color: AppColors.accentPurple),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Paid via PayMongo Sandbox (test mode) — no real money was processed.',
-                      style: AppTextStyles.bodyMuted.copyWith(fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
+            _DetailRow(label: 'Date', value: formatMediumDate(transaction.dateTime)),
+            _DetailRow(label: 'Paid with', value: transaction.paymentMethod),
+            if (fee != null) _DetailRow(label: fee.label, value: fee.value),
+            _DetailRow(
+              label: 'Reference',
+              value: transaction.referenceNumber,
+              onCopy: () => _copyReference(context),
             ),
           ],
         ),
+      ],
+    );
+  }
+}
+
+/// Top card: what kind of transaction it was, the amount, and the status.
+class _SummaryCard extends StatelessWidget {
+  const _SummaryCard({required this.transaction});
+
+  final AppTransaction transaction;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      decoration: BoxDecoration(
+        color: t.surfaceFill,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: t.surfaceBorder),
+      ),
+      child: Column(
+        children: [
+          Text(
+            transaction.categoryLabel,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              color: t.subtitleColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            formatPesoShort(transaction.amount),
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 44,
+              height: 1.1,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -1,
+              color: t.titleColor,
+            ),
+          ),
+          const SizedBox(height: 16),
+          FtTransactionStatusPill(status: transaction.status, large: true),
+        ],
       ),
     );
   }
+}
 
-  Widget _receiptRow(String label, String value) {
+/// Bottom card: label / value rows.
+class _DetailsCard extends StatelessWidget {
+  const _DetailsCard({required this.rows});
+
+  final List<Widget> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 22),
+      decoration: BoxDecoration(
+        color: t.surfaceFill,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: t.surfaceBorder),
+      ),
+      child: Column(
+        children: [
+          for (var i = 0; i < rows.length; i++) ...[
+            if (i > 0) const SizedBox(height: 16),
+            rows[i],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({required this.label, required this.value, this.onCopy});
+
+  final String label;
+  final String value;
+
+  /// When set, a copy icon follows the value.
+  final VoidCallback? onCopy;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(label, style: AppTextStyles.bodyMuted),
-        Flexible(
+        Text(
+          label,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 15,
+            fontWeight: FontWeight.w400,
+            color: t.subtitleColor,
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
           child: Text(
             value,
             textAlign: TextAlign.right,
-            style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: AppColors.textDark),
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: t.titleColor,
+            ),
           ),
         ),
+        if (onCopy != null) ...[
+          const SizedBox(width: 8),
+          InkWell(
+            onTap: onCopy,
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Icon(
+                Icons.copy_rounded,
+                size: 19,
+                semanticLabel: 'Copy reference',
+                color: t.activeAccent,
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }

@@ -1,20 +1,25 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../models/event.dart';
 import '../../models/ticket.dart';
 import '../../services/resale_repository.dart';
 import '../../services/ticket_repository.dart';
-import '../../theme/app_theme.dart';
-import '../../widgets/gradient_pill_button.dart';
-import '../../widgets/purple_header_bar.dart';
+import '../../theme/fairtix_palette.dart';
+import '../../widgets/ft_dark_ui.dart';
+import '../../widgets/ft_resale_ui.dart';
+import '../../widgets/ft_subpage_ui.dart';
+import '../../widgets/ft_transaction_ui.dart' show formatPesoShort;
 import 'resale_confirmation_screen.dart';
 
-/// "List for Resale" screen — lets the ticket owner set a resale price,
+/// "List for resale" screen — lets the ticket owner set a resale price,
 /// enforcing FairTix's system-wide resale band: the price must fall
 /// between 50% (floor, to prevent nominal-price transfers that bypass
 /// purchase limits) and 100% (ceiling, to prevent scalping) of the
 /// ticket's original purchase price.
+///
+/// The price is picked with a slider or one of four quick amounts, so it can
+/// never leave the allowed band. The server checks the band again anyway.
 class ResaleListingScreen extends StatefulWidget {
   const ResaleListingScreen({super.key, required this.ticket});
 
@@ -25,58 +30,40 @@ class ResaleListingScreen extends StatefulWidget {
 }
 
 class _ResaleListingScreenState extends State<ResaleListingScreen> {
-  late final TextEditingController _priceController;
   bool _isSubmitting = false;
+  late double _price;
 
   double get _minPrice => widget.ticket.minResalePrice;
   double get _maxPrice => widget.ticket.maxResalePrice;
-
   bool get _windowClosed => widget.ticket.event.isResaleWindowClosed;
+  bool get _hasRange => _maxPrice > _minPrice;
 
-  double? get _enteredPrice {
-    final raw = _priceController.text.replaceAll(',', '').trim();
-    if (raw.isEmpty) return null;
-    return double.tryParse(raw);
-  }
+  /// Four evenly spaced prices from the floor to the ceiling.
+  List<double> get _quickPrices => [
+        for (var i = 0; i < 4; i++)
+          (_minPrice + (_maxPrice - _minPrice) * i / 3).roundToDouble().clamp(_minPrice, _maxPrice).toDouble(),
+      ];
 
-  String? get _errorMessage {
-    final text = _priceController.text.trim();
-    if (text.isEmpty) return null;
-    final value = _enteredPrice;
-    if (value == null) return 'Enter a valid amount.';
-    if (value < _minPrice || value > _maxPrice) {
-      return 'Price must be between ${formatPeso(_minPrice)} and ${formatPeso(_maxPrice)} '
-          '(50%\u2013100% of original price)';
-    }
-    return null;
-  }
+  /// FairTix's flat resale fee, taken from the seller's side (the server
+  /// rounds the same way: c_resale_fee_rate in supabase/resale_purchase.sql).
+  double get _fee => (_price * kResaleSellerFeeRate * 100).round() / 100;
+  double get _receive => _price - _fee;
 
-  bool get _isValid => !_windowClosed && _errorMessage == null && _enteredPrice != null;
-
-  static const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-  String _formatCloseDateTime(DateTime dt) {
-    final hour12 = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
-    final minute = dt.minute.toString().padLeft(2, '0');
-    final period = dt.hour >= 12 ? 'PM' : 'AM';
-    return '${_months[dt.month - 1]} ${dt.day}, $hour12:$minute $period';
-  }
+  bool get _isValid => !_windowClosed && _price > 0 && _price >= _minPrice && _price <= _maxPrice;
 
   @override
   void initState() {
     super.initState();
-    _priceController = TextEditingController();
+    _price = _hasRange ? _quickPrices[2] : _maxPrice;
   }
 
-  @override
-  void dispose() {
-    _priceController.dispose();
-    super.dispose();
+  void _setPrice(double value) {
+    setState(() => _price = value.roundToDouble().clamp(_minPrice, _maxPrice).toDouble());
   }
 
   Future<void> _handleListTicket() async {
-    final price = _enteredPrice;
-    if (!_isValid || price == null || _isSubmitting) return;
+    if (!_isValid || _isSubmitting) return;
+    final price = _price;
     setState(() => _isSubmitting = true);
 
     try {
@@ -86,9 +73,7 @@ class _ResaleListingScreenState extends State<ResaleListingScreen> {
       // say why (e.g. window closed, price out of range).
       if (!mounted) return;
       setState(() => _isSubmitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message), backgroundColor: AppColors.error),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
       return;
     }
 
@@ -117,172 +102,287 @@ class _ResaleListingScreenState extends State<ResaleListingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.live(context);
     final ticket = widget.ticket;
     final event = ticket.event;
-    final error = _errorMessage;
+    final interactive = !_windowClosed && _hasRange && !_isSubmitting;
 
-    return Scaffold(
-      backgroundColor: AppColors.pageBackground,
-      appBar: PurpleHeaderBar(
-        title: 'List for Resale',
-        onBack: () => Navigator.of(context).maybePop(),
+    return FtSubpageScaffold(
+      title: 'List for resale',
+      titleAtEnd: true,
+      onBack: () => Navigator.of(context).maybePop(),
+      followTheme: true,
+      bottomButton: FtGradientButton(
+        label: _isValid ? 'List for ${formatPesoShort(_price)}' : 'List for resale',
+        loading: _isSubmitting,
+        onPressed: _isValid ? _handleListTicket : null,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: AppColors.cardWhite,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: AppColors.inputBorderLight),
+      body: [
+        if (_windowClosed) ...[
+          const FtBanner(
+            message:
+                'Resale listings for this event have closed. Listings automatically close 24 hours before the event starts.',
+          ),
+          const SizedBox(height: 16),
+        ],
+        FtSurfaceCard(
+          padding: const EdgeInsets.all(20),
+          radius: 26,
+          child: Row(
+            children: [
+              Container(
+                width: 74,
+                height: 74,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: FairTixPalette.buttonGradient,
+                ),
+                child: const Icon(Icons.confirmation_number_outlined, color: Colors.white, size: 32),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      event.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 24,
+                        height: 1.15,
+                        fontWeight: FontWeight.w800,
+                        color: t.titleColor,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${ticket.tier.name} • ${event.dateLabel}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 16.5,
+                        color: t.subtitleColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    event.title,
-                    style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, color: AppColors.textDark),
+                    'Face value',
+                    style: GoogleFonts.plusJakartaSans(fontSize: 14, color: t.subtitleColor),
                   ),
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.warningBackground,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      ticket.tier.name,
-                      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: AppColors.warning),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('Original Price', style: AppTextStyles.bodyMuted),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
-                    formatPeso(ticket.originalPrice),
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.textDark),
+                    formatPesoShort(ticket.originalPrice),
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      color: t.titleColor,
+                    ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 22),
-            if (_windowClosed) ...[
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppColors.errorBackground,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(Icons.event_busy_rounded, size: 18, color: AppColors.error),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Resale listings for this event have closed. Listings automatically close 24 hours before the event starts.',
-                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.error, height: 1.35),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 18),
             ],
-            const Text('Resale Price', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textDark)),
-            const SizedBox(height: 10),
-            Container(
-              decoration: BoxDecoration(
-                color: _windowClosed ? AppColors.inputFillLight : AppColors.cardWhite,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: error != null ? AppColors.error : AppColors.inputBorderLight, width: 1.4),
+          ),
+        ),
+        const SizedBox(height: 26),
+        Center(
+          child: Text(
+            'Your asking price',
+            style: GoogleFonts.plusJakartaSans(fontSize: 18, color: t.subtitleColor),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Semantics(
+          liveRegion: true,
+          child: Center(
+            child: Text(
+              formatPesoShort(_price),
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 62,
+                height: 1.1,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -1.5,
+                color: t.titleColor,
               ),
-              child: TextField(
-                controller: _priceController,
-                enabled: !_windowClosed,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-                onChanged: (_) => setState(() {}),
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: error != null ? AppColors.error : AppColors.textDark,
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        if (_hasRange) ...[
+          SliderTheme(
+            data: SliderThemeData(
+              trackHeight: 10,
+              activeTrackColor: FtColors.fieldBorderFocused,
+              inactiveTrackColor: t.progressTrack,
+              disabledActiveTrackColor: FtColors.fieldBorderFocused.withValues(alpha: 0.5),
+              disabledInactiveTrackColor: t.progressTrack,
+              thumbShape: const _RingThumbShape(ring: FtColors.glow),
+              overlayShape: SliderComponentShape.noOverlay,
+            ),
+            child: Slider(
+              min: _minPrice,
+              max: _maxPrice,
+              value: _price.clamp(_minPrice, _maxPrice).toDouble(),
+              semanticFormatterCallback: (v) => formatPesoShort(v.roundToDouble()),
+              onChanged: interactive ? _setPrice : null,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '${formatPesoShort(_minPrice)} min',
+                  style: GoogleFonts.plusJakartaSans(fontSize: 16, color: t.subtitleColor),
                 ),
-                cursorColor: AppColors.accentPurple,
-                decoration: InputDecoration(
-                  prefixText: '\u20b1',
-                  prefixStyle: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: error != null ? AppColors.error : AppColors.textDark,
+                Text(
+                  '${formatPesoShort(_maxPrice)} max',
+                  style: GoogleFonts.plusJakartaSans(fontSize: 16, color: t.subtitleColor),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              for (var i = 0; i < 4; i++) ...[
+                if (i > 0) const SizedBox(width: 8),
+                Expanded(
+                  child: _QuickPriceChip(
+                    amount: _quickPrices[i],
+                    selected: (_price - _quickPrices[i]).abs() < 0.5,
+                    onTap: interactive ? () => _setPrice(_quickPrices[i]) : null,
                   ),
-                  hintText: '0.00',
-                  hintStyle: AppTextStyles.fieldInputLight.copyWith(color: AppColors.textMuted),
-                  suffixIcon: _priceController.text.isEmpty
-                      ? null
-                      : IconButton(
-                          icon: const Icon(Icons.cancel_rounded, color: AppColors.error, size: 20),
-                          onPressed: () => setState(() => _priceController.clear()),
-                        ),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 18),
                 ),
+              ],
+            ],
+          ),
+        ] else if (!_windowClosed)
+          const FtBanner(message: 'Free tickets can’t be listed for resale.'),
+        const SizedBox(height: 22),
+        FtSurfaceCard(
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 22),
+          radius: 26,
+          child: Column(
+            children: [
+              FtSummaryRow(label: 'Listing price', value: formatPesoShort(_price)),
+              const SizedBox(height: 14),
+              FtSummaryRow(
+                label: 'Resale fee (${(kResaleSellerFeeRate * 100).round()}%)',
+                value: '−${formatPesoShort(_fee)}',
               ),
-            ),
-            if (error != null) ...[
-              const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.errorBackground,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(Icons.warning_amber_rounded, size: 17, color: AppColors.error),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        error,
-                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.error, height: 1.3),
-                      ),
-                    ),
-                  ],
-                ),
+              const SizedBox(height: 16),
+              Divider(height: 1, thickness: 1, color: t.divider),
+              const SizedBox(height: 16),
+              FtSummaryRow(
+                label: 'You receive',
+                value: formatPesoShort(_receive),
+                valueColor: t.success,
+                strong: true,
               ),
             ],
-            const SizedBox(height: 10),
-            Text(
-              _windowClosed
-                  ? 'This event has already reached its resale cutoff.'
-                  : 'Enter a price within the allowed range to continue. This listing will automatically close on ${_formatCloseDateTime(event.resaleListingCloseTime)} — 24 hours before the event — and any unsold ticket will be returned to you.',
-              style: AppTextStyles.bodyMuted.copyWith(fontSize: 12, height: 1.4),
-            ),
-            const SizedBox(height: 26),
-            GradientPillButton(
-              label: 'List Ticket',
-              loading: _isSubmitting,
-              onPressed: _isValid ? _handleListTicket : null,
-            ),
-            const SizedBox(height: 14),
-            Center(
-              child: TextButton(
-                onPressed: () => Navigator.of(context).maybePop(),
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.accentPurple),
+          ),
+        ),
+        const SizedBox(height: 18),
+        FtNote(
+          icon: Icons.schedule_rounded,
+          text: _windowClosed
+              ? 'This event has already reached its resale cutoff.'
+              : 'Closes ${formatClosesAt(event.resaleListingCloseTime)}. Paid out after the buyer gets their new QR.',
+        ),
+      ],
+    );
+  }
+}
+
+/// One of the four quick price buttons under the slider.
+class _QuickPriceChip extends StatelessWidget {
+  const _QuickPriceChip({required this.amount, required this.selected, required this.onTap});
+
+  final double amount;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
+    final radius = BorderRadius.circular(28);
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: 'Set price to ${formatPesoShort(amount)}',
+      excludeSemantics: true,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: radius,
+          gradient: selected ? FairTixPalette.buttonGradient : null,
+          color: selected ? null : t.surfaceFill,
+          border: selected ? null : Border.all(color: t.surfaceBorder),
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            borderRadius: radius,
+            onTap: onTap,
+            child: Container(
+              height: 54,
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  formatPesoShort(amount),
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: selected ? Colors.white : t.secondaryText,
+                  ),
                 ),
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
+  }
+}
+
+/// Slider knob: a white disc with a purple ring around it.
+class _RingThumbShape extends SliderComponentShape {
+  const _RingThumbShape({required this.ring});
+
+  final Color ring;
+
+  static const double _outer = 16;
+  static const double _inner = 12;
+
+  @override
+  Size getPreferredSize(bool isEnabled, bool isDiscrete) => const Size.fromRadius(_outer);
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset center, {
+    required Animation<double> activationAnimation,
+    required Animation<double> enableAnimation,
+    required bool isDiscrete,
+    required TextPainter labelPainter,
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required TextDirection textDirection,
+    required double value,
+    required double textScaleFactor,
+    required Size sizeWithOverflow,
+  }) {
+    final canvas = context.canvas;
+    canvas.drawCircle(center, _outer, Paint()..color = ring);
+    canvas.drawCircle(center, _inner, Paint()..color = Colors.white);
   }
 }

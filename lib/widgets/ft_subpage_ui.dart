@@ -19,11 +19,16 @@ class FtSubpageScaffold extends StatelessWidget {
     this.bottomButton,
     this.bottomFooter,
     this.followTheme = false,
+    this.titleAtEnd = false,
   });
 
   final String title;
   final VoidCallback? onBack;
   final List<Widget> body;
+
+  /// True = the title sits at the right edge, in a quieter color, opposite the
+  /// back button (the "List for resale" layout).
+  final bool titleAtEnd;
 
   /// Main action pinned to the bottom (e.g. "Update Password").
   final Widget? bottomButton;
@@ -57,7 +62,7 @@ class FtSubpageScaffold extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            FtPageHeader(title: title, onBack: onBack),
+                            FtPageHeader(title: title, onBack: onBack, titleAtEnd: titleAtEnd),
                             const SizedBox(height: 22),
                             ...body,
                           ],
@@ -96,10 +101,16 @@ class FtSubpageScaffold extends StatelessWidget {
 
 /// Back button on the left, title centered.
 class FtPageHeader extends StatelessWidget {
-  const FtPageHeader({super.key, required this.title, required this.onBack});
+  const FtPageHeader({
+    super.key,
+    required this.title,
+    required this.onBack,
+    this.titleAtEnd = false,
+  });
 
   final String title;
   final VoidCallback? onBack;
+  final bool titleAtEnd;
 
   @override
   Widget build(BuildContext context) {
@@ -116,14 +127,17 @@ class FtPageHeader extends StatelessWidget {
               child: FtBackButton(onTap: onBack ?? () {}),
             ),
           ),
-          Semantics(
-            header: true,
-            child: Text(
-              title,
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 19,
-                fontWeight: FontWeight.w800,
-                color: t.titleColor,
+          Align(
+            alignment: titleAtEnd ? Alignment.centerRight : Alignment.center,
+            child: Semantics(
+              header: true,
+              child: Text(
+                title,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: titleAtEnd ? 18 : 19,
+                  fontWeight: FontWeight.w800,
+                  color: titleAtEnd ? t.secondaryText : t.titleColor,
+                ),
               ),
             ),
           ),

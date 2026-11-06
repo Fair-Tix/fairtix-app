@@ -103,7 +103,7 @@ serve(async (req) => {
       throw new Error('You need to be signed in to start a checkout.');
     }
 
-    const { description, tierId, listingId, planId, planName } = await req.json();
+    const { description, tierId, listingId, planId, planName, paymentMethod } = await req.json();
 
     // ORGANIZER SUBSCRIPTION: an organizer pays for a plan through the same
     // PayMongo Checkout Session. The price comes from the saved plan in
@@ -180,6 +180,13 @@ serve(async (req) => {
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
+    // Ticket purchases may narrow the PayMongo page to the one method the buyer
+    // picked in the app (GCash / Maya / Card). Anything else, or no choice at
+    // all, keeps the full list, so older app versions behave as before.
+    const methodTypes = ['gcash', 'paymaya', 'card'].includes(paymentMethod)
+      ? [paymentMethod]
+      : ['gcash', 'paymaya', 'card', 'grab_pay'];
+
     const isResale = typeof listingId === 'string' && listingId.length > 0;
 
     if (!isResale && (typeof tierId !== 'string' || tierId.length === 0)) {
@@ -270,7 +277,7 @@ serve(async (req) => {
             line_items: [
               { currency: 'PHP', amount: amountInCentavos, name: itemName, quantity: 1 },
             ],
-            payment_method_types: ['gcash', 'paymaya', 'card', 'grab_pay'],
+            payment_method_types: methodTypes,
             description: itemName,
             metadata,
             success_url: `${APP_RETURN_URL_BASE}/success`,

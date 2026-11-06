@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../models/notification_settings.dart';
-import '../../theme/app_theme.dart';
-import '../../widgets/purple_header_bar.dart';
+import '../../widgets/ft_dark_ui.dart';
+import '../../widgets/ft_resale_ui.dart';
+import '../../widgets/ft_subpage_ui.dart';
 
-/// "Notification Preferences" screen — lets the user choose which
-/// channels (push/email) and which optional notification types
-/// (resale activity, promotions) they want to receive. Transactional
-/// notifications (ticket/purchase, cancellations/refunds) always stay
-/// on and are shown as locked.
+/// "Notifications" settings — which channels (in-app, email, push) and which
+/// kinds of notification the user wants. In-app notifications, ticket updates
+/// and account/security alerts are transactional, so they stay on and their
+/// switches are locked. Dark design that follows the Light / Dark switch.
 class NotificationPreferencesScreen extends StatefulWidget {
   const NotificationPreferencesScreen({super.key});
 
@@ -17,216 +18,228 @@ class NotificationPreferencesScreen extends StatefulWidget {
 }
 
 class _NotificationPreferencesScreenState extends State<NotificationPreferencesScreen> {
+  void _explainLocked() {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('This one is always on so you never miss a purchase, refund or entry update.'),
+        ),
+      );
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = notificationSettings;
-    return Scaffold(
-      backgroundColor: AppColors.pageBackground,
-      appBar: PurpleHeaderBar(
-        title: 'Notification Preferences',
-        onBack: () => Navigator.of(context).maybePop(),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _SectionCard(
-              title: 'Channels',
-              children: [
-                _ToggleRow(
-                  icon: Icons.notifications_active_rounded,
-                  label: 'Push Notifications',
-                  subtitle: 'Alerts sent to this device',
-                  value: settings.pushEnabled,
-                  onChanged: (v) => setState(() => settings.pushEnabled = v),
-                ),
-                const Divider(color: AppColors.inputBorderLight, height: 28),
-                _ToggleRow(
-                  icon: Icons.mail_outline_rounded,
-                  label: 'Email Notifications',
-                  subtitle: 'Alerts sent to your registered email',
-                  value: settings.emailEnabled,
-                  onChanged: (v) => setState(() => settings.emailEnabled = v),
-                ),
-                const Divider(color: AppColors.inputBorderLight, height: 28),
-                const _LockedRow(
-                  icon: Icons.smartphone_rounded,
-                  label: 'In-App Notifications',
-                  subtitle: 'Always on \u2014 shown in your Notifications feed',
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            _SectionCard(
-              title: 'Notification Types',
-              children: [
-                const _LockedRow(
-                  icon: Icons.confirmation_number_rounded,
-                  label: 'Ticket & Purchase Updates',
-                  subtitle: 'Purchase confirmations and QR code updates. Always on.',
-                ),
-                const Divider(color: AppColors.inputBorderLight, height: 28),
-                const _LockedRow(
-                  icon: Icons.event_busy_rounded,
-                  label: 'Event Cancellations & Refunds',
-                  subtitle: 'Time-sensitive refund notices. Always on.',
-                ),
-                const Divider(color: AppColors.inputBorderLight, height: 28),
-                _ToggleRow(
-                  icon: Icons.swap_horiz_rounded,
-                  label: 'Resale Activity',
-                  subtitle: 'Listing created, ticket sold, resale completed',
-                  value: settings.resaleActivityEnabled,
-                  onChanged: (v) => setState(() => settings.resaleActivityEnabled = v),
-                ),
-                const Divider(color: AppColors.inputBorderLight, height: 28),
-                _ToggleRow(
-                  icon: Icons.campaign_rounded,
-                  label: 'Promotional Announcements',
-                  subtitle: 'New event alerts from organizers you\u2019ve bought from',
-                  value: settings.promoEnabled,
-                  onChanged: (v) => setState(() => settings.promoEnabled = v),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.inputFillLight,
-                borderRadius: BorderRadius.circular(12),
+    return FtSubpageScaffold(
+      title: 'Notifications',
+      onBack: () => Navigator.of(context).maybePop(),
+      followTheme: true,
+      body: [
+        const FtSectionLabel('Channels'),
+        const SizedBox(height: 12),
+        FtSurfaceCard(
+          padding: const EdgeInsets.symmetric(horizontal: 22),
+          child: _RowGroup(
+            rows: [
+              _ToggleRow(
+                title: 'In-app',
+                subtitle: 'Inside FairTix',
+                value: true,
+                locked: true,
+                onLockedTap: _explainLocked,
               ),
-              child: Row(
-                children: [
-                  const Icon(Icons.info_outline, size: 16, color: AppColors.accentPurple),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Security and transaction alerts can\u2019t be turned off, to make sure you never miss a refund or entry update.',
-                      style: AppTextStyles.bodyMuted.copyWith(fontSize: 12),
-                    ),
-                  ),
-                ],
+              _ToggleRow(
+                title: 'Email',
+                subtitle: 'To your verified email',
+                value: settings.emailEnabled,
+                onChanged: (v) => setState(() => settings.emailEnabled = v),
               ),
-            ),
-          ],
+              _ToggleRow(
+                title: 'Push',
+                subtitle: 'On this device',
+                value: settings.pushEnabled,
+                onChanged: (v) => setState(() => settings.pushEnabled = v),
+              ),
+            ],
+          ),
         ),
-      ),
+        const SizedBox(height: 26),
+        const FtSectionLabel('What to notify me about'),
+        const SizedBox(height: 12),
+        FtSurfaceCard(
+          padding: const EdgeInsets.symmetric(horizontal: 22),
+          child: _RowGroup(
+            rows: [
+              _ToggleRow(
+                title: 'Tickets',
+                subtitle: 'Purchases, QR updates, event changes',
+                value: true,
+                locked: true,
+                onLockedTap: _explainLocked,
+              ),
+              _ToggleRow(
+                title: 'Resale',
+                subtitle: 'Listings, sales, expiries',
+                value: settings.resaleActivityEnabled,
+                onChanged: (v) => setState(() => settings.resaleActivityEnabled = v),
+              ),
+              _ToggleRow(
+                title: 'Account',
+                subtitle: 'Verification and security',
+                value: true,
+                locked: true,
+                onLockedTap: _explainLocked,
+              ),
+              _ToggleRow(
+                title: 'Promotions',
+                subtitle: 'New events from organizers you bought from',
+                value: settings.promoEnabled,
+                onChanged: (v) => setState(() => settings.promoEnabled = v),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+        const FtNote(
+          icon: Icons.lock_outline_rounded,
+          text: 'Ticket, refund and account alerts can’t be turned off, so you never miss one.',
+        ),
+      ],
     );
   }
 }
 
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.title, required this.children});
+/// Rows separated by hairlines.
+class _RowGroup extends StatelessWidget {
+  const _RowGroup({required this.rows});
 
-  final String title;
-  final List<Widget> children;
+  final List<Widget> rows;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.cardWhite,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 18, offset: const Offset(0, 6)),
+    final t = FtAuthTheme.of(context);
+    return Column(
+      children: [
+        for (var i = 0; i < rows.length; i++) ...[
+          if (i > 0) Divider(height: 1, thickness: 1, color: t.divider),
+          rows[i],
         ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800, color: AppColors.textDark)),
-          const SizedBox(height: 14),
-          ...children,
-        ],
-      ),
+      ],
     );
   }
 }
 
 class _ToggleRow extends StatelessWidget {
   const _ToggleRow({
-    required this.icon,
-    required this.label,
+    required this.title,
     required this.subtitle,
     required this.value,
-    required this.onChanged,
+    this.onChanged,
+    this.locked = false,
+    this.onLockedTap,
   });
 
-  final IconData icon;
-  final String label;
+  final String title;
   final String subtitle;
   final bool value;
-  final ValueChanged<bool> onChanged;
+  final ValueChanged<bool>? onChanged;
+
+  /// Always on: the switch is dimmed and tapping it explains why.
+  final bool locked;
+  final VoidCallback? onLockedTap;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 18, color: AppColors.accentPurple),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: AppColors.textDark)),
-              const SizedBox(height: 3),
-              Text(subtitle, style: AppTextStyles.bodyMuted.copyWith(fontSize: 12)),
-            ],
+    final t = FtAuthTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 18),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: t.titleColor,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 15,
+                    height: 1.3,
+                    color: t.subtitleColor,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        const SizedBox(width: 8),
-        Switch(
-          value: value,
-          onChanged: onChanged,
-          activeThumbColor: AppColors.accentPurple,
-        ),
-      ],
+          const SizedBox(width: 14),
+          _FtSwitch(
+            label: title,
+            value: value,
+            locked: locked,
+            onChanged: locked ? (_) => onLockedTap?.call() : onChanged,
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _LockedRow extends StatelessWidget {
-  const _LockedRow({required this.icon, required this.label, required this.subtitle});
+/// Purple pill switch with a white knob.
+class _FtSwitch extends StatelessWidget {
+  const _FtSwitch({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    this.locked = false,
+  });
 
-  final IconData icon;
   final String label;
-  final String subtitle;
+  final bool value;
+  final bool locked;
+  final ValueChanged<bool>? onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 18, color: AppColors.textMuted),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text(label, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: AppColors.textDark)),
-                  const SizedBox(width: 6),
-                  const Icon(Icons.lock_outline_rounded, size: 13, color: AppColors.textMuted),
-                ],
-              ),
-              const SizedBox(height: 3),
-              Text(subtitle, style: AppTextStyles.bodyMuted.copyWith(fontSize: 12)),
-            ],
+    final t = FtAuthTheme.of(context);
+    final reduce = MediaQuery.disableAnimationsOf(context);
+    return Semantics(
+      toggled: value,
+      enabled: !locked,
+      label: locked ? '$label, always on' : label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onChanged == null ? null : () => onChanged!(!value),
+        child: Opacity(
+          opacity: locked ? 0.6 : 1,
+          child: AnimatedContainer(
+            duration: reduce ? Duration.zero : const Duration(milliseconds: 160),
+            width: 60,
+            height: 34,
+            padding: const EdgeInsets.all(3),
+            alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+            decoration: BoxDecoration(
+              color: value ? FtColors.glow : (t.isDark ? t.progressTrack : t.surfaceBorder),
+              borderRadius: BorderRadius.circular(17),
+              border: value ? Border.all(color: FtColors.fieldBorderFocused, width: 1) : null,
+            ),
+            child: Container(
+              width: 28,
+              height: 28,
+              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+            ),
           ),
         ),
-        const SizedBox(width: 8),
-        Switch(
-          value: true,
-          onChanged: null,
-        ),
-      ],
+      ),
     );
   }
 }

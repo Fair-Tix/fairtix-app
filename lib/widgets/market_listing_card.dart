@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
-import '../models/event.dart';
 import '../models/ticket.dart';
-import '../theme/app_theme.dart';
+import '../theme/fairtix_palette.dart';
+import 'ft_dark_ui.dart';
+import 'ft_resale_ui.dart' show formatClosesAt;
+import 'ft_transaction_ui.dart' show formatPesoShort;
 
 /// Card for a listing in the "Market Listings" section of the Resale
-/// Market — another user's ticket that's available to buy.
+/// Market — another user's ticket that's available to buy. Draws with the
+/// surrounding [FtAuthTheme].
 class MarketListingCard extends StatelessWidget {
   const MarketListingCard({super.key, required this.listing, required this.onBuyNow, this.isBlocked = false});
 
@@ -18,31 +22,26 @@ class MarketListingCard extends StatelessWidget {
   /// visible but the buy action is disabled with an explanatory label.
   final bool isBlocked;
 
-  static const _closesFormat = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-  String _formatCloseDate(DateTime dt) {
-    final month = _closesFormat[dt.month - 1];
-    return '$month ${dt.day}';
-  }
-
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
     // The buyer pays exactly the listing price. The struck-through number is
     // what the original owner paid, so a discounted listing reads as a deal.
     final resalePrice = listing.resalePrice ?? listing.tier.price;
     final originalPrice = listing.originalPrice;
-    final bool isDiscounted = resalePrice < originalPrice;
+    final isDiscounted = resalePrice < originalPrice;
     final closesAt = listing.event.resaleListingCloseTime;
+    final accent = listing.event.accentColor;
+    final hsl = HSLColor.fromColor(accent);
+    final deeper = hsl.withLightness((hsl.lightness - 0.12).clamp(0.0, 1.0)).toColor();
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.cardWhite,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 14, offset: const Offset(0, 6)),
-        ],
+        color: t.surfaceFill,
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: t.surfaceBorder),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -51,12 +50,16 @@ class MarketListingCard extends StatelessWidget {
             width: 64,
             height: 64,
             decoration: BoxDecoration(
-              color: listing.event.accentColor,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(18),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [accent, deeper],
+              ),
             ),
-            child: const Icon(Icons.music_note_rounded, color: AppColors.white, size: 24),
+            child: const Icon(Icons.confirmation_number_outlined, color: Colors.white, size: 28),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -65,19 +68,24 @@ class MarketListingCard extends StatelessWidget {
                   listing.event.title,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textDark),
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 18,
+                    height: 1.2,
+                    fontWeight: FontWeight.w800,
+                    color: t.titleColor,
+                  ),
                 ),
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    const Icon(Icons.calendar_today_rounded, size: 12, color: AppColors.textMuted),
-                    const SizedBox(width: 5),
+                    Icon(Icons.calendar_today_outlined, size: 14, color: t.secondaryText),
+                    const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        listing.event.dateLabel.split(' \u2022 ').first,
+                        listing.event.dateLabel,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.bodyMuted.copyWith(fontSize: 11.5),
+                        style: GoogleFonts.plusJakartaSans(fontSize: 14, color: t.subtitleColor),
                       ),
                     ),
                   ],
@@ -86,62 +94,97 @@ class MarketListingCard extends StatelessWidget {
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                       decoration: BoxDecoration(
-                        color: AppColors.accentPurple,
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(999),
+                        gradient: FairTixPalette.buttonGradient,
                       ),
                       child: Text(
-                        listing.tier.name,
-                        style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: AppColors.white),
+                        listing.tier.name.toUpperCase(),
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    const Icon(Icons.verified_rounded, size: 15, color: AppColors.success),
+                    const SizedBox(width: 8),
+                    Icon(Icons.verified_rounded, size: 18, color: t.success),
                   ],
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 Text(
-                  'Listing closes ${_formatCloseDate(closesAt)}',
-                  style: AppTextStyles.bodyMuted.copyWith(fontSize: 10.5),
+                  'Listing closes ${formatClosesAt(closesAt)}',
+                  style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: t.subtitleColor),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              const Text('RESALE PRICE', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: AppColors.textMuted, letterSpacing: 0.3)),
+              Text(
+                'RESALE PRICE',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.6,
+                  color: t.subtitleColor,
+                ),
+              ),
               const SizedBox(height: 2),
               if (isDiscounted)
                 Text(
-                  formatPeso(originalPrice).replaceAll('.00', ''),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textMuted,
+                  formatPesoShort(originalPrice),
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 13,
+                    color: t.subtitleColor,
                     decoration: TextDecoration.lineThrough,
                   ),
                 ),
               Text(
-                formatPeso(resalePrice).replaceAll('.00', ''),
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: AppColors.accentPurple),
+                formatPesoShort(resalePrice),
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: t.activeAccent,
+                ),
               ),
-              const SizedBox(height: 8),
-              SizedBox(
-                height: 32,
-                child: ElevatedButton(
-                  onPressed: isBlocked ? null : onBuyNow,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isBlocked ? AppColors.textMuted.withValues(alpha: 0.3) : AppColors.accentPurple,
-                    foregroundColor: AppColors.white,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                  ),
-                  child: Text(
-                    isBlocked ? 'Limit Reached' : 'Buy Now',
-                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
+              const SizedBox(height: 10),
+              Semantics(
+                button: true,
+                enabled: !isBlocked,
+                label: isBlocked ? 'Limit reached' : 'Buy now',
+                excludeSemantics: true,
+                child: Opacity(
+                  opacity: isBlocked ? 0.5 : 1,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(999),
+                      gradient: isBlocked ? null : FairTixPalette.buttonGradient,
+                      color: isBlocked ? t.progressTrack : null,
+                    ),
+                    child: Material(
+                      type: MaterialType.transparency,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(999),
+                        onTap: isBlocked ? null : onBuyNow,
+                        child: Container(
+                          height: 40,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          alignment: Alignment.center,
+                          child: Text(
+                            isBlocked ? 'Limit reached' : 'Buy now',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),

@@ -20,8 +20,8 @@ class AppBottomNav extends StatelessWidget {
   final ValueChanged<int> onTap;
 
   /// Shell tab indexes whose screens already follow the Light / Dark switch.
-  /// 0 = Home, 1 = My Tickets, 3 = Profile.
-  static const Set<int> _lightReadyTabs = {0, 1, 3};
+  /// 0 = Home, 1 = My Tickets, 2 = Resale, 3 = Profile.
+  static const Set<int> _lightReadyTabs = {0, 1, 2, 3};
 
   static const _items = [
     (icon: Icons.home_outlined, activeIcon: Icons.home_rounded, label: 'Home'),

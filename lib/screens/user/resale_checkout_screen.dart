@@ -2,19 +2,21 @@ import 'dart:async';
 
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../models/event.dart';
 import '../../models/ticket.dart';
 import '../../services/notification_repository.dart';
 import '../../services/public_event_repository.dart';
 import '../../services/ticket_repository.dart';
 import '../../services/transaction_repository.dart';
 import '../../services/user_session.dart';
-import '../../theme/app_theme.dart';
-import '../../widgets/gradient_pill_button.dart';
-import '../../widgets/purple_header_bar.dart';
+import '../../theme/fairtix_palette.dart';
+import '../../widgets/ft_dark_ui.dart';
+import '../../widgets/ft_resale_ui.dart';
+import '../../widgets/ft_subpage_ui.dart';
+import '../../widgets/ft_transaction_ui.dart' show formatPesoShort;
 import 'checkout_confirmation_screen.dart';
 
 /// Checkout screen for buying another user's resale listing. Works exactly
@@ -43,6 +45,10 @@ enum _CheckoutStage { review, creatingLink, awaitingPayment, finalizing }
 
 class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> with WidgetsBindingObserver {
   _CheckoutStage _stage = _CheckoutStage.review;
+
+  /// Payment method the buyer picked (a PayMongo method type). The server
+  /// limits the PayMongo page to it; an older server ignores it and shows all.
+  String _method = 'gcash';
   String? _checkoutUrl;
   String? _sessionId;
   String? _errorMessage;
@@ -112,6 +118,7 @@ class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> with Widget
         body: {
           'description': 'Resale – ${listing.tier.name} – ${listing.event.title}',
           'listingId': listingId,
+          'paymentMethod': _method,
         },
       );
 
@@ -268,227 +275,285 @@ class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> with Widget
     );
   }
 
+  static const _methods = [
+    (label: 'GCash', type: 'gcash'),
+    (label: 'Maya', type: 'paymaya'),
+    (label: 'Card', type: 'card'),
+  ];
+
+  /// "Hanz" -> "H•••z": the seller is only identified by their first name,
+  /// and only by its ends.
+  String _maskName(String name) {
+    final clean = name.trim();
+    if (clean.isEmpty) return 'Verified seller';
+    if (clean.length <= 2) return '${clean[0]}•••';
+    return '${clean[0]}•••${clean[clean.length - 1]}';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final t = FtAuthTheme.live(context);
     final listing = widget.listing;
     // The buyer pays exactly the listing price; FairTix's resale fee comes out
     // of the seller's proceeds.
     final resalePrice = listing.resalePrice ?? listing.tier.price;
     final isFree = resalePrice <= 0;
     final isBusy = _stage == _CheckoutStage.creatingLink || _stage == _CheckoutStage.finalizing;
+    final waiting = _stage == _CheckoutStage.awaitingPayment || _stage == _CheckoutStage.finalizing;
 
-    return Scaffold(
-      backgroundColor: AppColors.pageBackground,
-      appBar: PurpleHeaderBar(
-        title: 'Checkout',
-        onBack: () => Navigator.of(context).maybePop(),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.cardWhite,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 20, offset: const Offset(0, 8)),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return FtSubpageScaffold(
+      title: 'Resale checkout',
+      onBack: isBusy ? null : () => Navigator.of(context).maybePop(),
+      followTheme: true,
+      bottomButton: waiting
+          ? SizedBox(
+              height: 58,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text('Order Summary', style: AppTextStyles.sectionHeading),
-                  const SizedBox(height: 16),
-                  const Divider(color: AppColors.inputBorderLight, height: 1),
-                  const SizedBox(height: 16),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 56,
-                        height: 56,
-                        decoration: BoxDecoration(
-                          color: listing.event.accentColor,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.music_note_rounded, color: AppColors.white, size: 24),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${listing.tier.name} – ${listing.event.title}',
-                              style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: AppColors.textDark),
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.accentPurple,
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Text(
-                                    listing.tier.name.toUpperCase(),
-                                    style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: AppColors.white),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                const Icon(Icons.verified_rounded, size: 14, color: AppColors.success),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2.4, color: t.activeAccent),
                   ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      const Icon(Icons.person_outline_rounded, size: 15, color: AppColors.textMuted),
-                      const SizedBox(width: 6),
-                      Text('Sold by ${listing.ownerName}', style: AppTextStyles.bodyMuted.copyWith(fontSize: 12.5)),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  const Divider(color: AppColors.inputBorderLight, height: 1),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Resale Price', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textDark)),
-                      Text(
-                        isFree ? 'Free' : formatPeso(resalePrice),
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.accentPurple),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.inputFillLight,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.info_outline, size: 16, color: AppColors.accentPurple),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            isFree
-                                ? 'This listing is free — no payment is needed. Tap the button below to get it.'
-                                : 'You’ll pay via PayMongo’s Sandbox checkout page (test mode — no real money is processed). The ticket is transferred to you once the payment is confirmed.',
-                            style: AppTextStyles.bodyMuted.copyWith(fontSize: 12),
-                          ),
-                        ),
-                      ],
+                  const SizedBox(width: 12),
+                  Text(
+                    _stage == _CheckoutStage.finalizing
+                        ? 'Confirming your payment…'
+                        : 'Waiting for your payment…',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: t.activeAccent,
                     ),
                   ),
                 ],
               ),
+            )
+          : FtGradientButton(
+              label: isFree ? 'Get free ticket' : 'Buy for ${formatPesoShort(resalePrice)}',
+              loading: isBusy,
+              onPressed: _handleStartPayment,
             ),
-            if (_stage == _CheckoutStage.awaitingPayment) ...[
-              const SizedBox(height: 20),
+      bottomFooter: TextButton(
+        onPressed: isBusy ? null : () => Navigator.of(context).maybePop(),
+        child: Text(
+          'Cancel and go back',
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 14.5,
+            fontWeight: FontWeight.w600,
+            color: t.secondaryText,
+          ),
+        ),
+      ),
+      body: [
+        FtSurfaceCard(
+          padding: const EdgeInsets.all(20),
+          radius: 26,
+          child: Row(
+            children: [
               Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
+                width: 82,
+                height: 82,
                 decoration: BoxDecoration(
-                  color: AppColors.accentPurple.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.accentPurple.withValues(alpha: 0.3)),
+                  color: const Color(0xFF4F31B8),
+                  borderRadius: BorderRadius.circular(24),
                 ),
+                child: const Icon(Icons.verified_user_outlined, color: Colors.white, size: 38),
+              ),
+              const SizedBox(width: 18),
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.open_in_new_rounded, size: 18, color: AppColors.accentPurple),
-                        SizedBox(width: 8),
-                        Text('Complete your payment', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.accentPurple)),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
                     Text(
-                      'A PayMongo Sandbox payment page opened in your browser. After you authorize the test payment there, you’ll be brought back here automatically and your ticket will be confirmed.',
-                      style: AppTextStyles.bodyMuted.copyWith(fontSize: 12.5, height: 1.4),
-                    ),
-                    if (_checkoutUrl != null) ...[
-                      const SizedBox(height: 10),
-                      InkWell(
-                        onTap: () => launchUrl(Uri.parse(_checkoutUrl!), mode: LaunchMode.externalApplication),
-                        child: Text(
-                          'Reopen payment page',
-                          style: AppTextStyles.bodyMuted.copyWith(
-                            fontSize: 12.5,
-                            color: AppColors.accentPurple,
-                            fontWeight: FontWeight.w700,
-                            decoration: TextDecoration.underline,
-                          ),
-                        ),
+                      listing.event.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 26,
+                        height: 1.15,
+                        fontWeight: FontWeight.w800,
+                        color: t.titleColor,
                       ),
-                    ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${listing.tier.name} • ${listing.event.dateLabel}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.plusJakartaSans(fontSize: 17, color: t.subtitleColor),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Seller ${_maskName(listing.ownerName)} · Verified',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.plusJakartaSans(fontSize: 17, color: t.subtitleColor),
+                    ),
                   ],
                 ),
               ),
             ],
-            if (_errorMessage != null) ...[
+          ),
+        ),
+        const SizedBox(height: 26),
+        const FtSectionLabel('Pay with'),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            for (final method in _methods)
+              _MethodPill(
+                label: method.label,
+                selected: _method == method.type,
+                onTap: _stage == _CheckoutStage.review
+                    ? () => setState(() => _method = method.type)
+                    : null,
+              ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        FtSurfaceCard(
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 22),
+          radius: 26,
+          child: Column(
+            children: [
+              FtSummaryRow(
+                label: 'Ticket price',
+                value: isFree ? 'Free' : formatPesoShort(resalePrice),
+              ),
+              const SizedBox(height: 14),
+              FtSummaryRow(label: 'Face value', value: formatPesoShort(listing.originalPrice)),
+              const SizedBox(height: 14),
+              FtSummaryRow(label: 'Buyer fees', value: 'None', valueColor: t.success),
               const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.error.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
-                ),
-                child: Text(
-                  _errorMessage!,
-                  style: TextStyle(fontSize: 12.5, color: AppColors.error, height: 1.4),
-                ),
+              Divider(height: 1, thickness: 1, color: t.divider),
+              const SizedBox(height: 16),
+              FtSummaryRow(
+                label: 'Total',
+                value: isFree ? 'Free' : formatPesoShort(resalePrice),
+                strong: true,
               ),
             ],
-            const SizedBox(height: 24),
-            if (_stage == _CheckoutStage.awaitingPayment || _stage == _CheckoutStage.finalizing)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2.4, color: AppColors.accentPurple),
+          ),
+        ),
+        const SizedBox(height: 18),
+        FtNote(
+          icon: Icons.verified_user_outlined,
+          text: isFree
+              ? 'This listing is free — no payment is needed. Tap the button below to get it.'
+              : 'Your payment is held until your new QR is issued.',
+        ),
+        if (!isFree) ...[
+          const SizedBox(height: 10),
+          const FtNote(
+            icon: Icons.info_outline_rounded,
+            text: 'Paid via PayMongo Sandbox (test mode): no real money is processed.',
+          ),
+        ],
+        if (_stage == _CheckoutStage.awaitingPayment) ...[
+          const SizedBox(height: 22),
+          FtSurfaceCard(
+            padding: const EdgeInsets.all(20),
+            radius: 24,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.open_in_new_rounded, size: 20, color: t.activeAccent),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Complete your payment',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: t.activeAccent,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'A PayMongo Sandbox payment page opened in your browser. After you authorize the test payment there, you’ll be brought back here automatically and your ticket will be confirmed.',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 14.5,
+                    height: 1.45,
+                    color: t.subtitleColor,
                   ),
-                  const SizedBox(width: 12),
-                  Text(
-                    _stage == _CheckoutStage.finalizing ? 'Confirming your payment…' : 'Waiting for your payment…',
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.accentPurple),
+                ),
+                if (_checkoutUrl != null) ...[
+                  const SizedBox(height: 12),
+                  InkWell(
+                    onTap: () => launchUrl(Uri.parse(_checkoutUrl!), mode: LaunchMode.externalApplication),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(
+                        'Reopen payment page',
+                        style: t.link().copyWith(decoration: TextDecoration.underline),
+                      ),
+                    ),
                   ),
                 ],
-              )
-            else
-              GradientPillButton(
-                label: isFree ? 'Get Free Ticket' : 'Pay with PayMongo',
-                loading: isBusy,
-                onPressed: _handleStartPayment,
-              ),
-            const SizedBox(height: 14),
-            Center(
-              child: TextButton(
-                onPressed: isBusy ? null : () => Navigator.of(context).maybePop(),
-                child: const Text(
-                  'Cancel and go back',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.textMuted, decoration: TextDecoration.underline),
+              ],
+            ),
+          ),
+        ],
+        if (_errorMessage != null) ...[
+          const SizedBox(height: 16),
+          FtBanner(message: _errorMessage!),
+        ],
+      ],
+    );
+  }
+}
+
+/// One of the payment methods (GCash / Maya / Card). The selected one is
+/// filled with the brand gradient. [onTap] is null once payment has started.
+class _MethodPill extends StatelessWidget {
+  const _MethodPill({required this.label, required this.selected, required this.onTap});
+
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
+    final radius = BorderRadius.circular(24);
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: 'Pay with $label',
+      excludeSemantics: true,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: radius,
+          gradient: selected ? FairTixPalette.buttonGradient : null,
+          color: selected ? null : t.surfaceFill,
+          border: selected ? null : Border.all(color: t.surfaceBorder),
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            borderRadius: radius,
+            onTap: onTap,
+            child: Container(
+              height: 46,
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              alignment: Alignment.center,
+              child: Text(
+                label,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 16,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
+                  color: selected ? Colors.white : t.secondaryText,
                 ),
               ),
             ),
-          ],
+          ),
         ),
       ),
     );

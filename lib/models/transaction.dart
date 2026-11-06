@@ -13,6 +13,17 @@ String formatDateTime(DateTime dt) {
   return '${months[dt.month - 1]} ${dt.day}, ${dt.year} \u2022 $hour12:$minute $period';
 }
 
+const _shortMonths = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+/// Formats a DateTime like "Oct 14".
+String formatShortDate(DateTime dt) => '${_shortMonths[dt.month - 1]} ${dt.day}';
+
+/// Formats a DateTime like "Oct 14, 2026".
+String formatMediumDate(DateTime dt) => '${formatShortDate(dt)}, ${dt.year}';
+
 enum TransactionCategory { ticketPurchase, resalePurchase, resaleSale, refund }
 
 enum TransactionStatus { completed, pending, failed, refunded }

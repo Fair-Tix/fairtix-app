@@ -1,211 +1,281 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
-import '../../theme/app_theme.dart';
-import '../../widgets/purple_header_bar.dart';
-import 'simple_placeholder_screen.dart';
+import '../../services/support_contact.dart';
+import '../../widgets/ft_dark_ui.dart';
+import '../../widgets/ft_resale_ui.dart';
+import '../../widgets/ft_subpage_ui.dart';
 import 'terms_privacy_screen.dart';
 
-/// "Help & Support" screen — FAQ, and entry points for contacting
-/// support, reporting a problem, and reading the Terms & Privacy Policy.
-class HelpSupportScreen extends StatelessWidget {
+/// "Help & Support" screen — a short FAQ, the support email, and the Terms &
+/// Privacy Policy. Dark design that follows the Light / Dark switch.
+class HelpSupportScreen extends StatefulWidget {
   const HelpSupportScreen({super.key});
 
+  @override
+  State<HelpSupportScreen> createState() => _HelpSupportScreenState();
+}
+
+class _HelpSupportScreenState extends State<HelpSupportScreen> {
   static const _faqs = [
     (
-      question: 'Why do I need to verify my ID?',
+      question: 'How does resale work?',
       answer:
-          'FairTix links every ticket to a verified account to prevent duplicate registrations and keep '
-          'resale limited to genuine buyers. Verification requires a one-time email code, a valid ID, and '
-          'a quick live selfie \u2014 after that, your name and contact details are locked to protect your account.',
+          'You can list a ticket for 50%–100% of the price you paid. A verified buyer pays the '
+          'listing price and gets a new QR code, so your old QR stops working. FairTix keeps a flat 5% '
+          'from what you receive; buyers pay no extra fees. Listings close automatically 24 hours before '
+          'the event, and a ticket that doesn’t sell comes back to you.',
     ),
     (
-      question: 'How does resale pricing work?',
+      question: 'When do I get my money?',
       answer:
-          'You can only resell a ticket at or below its original purchase price, down to a floor of 50% of '
-          'that price. This keeps resale fair and prevents scalping, while still giving you flexibility if '
-          'you can no longer attend.',
+          'The buyer’s payment is held until their new QR code has been issued. After that, your '
+          'payout (the listing price minus the 5% resale fee) is released to you. You can follow it under '
+          'Profile › Transactions.',
     ),
     (
-      question: 'What if I don\u2019t attend the event?',
+      question: 'My QR code isn’t working',
       answer:
-          'Your ticket simply goes unused \u2014 there\u2019s no refund for not showing up, since a refund is only '
-          'issued if the organizer cancels the event.',
+          'Open the ticket from My Tickets in the account that owns it, raise your screen brightness, and '
+          'keep the whole code visible. A ticket that was resold or already scanned won’t scan again, '
+          'and the previous owner’s QR stops working once it is resold. If it still fails, email us '
+          'with your ticket reference.',
     ),
     (
-      question: 'How do refunds work if an event is canceled?',
+      question: 'Why is my account pending?',
       answer:
-          'Refunds are issued automatically, only when an organizer cancels a published event. If your '
-          'ticket was resold before the cancellation, the refund goes to whoever holds it at the time of '
-          'cancellation, not the original buyer. Refunds are not issued for a change of mind.',
+          'FairTix checks every new account’s ID and selfie before it can buy or resell tickets. You '
+          'can browse events while you wait, and you’ll get a notification once an admin approves '
+          'your account. If it was rejected, email us.',
+    ),
+    (
+      question: 'How do refunds work?',
+      answer:
+          'Refunds are issued automatically, only when an organizer cancels a published event, and they go '
+          'to whoever holds the ticket at that time. There are no refunds for a change of mind or for not '
+          'attending.',
     ),
   ];
 
+  int? _openIndex;
+
+  Future<void> _emailSupport() async {
+    final opened = await FairTixSupport.compose(subject: 'FairTix support request');
+    if (opened || !mounted) return;
+    await FairTixSupport.copyEmail();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(content: Text('No email app found. The address was copied.')),
+      );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.pageBackground,
-      appBar: PurpleHeaderBar(
-        title: 'Help & Support',
-        onBack: () => Navigator.of(context).maybePop(),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _SectionCard(
-              title: 'Frequently Asked Questions',
-              child: Theme(
-                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                child: ExpansionPanelList.radio(
-                  elevation: 0,
-                  expandedHeaderPadding: EdgeInsets.zero,
-                  materialGapSize: 0,
-                  children: _faqs
-                      .map(
-                        (faq) => ExpansionPanelRadio(
-                          value: faq.question,
-                          canTapOnHeader: true,
-                          backgroundColor: Colors.transparent,
-                          headerBuilder: (context, isExpanded) => Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                            child: Text(
-                              faq.question,
-                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textDark),
-                            ),
-                          ),
-                          body: Padding(
-                            padding: const EdgeInsets.only(bottom: 14),
-                            child: Text(
-                              faq.answer,
-                              style: AppTextStyles.bodyMuted.copyWith(fontSize: 13, height: 1.5),
-                            ),
-                          ),
-                        ),
-                      )
-                      .toList(),
+    final t = FtAuthTheme.live(context);
+    return FtSubpageScaffold(
+      title: 'Help & Support',
+      onBack: () => Navigator.of(context).maybePop(),
+      followTheme: true,
+      body: [
+        FtSurfaceCard(
+          padding: const EdgeInsets.symmetric(horizontal: 22),
+          child: Column(
+            children: [
+              for (var i = 0; i < _faqs.length; i++) ...[
+                if (i > 0) Divider(height: 1, thickness: 1, color: t.divider),
+                _FaqRow(
+                  question: _faqs[i].question,
+                  answer: _faqs[i].answer,
+                  open: _openIndex == i,
+                  onTap: () => setState(() => _openIndex = _openIndex == i ? null : i),
                 ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            _SectionCard(
-              title: 'Get Help',
-              child: Column(
-                children: [
-                  _NavRow(
-                    icon: Icons.support_agent_rounded,
-                    label: 'CONTACT SUPPORT',
-                    value: 'Message the FairTix Team',
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const SimplePlaceholderScreen(
-                          title: 'Contact Support',
-                          icon: Icons.support_agent_rounded,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const Divider(color: AppColors.inputBorderLight, height: 28),
-                  _NavRow(
-                    icon: Icons.flag_outlined,
-                    label: 'REPORT A PROBLEM',
-                    value: 'Report Fraud or a Bug',
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const SimplePlaceholderScreen(
-                          title: 'Report a Problem',
-                          icon: Icons.flag_outlined,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 18),
-            _SectionCard(
-              title: 'Legal',
-              child: _NavRow(
-                icon: Icons.description_outlined,
-                label: 'TERMS & PRIVACY POLICY',
-                value: 'Terms of Use & Privacy Policy',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const TermsPrivacyScreen()),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Center(
-              child: Text(
-                'FairTix v1.0.0 \u2022 Capstone Prototype Build',
-                style: AppTextStyles.bodyMuted.copyWith(fontSize: 12),
-              ),
-            ),
-          ],
+              ],
+            ],
+          ),
         ),
-      ),
+        if (FairTixSupport.isAvailable) ...[
+          const SizedBox(height: 18),
+          FtSurfaceCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Still need help?',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: t.titleColor,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Email us and include your ticket or transaction reference.',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 16,
+                    height: 1.4,
+                    color: t.subtitleColor,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Semantics(
+                  button: true,
+                  label: 'Email ${FairTixSupport.email}',
+                  excludeSemantics: true,
+                  child: Material(
+                    color: t.fieldFill,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                      side: BorderSide(color: t.fieldBorder),
+                    ),
+                    child: InkWell(
+                      customBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                      onTap: _emailSupport,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                FairTixSupport.email,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 18,
+                                  color: t.titleColor,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(Icons.mail_outline_rounded, size: 22, color: t.activeAccent),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 18),
+        FtSurfaceCard(
+          padding: EdgeInsets.zero,
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(28),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const TermsPrivacyScreen()),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Terms & Privacy Policy',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: t.titleColor,
+                        ),
+                      ),
+                    ),
+                    Icon(Icons.chevron_right_rounded, size: 26, color: t.secondaryText),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 22),
+        Center(
+          child: Text(
+            'FairTix v1.0.0 • Capstone Prototype Build',
+            style: GoogleFonts.plusJakartaSans(fontSize: 13, color: t.subtitleColor),
+          ),
+        ),
+      ],
     );
   }
 }
 
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.title, required this.child});
+/// One FAQ line: tap to show or hide the answer.
+class _FaqRow extends StatelessWidget {
+  const _FaqRow({
+    required this.question,
+    required this.answer,
+    required this.open,
+    required this.onTap,
+  });
 
-  final String title;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.cardWhite,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 18, offset: const Offset(0, 6)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800, color: AppColors.textDark)),
-          const SizedBox(height: 14),
-          child,
-        ],
-      ),
-    );
-  }
-}
-
-class _NavRow extends StatelessWidget {
-  const _NavRow({required this.icon, required this.label, required this.value, required this.onTap});
-
-  final IconData icon;
-  final String label;
-  final String value;
+  final String question;
+  final String answer;
+  final bool open;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: AppColors.accentPurple),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: AppTextStyles.cardLabel),
-                const SizedBox(height: 3),
-                Text(value, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: AppColors.textDark)),
-              ],
-            ),
+    final t = FtAuthTheme.of(context);
+    final reduce = MediaQuery.disableAnimationsOf(context);
+    final duration = reduce ? Duration.zero : const Duration(milliseconds: 200);
+    return Semantics(
+      button: true,
+      expanded: open,
+      label: question,
+      excludeSemantics: true,
+      onTapHint: open ? 'Hide the answer' : 'Show the answer',
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      question,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 18.5,
+                        height: 1.25,
+                        fontWeight: FontWeight.w800,
+                        color: t.titleColor,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  AnimatedRotation(
+                    turns: open ? 0.25 : 0,
+                    duration: duration,
+                    child: Icon(Icons.chevron_right_rounded, size: 28, color: t.secondaryText),
+                  ),
+                ],
+              ),
+              AnimatedSize(
+                duration: duration,
+                curve: Curves.easeOut,
+                alignment: Alignment.topCenter,
+                child: open
+                    ? Padding(
+                        padding: const EdgeInsets.only(top: 12, right: 8),
+                        child: Text(
+                          answer,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 15,
+                            height: 1.5,
+                            color: t.subtitleColor,
+                          ),
+                        ),
+                      )
+                    : const SizedBox(width: double.infinity),
+              ),
+            ],
           ),
-          const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted, size: 22),
-        ],
+        ),
       ),
     );
   }

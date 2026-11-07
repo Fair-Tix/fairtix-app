@@ -6,6 +6,7 @@ import '../../services/csv_export.dart';
 import '../../theme/fairtix_palette.dart';
 import '../../widgets/admin_shell.dart';
 import '../../widgets/admin_widgets.dart';
+import '../../widgets/ft_skeleton.dart';
 import '../../widgets/organizer_ui.dart';
 
 /// The fraud / price-flag review queue.
@@ -192,12 +193,11 @@ class _AdminFraudAlertsScreenState extends State<AdminFraudAlertsScreen> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 120),
               child: _isLoading
-                  ? Padding(
-                      padding: const EdgeInsets.all(48),
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.4,
-                          color: FairTixPalette.of(context).accentLabel,
+                  ? LayoutBuilder(
+                      builder: (context, constraints) => FtShimmer(
+                        child: AdminSkeletonTableBody(
+                          flex: _flex,
+                          compact: constraints.maxWidth < 900,
                         ),
                       ),
                     )

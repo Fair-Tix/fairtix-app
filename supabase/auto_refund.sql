@@ -1,6 +1,7 @@
 -- =============================================================================
--- FairTix — AUTOMATIC refunds when an organizer/admin cancels an event.
--- Run AFTER refund_functions.sql and escrow_and_summary.sql. Safe to re-run.
+-- FairTix — record refunds due when an organizer/admin cancels an event.
+-- Run AFTER refund_functions.sql and escrow_and_summary.sql, then run
+-- refund_provider_confirmation.sql last. Safe to re-run.
 --
 -- Proposal: "Refunds are processed automatically by the system, with no
 -- manual admin action required." Before this file the cancel trigger only
@@ -8,11 +9,13 @@
 --
 -- Now, the moment an event (or a multi-day parent) becomes 'canceled':
 --   * every ticket not yet scanned is canceled and its QR invalidated;
---   * the CURRENT holder's latest completed payment for that ticket is
---     refunded: refunds row = 'processed', transaction = 'refunded',
---     escrow = 'refunded' (escrow_amount zeroed by settle_escrow trigger);
+--   * the CURRENT holder's latest completed payment for that ticket gets a
+--     pending refund record. This does NOT confirm money was returned;
+--     refund_provider_confirmation.sql requires a provider refund ID first.
+--     Funds remain unavailable for payout and organizer fees are withheld.
 --   * the organizer fee on it is 'withheld';
---   * the existing transaction notification trigger sends "Refund issued".
+--   * no "Refund issued" notice is sent until an admin records provider
+--     confirmation and the transaction changes to refunded.
 -- Scanned (used) tickets are not refunded; their escrow was already released.
 -- If a ticket was resold, the refund goes to the current holder's (resale)
 -- payment; money already released for an earlier sale is not clawed back.
@@ -20,7 +23,7 @@
 -- NOTE: this updates FairTix's ledger. Returning the actual money to the
 -- buyer's GCash/Maya/card needs a PayMongo Refund API call (an Edge Function,
 -- separate step). In Sandbox no real money moves either way.
--- admin_process_refund() stays as a harmless fallback for old pending rows.
+-- Do not add a one-time pending -> processed backfill here.
 -- =============================================================================
 
 create or replace function public.create_refunds_on_event_cancel()
@@ -70,9 +73,9 @@ begin
        and (e.event_id = new.event_id or e.parent_event_id = new.event_id)
        and t.ticket_status::text <> 'used';
 
-    -- 4. Settle immediately: pending refunds of this event -> processed.
+    -- 4. Keep funds unavailable and withhold fees; the refund remains pending.
     update public.transactions tr
-       set status = 'refunded', escrow_status = 'refunded'
+       set escrow_status = 'refunded'
       from public.refunds r
      where r.transaction_id = tr.transaction_id
        and r.status = 'pending'
@@ -89,12 +92,6 @@ begin
          select e.event_id from public.events e
           where e.event_id = new.event_id or e.parent_event_id = new.event_id);
 
-    update public.refunds r
-       set status = 'processed', processed_at = now()
-     where r.status = 'pending'
-       and r.event_id in (
-         select e.event_id from public.events e
-          where e.event_id = new.event_id or e.parent_event_id = new.event_id);
   end if;
   return new;
 end;
@@ -107,17 +104,5 @@ create trigger on_event_cancel_create_refunds
   after update of status on public.events
   for each row execute procedure public.create_refunds_on_event_cancel();
 
--- Refunds that were left pending before this change: settle them now.
-do $$
-declare
-  r record;
-begin
-  for r in select refund_id from public.refunds where status = 'pending' loop
-    begin
-      perform public.admin_process_refund(r.refund_id);
-    exception when others then
-      raise notice 'skipped %: %', r.refund_id, sqlerrm;
-    end;
-  end loop;
-end;
-$$;
+-- Pending rows stay pending until an administrator has issued the refund
+-- through the provider and records its provider refund ID.

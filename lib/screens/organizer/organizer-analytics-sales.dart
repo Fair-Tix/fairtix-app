@@ -7,6 +7,7 @@ import '../../services/event_repository.dart';
 import '../../services/organizer_escrow_service.dart';
 import '../../services/organizer_session.dart';
 import '../../theme/fairtix_palette.dart';
+import '../../widgets/ft_skeleton.dart';
 import '../../widgets/organizer_event_widgets.dart';
 import '../../widgets/organizer_ui.dart';
 import 'organizer-scaffold.dart';
@@ -126,15 +127,7 @@ class _OrganizerAnalyticsSalesScreenState
           _header(p),
           const SizedBox(height: 24),
           if (_isLoading)
-            Padding(
-              padding: const EdgeInsets.all(48),
-              child: Center(
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.4,
-                  color: p.accentLabel,
-                ),
-              ),
-            )
+            const _AnalyticsSkeleton()
           else if (_loadError != null)
             _errorState(p, _loadError!)
           else
@@ -423,6 +416,164 @@ class _EventSales {
 // ---------------------------------------------------------------------------
 // Pieces
 // ---------------------------------------------------------------------------
+
+/// Loading placeholder shaped like the loaded page: four summary cards, the
+/// "Sales by event" title and two event cards with a tier table. The header
+/// (title, All time, export) above it is real.
+class _AnalyticsSkeleton extends StatelessWidget {
+  const _AnalyticsSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return FtShimmer(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          OrganizerStatGrid(
+            children: const [
+              _SkeletonStatCard(),
+              _SkeletonStatCard(),
+              _SkeletonStatCard(),
+              _SkeletonStatCard(),
+            ],
+          ),
+          const SizedBox(height: 28),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: FtSkeletonBox(width: 130, height: 18),
+          ),
+          const SizedBox(height: 14),
+          const _SkeletonSalesCard(rows: 2),
+          const SizedBox(height: 18),
+          const _SkeletonSalesCard(rows: 3),
+        ],
+      ),
+    );
+  }
+}
+
+class _SkeletonStatCard extends StatelessWidget {
+  const _SkeletonStatCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return const FtSkeletonPanel(
+      radius: 20,
+      padding: EdgeInsets.all(24),
+      child: Row(
+        children: [
+          FtSkeletonBox(width: 48, height: 48, radius: 14),
+          SizedBox(width: 18),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FtSkeletonBox(width: 90, height: 13),
+                SizedBox(height: 8),
+                FtSkeletonBox(width: 130, height: 30),
+                SizedBox(height: 8),
+                FtSkeletonBox(width: 100, height: 13),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Event header row plus a tier table band and [rows] tier rows, using the
+/// same column proportions as [_EventSalesCard].
+class _SkeletonSalesCard extends StatelessWidget {
+  const _SkeletonSalesCard({required this.rows});
+
+  final int rows;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
+    final band = p.primary.withValues(alpha: p.isDark ? 0.08 : 0.05);
+
+    Widget row(List<Widget> cells, {Color? color, bool top = false}) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        decoration: BoxDecoration(
+          color: color,
+          border: top ? Border(top: BorderSide(color: p.border)) : null,
+        ),
+        child: Row(
+          children: [
+            for (var i = 0; i < cells.length; i++)
+              Expanded(
+                flex: _EventSalesCard._flex[i],
+                child: Align(
+                  alignment:
+                      i >= 4 ? Alignment.centerRight : Alignment.centerLeft,
+                  child: cells[i],
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+
+    return FtSkeletonPanel(
+      radius: 20,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(24, 18, 24, 18),
+            child: Row(
+              children: [
+                FtSkeletonBox(width: 44, height: 44, radius: 12),
+                SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      FtSkeletonBox(width: 200, height: 17),
+                      SizedBox(height: 8),
+                      FtSkeletonBox(width: 130, height: 13),
+                    ],
+                  ),
+                ),
+                SizedBox(width: 12),
+                FtSkeletonBox(width: 84, height: 26, radius: 13),
+              ],
+            ),
+          ),
+          row(
+            const [
+              FtSkeletonBox(width: 32, height: 11),
+              FtSkeletonBox(width: 38, height: 11),
+              FtSkeletonBox(width: 34, height: 11),
+              FtSkeletonBox(width: 70, height: 11),
+              FtSkeletonBox(width: 44, height: 11),
+              FtSkeletonBox(width: 60, height: 11),
+            ],
+            color: band,
+          ),
+          for (var i = 0; i < rows; i++)
+            row(
+              const [
+                FtSkeletonBox(width: 60, height: 14),
+                FtSkeletonBox(width: 56, height: 14),
+                FtSkeletonBox(width: 150, height: 14),
+                FtSkeletonBox(width: 30, height: 14),
+                FtSkeletonBox(width: 60, height: 14),
+                FtSkeletonBox(width: 70, height: 14),
+              ],
+              top: true,
+            ),
+        ],
+      ),
+    );
+  }
+}
 
 class _StatCard extends StatelessWidget {
   const _StatCard({

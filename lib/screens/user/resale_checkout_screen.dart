@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:app_links/app_links.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -14,6 +15,7 @@ import '../../services/transaction_repository.dart';
 import '../../services/user_session.dart';
 import '../../theme/fairtix_palette.dart';
 import '../../widgets/ft_dark_ui.dart';
+import '../../widgets/ft_payment_failed_dialog.dart';
 import '../../widgets/ft_resale_ui.dart';
 import '../../widgets/ft_subpage_ui.dart';
 import '../../widgets/ft_transaction_ui.dart' show formatPesoShort;
@@ -55,6 +57,11 @@ class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> with Widget
   bool _verifying = false;
   StreamSubscription<Uri>? _linkSub;
 
+  /// Asks the server every few seconds whether the payment finished while the
+  /// PayMongo page is open, so a failed or paid payment is noticed without any
+  /// redirect from PayMongo's page.
+  Timer? _pollTimer;
+
   @override
   void initState() {
     super.initState();
@@ -68,6 +75,7 @@ class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> with Widget
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _linkSub?.cancel();
+    _pollTimer?.cancel();
     super.dispose();
   }
 
@@ -83,17 +91,41 @@ class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> with Widget
   void _handleDeepLink(Uri uri) {
     if (uri.scheme != 'fairtix' || uri.host != 'payment') return;
     if (_stage != _CheckoutStage.awaitingPayment) return;
+    unawaited(_closePaymentPage());
     final result = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : '';
-    if (result == 'cancel') {
+    if (result == 'cancel' || result == 'failed' || result == 'failure') {
+      _pollTimer?.cancel();
       setState(() {
         _stage = _CheckoutStage.review;
-        _errorMessage = 'Payment was canceled. You have not been charged.';
+        _errorMessage = null;
       });
+      showPaymentFailedDialog(context, canceled: result == 'cancel');
       return;
     }
     // success: confirm with the server. Retry a few times because PayMongo can
     // take a moment to mark the payment as paid after the redirect.
     _verifyPayment(attempts: 6, silent: false);
+  }
+
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 3), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      if (_stage != _CheckoutStage.awaitingPayment) return;
+      _verifyPayment(attempts: 1, silent: true);
+    });
+  }
+
+  /// Closes the in-app PayMongo page (opened with LaunchMode.inAppWebView) so
+  /// the buyer is back on this screen. Harmless if no page is open.
+  Future<void> _closePaymentPage() async {
+    if (kIsWeb) return;
+    try {
+      await closeInAppWebView();
+    } catch (_) {}
   }
 
   Future<void> _handleStartPayment() async {
@@ -150,7 +182,8 @@ class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> with Widget
         _stage = _CheckoutStage.awaitingPayment;
       });
 
-      final launched = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      final launched = await launchUrl(Uri.parse(url), mode: LaunchMode.inAppWebView);
+      _startPolling();
       if (!launched && mounted) {
         setState(() => _errorMessage = 'Could not open the payment page automatically. Use the link below.');
       }
@@ -199,6 +232,7 @@ class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> with Widget
     }
 
     String? lastMessage;
+    var paymentFailed = false;
     try {
       for (var i = 0; i < attempts; i++) {
         try {
@@ -222,6 +256,11 @@ class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> with Widget
           lastMessage = (details is Map ? details['error'] as String? : null) ??
               'Could not confirm your payment.';
           // 402 = PayMongo doesn't show it as paid (yet): worth retrying.
+          // Unless PayMongo says the payment itself failed: stop and tell the buyer.
+          if (details is Map && details['payment_failed'] == true) {
+            paymentFailed = true;
+            break;
+          }
           // Anything else (403 wrong account, 400, 5xx) won't fix itself.
           if (e.status != 402) break;
         }
@@ -237,6 +276,16 @@ class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> with Widget
     }
 
     if (!mounted) return;
+    if (paymentFailed) {
+      _pollTimer?.cancel();
+      unawaited(_closePaymentPage());
+      setState(() {
+        _stage = _CheckoutStage.review;
+        _errorMessage = null;
+      });
+      showPaymentFailedDialog(context);
+      return;
+    }
     setState(() {
       _stage = _CheckoutStage.awaitingPayment;
       _errorMessage = silent ? null : lastMessage;
@@ -247,6 +296,8 @@ class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> with Widget
   /// the purchase changed (wallet, transactions, notifications, event stock)
   /// and shows the confirmation screen.
   void _finishPurchase({required String ticketId, required String qrToken}) {
+    _pollTimer?.cancel();
+    unawaited(_closePaymentPage());
     final listing = widget.listing;
 
     unawaited(TicketRepository.instance.refresh().catchError((_) {}));
@@ -307,7 +358,7 @@ class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> with Widget
       followTheme: true,
       bottomButton: waiting
           ? SizedBox(
-              height: 58,
+              height: 52,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -322,7 +373,7 @@ class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> with Widget
                         ? 'Confirming your payment…'
                         : 'Waiting for your payment…',
                     style: GoogleFonts.plusJakartaSans(
-                      fontSize: 16,
+                      fontSize: 14.5,
                       fontWeight: FontWeight.w700,
                       color: t.activeAccent,
                     ),
@@ -348,20 +399,20 @@ class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> with Widget
       ),
       body: [
         FtSurfaceCard(
-          padding: const EdgeInsets.all(20),
-          radius: 26,
+          padding: const EdgeInsets.all(16),
+          radius: 22,
           child: Row(
             children: [
               Container(
-                width: 82,
-                height: 82,
+                width: 62,
+                height: 62,
                 decoration: BoxDecoration(
                   color: const Color(0xFF4F31B8),
-                  borderRadius: BorderRadius.circular(24),
+                  borderRadius: BorderRadius.circular(18),
                 ),
-                child: const Icon(Icons.verified_user_outlined, color: Colors.white, size: 38),
+                child: const Icon(Icons.verified_user_outlined, color: Colors.white, size: 28),
               ),
-              const SizedBox(width: 18),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -371,7 +422,7 @@ class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> with Widget
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 26,
+                        fontSize: 19,
                         height: 1.15,
                         fontWeight: FontWeight.w800,
                         color: t.titleColor,
@@ -382,14 +433,14 @@ class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> with Widget
                       '${listing.tier.name} • ${listing.event.dateLabel}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.plusJakartaSans(fontSize: 17, color: t.subtitleColor),
+                      style: GoogleFonts.plusJakartaSans(fontSize: 14, color: t.subtitleColor),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       'Seller ${_maskName(listing.ownerName)} · Verified',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.plusJakartaSans(fontSize: 17, color: t.subtitleColor),
+                      style: GoogleFonts.plusJakartaSans(fontSize: 14, color: t.subtitleColor),
                     ),
                   ],
                 ),
@@ -397,7 +448,7 @@ class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> with Widget
             ],
           ),
         ),
-        const SizedBox(height: 26),
+        const SizedBox(height: 22),
         const FtSectionLabel('Pay with'),
         const SizedBox(height: 12),
         Wrap(
@@ -416,8 +467,8 @@ class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> with Widget
         ),
         const SizedBox(height: 18),
         FtSurfaceCard(
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 22),
-          radius: 26,
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+          radius: 22,
           child: Column(
             children: [
               FtSummaryRow(
@@ -456,8 +507,8 @@ class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> with Widget
         if (_stage == _CheckoutStage.awaitingPayment) ...[
           const SizedBox(height: 22),
           FtSurfaceCard(
-            padding: const EdgeInsets.all(20),
-            radius: 24,
+            padding: const EdgeInsets.all(16),
+            radius: 22,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -468,7 +519,7 @@ class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> with Widget
                     Text(
                       'Complete your payment',
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 17,
+                        fontSize: 15,
                         fontWeight: FontWeight.w800,
                         color: t.activeAccent,
                       ),
@@ -479,7 +530,7 @@ class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> with Widget
                 Text(
                   'A PayMongo Sandbox payment page opened in your browser. After you authorize the test payment there, you’ll be brought back here automatically and your ticket will be confirmed.',
                   style: GoogleFonts.plusJakartaSans(
-                    fontSize: 14.5,
+                    fontSize: 13.5,
                     height: 1.45,
                     color: t.subtitleColor,
                   ),
@@ -487,7 +538,7 @@ class _ResaleCheckoutScreenState extends State<ResaleCheckoutScreen> with Widget
                 if (_checkoutUrl != null) ...[
                   const SizedBox(height: 12),
                   InkWell(
-                    onTap: () => launchUrl(Uri.parse(_checkoutUrl!), mode: LaunchMode.externalApplication),
+                    onTap: () => launchUrl(Uri.parse(_checkoutUrl!), mode: LaunchMode.inAppWebView),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       child: Text(
@@ -541,13 +592,13 @@ class _MethodPill extends StatelessWidget {
             borderRadius: radius,
             onTap: onTap,
             child: Container(
-              height: 46,
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              height: 40,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
               alignment: Alignment.center,
               child: Text(
                 label,
                 style: GoogleFonts.plusJakartaSans(
-                  fontSize: 16,
+                  fontSize: 14.5,
                   fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
                   color: selected ? Colors.white : t.secondaryText,
                 ),

@@ -30,7 +30,8 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
       question: 'When do I get my money?',
       answer:
           'The buyer’s payment is held until their new QR code has been issued. After that, your '
-          'payout (the listing price minus the 5% resale fee) is released to you. You can follow it under '
+          'proceeds (the listing price minus the 5% resale fee) are recorded in FairTix; this prototype does '
+          'not transfer money to your account. You can follow the ledger under '
           'Profile › Transactions.',
     ),
     (
@@ -51,9 +52,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
     (
       question: 'How do refunds work?',
       answer:
-          'Refunds are issued automatically, only when an organizer cancels a published event, and they go '
-          'to whoever holds the ticket at that time. There are no refunds for a change of mind or for not '
-          'attending.',
+          'When an event is canceled, FairTix records a refund due to the ticket’s current holder. The record '
+          'does not mean money was returned to the original payment method; this prototype does not send '
+          'PayMongo refunds automatically. There are no refunds for a change of mind or for not attending.',
     ),
   ];
 

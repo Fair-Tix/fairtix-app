@@ -38,9 +38,9 @@ class _TermsPrivacyScreenState extends State<TermsPrivacyScreen> {
     (
       title: 'Tickets and resale',
       paragraphs: [
-        'When you buy a ticket, your payment is processed securely through PayMongo. Your ticket and QR '
-            'code are issued right away, and payments to organizers and sellers are handled automatically by '
-            'FairTix\u2019s internal payment system.',
+        'When you buy a ticket, payment is handled through PayMongo Sandbox. FairTix records the purchase '
+            'and issues a ticket after payment verification. This prototype tracks organizer proceeds, but it '
+            'does not transfer payouts to organizers or sellers.',
         'Tickets may only be resold through FairTix, at a price between 50% and 100% of the original '
             'purchase price. This range is enforced automatically to keep resale fair and discourage scalping. '
             'Active listings close 24 hours before an event starts, and any unsold ticket is returned to its '
@@ -50,9 +50,10 @@ class _TermsPrivacyScreenState extends State<TermsPrivacyScreen> {
     (
       title: 'Refunds',
       paragraphs: [
-        'Refunds are issued automatically, and only when an event organizer cancels a published event. '
-            'They are not issued for a change of mind or a failed resale attempt. If a ticket was resold '
-            'before a cancellation, the refund goes to whoever holds it at the time of cancellation.',
+        'When an event is canceled, FairTix records the refund due to the ticket’s current holder. A recorded '
+            'refund does not mean money has been returned to the original payment method. This prototype does '
+            'not send PayMongo refunds automatically; any external refund must be confirmed separately. '
+            'Refunds are not provided for a change of mind or a failed resale attempt.',
       ],
     ),
     (
@@ -67,9 +68,10 @@ class _TermsPrivacyScreenState extends State<TermsPrivacyScreen> {
     (
       title: 'Identity verification',
       paragraphs: [
-        'Creating an account requires email OTP confirmation and a valid government- or school-issued '
-            'ID with a live selfie for facial comparison. This is used only to confirm you\u2019re a real, unique '
-            'person and to prevent one individual from holding multiple accounts to bypass purchase limits. '
+        'Creating an account requires email OTP confirmation and a government- or school-issued ID with a '
+            'selfie. The app performs an on-device liveness check during selfie capture. An administrator '
+            'reviews the submitted ID and selfie; FairTix does not perform server-side facial comparison. '
+            'This process is intended to deter duplicate accounts and support identity review. '
             'Once verified, your name and contact details are locked to your ID and can only be changed by '
             'contacting support.',
       ],
@@ -84,9 +86,9 @@ class _TermsPrivacyScreenState extends State<TermsPrivacyScreen> {
     (
       title: 'How it\u2019s protected',
       paragraphs: [
-        'This data is encrypted, accessible only to automated verification processes and authorized '
-            'administrators, and is not shared with third parties beyond what\u2019s needed to process your '
-            'transactions.',
+        'Your uploaded verification documents are stored in protected storage and are available to authorized '
+            'administrators for manual review. Payment information is handled by PayMongo Sandbox in this '
+            'prototype.',
       ],
     ),
   ];
@@ -160,7 +162,7 @@ class _TermsPrivacyScreenState extends State<TermsPrivacyScreen> {
                     const SizedBox(height: 16),
                     Center(
                       child: Text(
-                        'Last reviewed: July 2026',
+                        'Last reviewed: November 2026',
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 12.5,
                           fontStyle: FontStyle.italic,

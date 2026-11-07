@@ -9,6 +9,7 @@ import '../../services/csv_export.dart';
 import '../../theme/fairtix_palette.dart';
 import '../../widgets/admin_shell.dart';
 import '../../widgets/admin_widgets.dart';
+import '../../widgets/ft_skeleton.dart';
 import '../../widgets/organizer_ui.dart';
 import 'admin-announcement.dart';
 import 'admin-fraud-alerts.dart';
@@ -245,6 +246,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
           const SizedBox(height: 20),
         ],
+        if (_isLoading && stats == null && _statsError == null)
+          const FtShimmer(child: AdminSkeletonSummaryRow(count: 5))
+        else
         AdminSummaryRow(
           cards: [
             AdminSummaryCard(
@@ -382,15 +386,39 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  Widget _spinner() {
-    final p = FairTixPalette.of(context);
-    return Padding(
-      padding: const EdgeInsets.all(28),
-      child: Center(
-        child: CircularProgressIndicator(
-          strokeWidth: 2.4,
-          color: p.accentLabel,
-        ),
+  /// Skeleton rows for a panel that is still loading its first data: two
+  /// text lines and a trailing value, with a round icon in front when
+  /// [leadingCircle] is set (the activity feed).
+  Widget _spinner({bool leadingCircle = false, int rows = 3}) {
+    return FtShimmer(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < rows; i++)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 9),
+              child: Row(
+                children: [
+                  if (leadingCircle) ...[
+                    const FtSkeletonCircle(size: 34),
+                    const SizedBox(width: 12),
+                  ],
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        FtSkeletonBox(width: 170, height: 14),
+                        SizedBox(height: 6),
+                        FtSkeletonBox(width: 230, height: 12),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const FtSkeletonBox(width: 64, height: 12),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -539,7 +567,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     ].whereType<String>().isNotEmpty;
     final Widget body;
     if (_isLoading && items.isEmpty) {
-      body = _spinner();
+      body = _spinner(leadingCircle: true, rows: 5);
     } else if (items.isEmpty) {
       body = _inlineMessage(
         failed

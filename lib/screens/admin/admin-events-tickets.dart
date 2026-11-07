@@ -7,6 +7,7 @@ import '../../widgets/admin_document_viewer.dart'
     show AdminReviewDocument, showAdminReviewDialog;
 import '../../widgets/admin_shell.dart';
 import '../../widgets/admin_widgets.dart';
+import '../../widgets/ft_skeleton.dart';
 import '../../widgets/organizer_ui.dart';
 import 'admin-browse-events.dart';
 
@@ -170,7 +171,7 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
     final refundNote = sold == 0
         ? 'No tickets have been sold yet.'
         : 'All $sold ticket${sold == 1 ? '' : 's'} sold (${formatPeso(event.grossRevenue)}) '
-              'will be refunded automatically and every holder notified.';
+              'will have a refund recorded as due; a PayMongo refund must be confirmed separately.';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -409,6 +410,9 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
           ],
         ),
         const SizedBox(height: 24),
+        if (_isLoading)
+          const FtShimmer(child: AdminSkeletonSummaryRow(count: 3))
+        else
         AdminSummaryRow(
           cards: [
             AdminSummaryCard(
@@ -457,12 +461,11 @@ class _AdminEventsTicketsScreenState extends State<AdminEventsTicketsScreen> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 200),
               child: _isLoading
-                  ? Padding(
-                      padding: const EdgeInsets.all(48),
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.4,
-                          color: p.accentLabel,
+                  ? LayoutBuilder(
+                      builder: (context, constraints) => FtShimmer(
+                        child: AdminSkeletonTableBody(
+                          flex: _flex,
+                          compact: constraints.maxWidth < 900,
                         ),
                       ),
                     )

@@ -15,6 +15,7 @@ import '../../widgets/ft_dashboard_ui.dart';
 import '../../theme/fairtix_palette.dart';
 import '../../widgets/ft_pending_ui.dart' show FtReveal;
 import '../../widgets/ft_profile_ui.dart' show FtPaletteBackground, ftOverlayStyle;
+import '../../widgets/ft_skeleton.dart';
 import 'all_events_screen.dart';
 import 'event_details_screen.dart';
 import 'notifications_screen.dart';
@@ -286,10 +287,23 @@ class _DashboardScreenState extends State<DashboardScreen>
                     ),
                     const SizedBox(height: 20),
                     if (firstLoad)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 60),
-                        child: Center(
-                          child: CircularProgressIndicator(color: p.tileAccent),
+                      const FtShimmer(
+                        semanticLabel: 'Loading events',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            FtSkeletonStatRow(),
+                            SizedBox(height: 28),
+                            Row(
+                              children: [
+                                FtSkeletonBox(width: 150, height: 20),
+                                Spacer(),
+                                FtSkeletonBox(width: 56, height: 14),
+                              ],
+                            ),
+                            SizedBox(height: 14),
+                            FtSkeletonPostCard(posterAspect: 1.0),
+                          ],
                         ),
                       )
                     else if (_errorMessage != null && events.isEmpty)

@@ -26,8 +26,8 @@ class FtSurfaceCard extends StatelessWidget {
   const FtSurfaceCard({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(22),
-    this.radius = 28,
+    this.padding = const EdgeInsets.all(18),
+    this.radius = 24,
   });
 
   final Widget child;
@@ -64,9 +64,9 @@ class FtSectionLabel extends StatelessWidget {
       child: Text(
         text.toUpperCase(),
         style: GoogleFonts.plusJakartaSans(
-          fontSize: 14,
+          fontSize: 12.5,
           fontWeight: FontWeight.w800,
-          letterSpacing: 1.3,
+          letterSpacing: 1.2,
           color: t.accent,
         ),
       ),
@@ -100,7 +100,7 @@ class FtSummaryRow extends StatelessWidget {
           child: Text(
             label,
             style: GoogleFonts.plusJakartaSans(
-              fontSize: strong ? 20 : 17,
+              fontSize: strong ? 17 : 15,
               fontWeight: strong ? FontWeight.w800 : FontWeight.w400,
               color: strong ? t.titleColor : t.subtitleColor,
             ),
@@ -110,7 +110,7 @@ class FtSummaryRow extends StatelessWidget {
         Text(
           value,
           style: GoogleFonts.plusJakartaSans(
-            fontSize: strong ? 23 : 17,
+            fontSize: strong ? 20 : 15,
             fontWeight: strong ? FontWeight.w800 : FontWeight.w500,
             color: valueColor ?? t.titleColor,
           ),
@@ -135,14 +135,14 @@ class FtNote extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.only(top: 2),
-          child: Icon(icon, size: 21, color: t.secondaryText),
+          child: Icon(icon, size: 19, color: t.secondaryText),
         ),
         const SizedBox(width: 10),
         Expanded(
           child: Text(
             text,
             style: GoogleFonts.plusJakartaSans(
-              fontSize: 15,
+              fontSize: 13.5,
               height: 1.4,
               color: t.subtitleColor,
             ),
@@ -194,19 +194,19 @@ class FtResultScaffold extends StatelessWidget {
                 children: [
                   Expanded(
                     child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(22, 44, 22, 24),
+                      padding: const EdgeInsets.fromLTRB(19, 40, 19, 24),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Center(
                             child: Container(
-                              width: 92,
-                              height: 92,
+                              width: 80,
+                              height: 80,
                               decoration: BoxDecoration(
                                 color: t.successSurface,
                                 shape: BoxShape.circle,
                               ),
-                              child: Icon(icon, size: 40, color: t.success),
+                              child: Icon(icon, size: 34, color: t.success),
                             ),
                           ),
                           const SizedBox(height: 24),
@@ -216,7 +216,7 @@ class FtResultScaffold extends StatelessWidget {
                               title,
                               textAlign: TextAlign.center,
                               style: GoogleFonts.plusJakartaSans(
-                                fontSize: 31,
+                                fontSize: 27,
                                 height: 1.15,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: -0.6,
@@ -229,7 +229,7 @@ class FtResultScaffold extends StatelessWidget {
                             Text(
                               subtitle!,
                               textAlign: TextAlign.center,
-                              style: t.subtitle().copyWith(fontSize: 17),
+                              style: t.subtitle().copyWith(fontSize: 15),
                             ),
                           ],
                           const SizedBox(height: 28),
@@ -243,7 +243,7 @@ class FtResultScaffold extends StatelessWidget {
                       border: Border(top: BorderSide(color: t.divider)),
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(22, 16, 22, 14),
+                      padding: const EdgeInsets.fromLTRB(19, 14, 19, 14),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -255,7 +255,7 @@ class FtResultScaffold extends StatelessWidget {
                               child: Text(
                                 secondaryLabel!,
                                 style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 16,
+                                  fontSize: 14.5,
                                   fontWeight: FontWeight.w700,
                                   color: t.secondaryText,
                                 ),

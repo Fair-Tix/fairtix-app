@@ -2,7 +2,7 @@
 -- FairTix — get_my_transactions(): the signed-in user's full transaction
 -- history for the app's Transactions screen.
 -- Run this in the Supabase SQL Editor AFTER schema.sql, policies.sql,
--- refund_functions.sql and auto_refund.sql. Safe to re-run.
+-- refund_functions.sql, auto_refund.sql and payment_references.sql. Safe to re-run.
 --
 -- Why this exists: the app used to read public.transactions directly and
 -- join tickets -> ticket_tiers -> events with INNER joins. tickets RLS only
@@ -24,6 +24,11 @@
 --       it reverses, which stays in the list with status 'refunded')
 -- =============================================================================
 
+-- The return type gained three columns (payment_ref, provider_payment_id,
+-- payment_method; supabase/payment_references.sql), and CREATE OR REPLACE
+-- cannot change a function's result columns, so it is dropped first.
+drop function if exists public.get_my_transactions();
+
 create or replace function public.get_my_transactions()
 returns table (
   transaction_id   uuid,
@@ -36,7 +41,10 @@ returns table (
   status           text,
   created_at       timestamptz,
   tier_name        text,
-  event_title      text
+  event_title      text,
+  payment_ref         text,
+  provider_payment_id text,
+  payment_method      text
 )
 language sql stable
 security definer set search_path = public
@@ -61,7 +69,10 @@ as $$
       end,
       tr.created_at,
       tt.tier_name::text,
-      e.title::text
+      e.title::text,
+      tr.payment_ref,
+      tr.provider_payment_id,
+      tr.payment_method
     from public.transactions tr
     left join public.tickets t       on t.ticket_id = tr.ticket_id
     left join public.ticket_tiers tt on tt.tier_id = t.tier_id
@@ -82,7 +93,10 @@ as $$
       case r.status when 'processed' then 'completed' else 'pending' end,
       coalesce(r.processed_at, r.created_at),
       tt.tier_name::text,
-      e.title::text
+      e.title::text,
+      null::text,
+      null::text,
+      null::text
     from public.refunds r
     left join public.tickets t       on t.ticket_id = r.ticket_id
     left join public.ticket_tiers tt on tt.tier_id = t.tier_id

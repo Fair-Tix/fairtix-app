@@ -5,6 +5,7 @@ import '../../models/organizer_event.dart';
 import '../../services/access_control.dart';
 import '../../services/event_repository.dart';
 import '../../theme/fairtix_palette.dart';
+import '../../widgets/ft_skeleton.dart';
 import '../../widgets/organizer_event_widgets.dart';
 import '../../widgets/organizer_ui.dart';
 import 'organizer-cancel-event.dart';
@@ -280,15 +281,7 @@ class _OrganizerMyEventsScreenState extends State<OrganizerMyEventsScreen> {
           _header(p),
           const SizedBox(height: 24),
           if (_isLoading)
-            Padding(
-              padding: const EdgeInsets.all(48),
-              child: Center(
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.4,
-                  color: p.accentLabel,
-                ),
-              ),
-            )
+            const _MyEventsSkeleton()
           else if (_loadError != null)
             _errorState(p, _loadError!)
           else if (events.isEmpty)
@@ -538,6 +531,160 @@ class _OrganizerMyEventsScreenState extends State<OrganizerMyEventsScreen> {
 // ---------------------------------------------------------------------------
 // Pieces
 // ---------------------------------------------------------------------------
+
+/// Loading placeholder with the same structure as the loaded page: four
+/// summary tiles, the filter chips and a few event rows. The header (title +
+/// search) above it is real, so it is not repeated here.
+class _MyEventsSkeleton extends StatelessWidget {
+  const _MyEventsSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return FtShimmer(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          OrganizerStatGrid(
+            children: const [
+              _SkeletonStatTile(),
+              _SkeletonStatTile(),
+              _SkeletonStatTile(),
+              _SkeletonStatTile(),
+            ],
+          ),
+          const SizedBox(height: 24),
+          const Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              FtSkeletonBox(width: 62, height: 36, radius: 18),
+              FtSkeletonBox(width: 108, height: 36, radius: 18),
+              FtSkeletonBox(width: 84, height: 36, radius: 18),
+              FtSkeletonBox(width: 112, height: 36, radius: 18),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const _SkeletonEventRow(),
+          const SizedBox(height: 14),
+          const _SkeletonEventRow(),
+          const SizedBox(height: 14),
+          const _SkeletonEventRow(),
+        ],
+      ),
+    );
+  }
+}
+
+class _SkeletonStatTile extends StatelessWidget {
+  const _SkeletonStatTile();
+
+  @override
+  Widget build(BuildContext context) {
+    return const FtSkeletonPanel(
+      radius: 20,
+      padding: EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FtSkeletonBox(width: 90, height: 13),
+          SizedBox(height: 10),
+          FtSkeletonBox(width: 64, height: 28),
+          SizedBox(height: 8),
+          FtSkeletonBox(width: 110, height: 13),
+        ],
+      ),
+    );
+  }
+}
+
+/// Same breakpoint (900px) and column widths as [_EventCard].
+class _SkeletonEventRow extends StatelessWidget {
+  const _SkeletonEventRow();
+
+  @override
+  Widget build(BuildContext context) {
+    const dateBlock = FtSkeletonBox(width: 58, height: 64, radius: 14);
+    const avatar = FtSkeletonBox(width: 64, height: 64, radius: 14);
+    const info = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        FtSkeletonBox(width: 220, height: 18),
+        SizedBox(height: 10),
+        FtSkeletonBox(width: 150, height: 14),
+      ],
+    );
+    const sold = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        FtSkeletonBox(width: 110, height: 15),
+        SizedBox(height: 10),
+        FtSkeletonBox(width: 190, height: 8, radius: 4),
+      ],
+    );
+    const actions = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        FtSkeletonBox(width: 118, height: 38),
+        SizedBox(width: 8),
+        FtSkeletonBox(width: 92, height: 38),
+        SizedBox(width: 8),
+        FtSkeletonBox(width: 40, height: 40, radius: 10),
+      ],
+    );
+
+    return FtSkeletonPanel(
+      radius: 20,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+      child: LayoutBuilder(
+        builder: (context, c) {
+          if (c.maxWidth >= 900) {
+            return const Row(
+              children: [
+                dateBlock,
+                SizedBox(width: 16),
+                avatar,
+                SizedBox(width: 16),
+                Expanded(child: info),
+                SizedBox(width: 24),
+                SizedBox(width: 200, child: sold),
+                SizedBox(width: 24),
+                SizedBox(
+                  width: 290,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: actions,
+                  ),
+                ),
+              ],
+            );
+          }
+          return const Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  dateBlock,
+                  SizedBox(width: 14),
+                  avatar,
+                  SizedBox(width: 14),
+                  Expanded(child: info),
+                ],
+              ),
+              SizedBox(height: 16),
+              sold,
+              SizedBox(height: 16),
+              Align(alignment: Alignment.centerRight, child: actions),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
 
 class _CreateEventButton extends StatelessWidget {
   const _CreateEventButton({required this.onTap});

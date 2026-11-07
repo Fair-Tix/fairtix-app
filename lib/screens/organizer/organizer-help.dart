@@ -20,18 +20,19 @@ class OrganizerHelpScreen extends StatelessWidget {
       question: 'When do I get paid for my ticket sales?',
       answer:
           'Each sale is held in escrow: your share (the ticket price minus '
-          'FairTix\u2019s platform fee) is released for payout the day after '
+          'FairTix\u2019s platform fee) is marked cleared for payout the day after '
           'your event\u2019s last day, in Philippine time. Scanning tickets at '
-          'the door does not release it. Multi-day events release one day at '
-          'a time as each day ends. You can follow every peso under Escrow & '
-          'Payouts.',
+          'the door does not release it. This prototype tracks the ledger but '
+          'does not transfer money to your account. Multi-day events clear one '
+          'day at a time as each day ends. You can follow it under Escrow & Payouts.',
     ),
     (
       question: 'What happens if I cancel an event?',
       answer:
-          'Buyers are refunded instead of the money being released to you. '
-          'The refunded amount shows under Escrow & Payouts and in the refund '
-          'note on that event in Analytics.',
+          'FairTix records a refund due to the current ticket holder and withholds '
+          'the sale from payout. The record does not confirm money was returned '
+          'through PayMongo. The amount shows under Escrow & Payouts and in the '
+          'refund note on that event in Analytics.',
     ),
     (
       question: 'Why was my event unpublished?',

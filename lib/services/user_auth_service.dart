@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/app_user.dart';
+import '../models/legal_terms.dart';
 import 'account_status.dart';
 import 'push_service.dart';
 import 'ticket_repository.dart';
@@ -157,6 +158,7 @@ class UserAuthService {
     String? phone,
     required String password,
     DateTime? birthDate,
+    required String termsVersion,
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
     try {
@@ -165,6 +167,7 @@ class UserAuthService {
         password: password,
         data: {
           'full_name': fullName.trim(),
+          'terms_version': termsVersion,
           if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
           if (birthDate != null)
             'birth_date':

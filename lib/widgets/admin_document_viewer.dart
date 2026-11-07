@@ -32,6 +32,10 @@ const _imageExtensions = {'jpg', 'jpeg', 'png', 'webp', 'gif', 'heic'};
 /// Otherwise a single "Close" button is shown instead — this dialog is
 /// reused to just *view* documents on already-decided accounts, not only
 /// to decide on pending ones.
+///
+/// [onRejectWithReason] is the same as [onReject] but the reject
+/// confirmation also asks for an optional reason, which is passed on (and
+/// saved in the review log). When it is given it is used instead of [onReject].
 Future<void> showAdminReviewDialog({
   required BuildContext context,
   required String title,
@@ -40,6 +44,7 @@ Future<void> showAdminReviewDialog({
   required String currentStatus,
   Future<void> Function()? onApprove,
   Future<void> Function()? onReject,
+  Future<void> Function(String? reason)? onRejectWithReason,
 }) {
   return showDialog(
     context: context,
@@ -50,6 +55,7 @@ Future<void> showAdminReviewDialog({
       currentStatus: currentStatus,
       onApprove: onApprove,
       onReject: onReject,
+      onRejectWithReason: onRejectWithReason,
     ),
   );
 }
@@ -62,6 +68,7 @@ class _AdminReviewDialog extends StatefulWidget {
     required this.currentStatus,
     this.onApprove,
     this.onReject,
+    this.onRejectWithReason,
   });
 
   final String title;
@@ -70,6 +77,7 @@ class _AdminReviewDialog extends StatefulWidget {
   final String currentStatus;
   final Future<void> Function()? onApprove;
   final Future<void> Function()? onReject;
+  final Future<void> Function(String? reason)? onRejectWithReason;
 
   @override
   State<_AdminReviewDialog> createState() => _AdminReviewDialogState();
@@ -79,6 +87,13 @@ enum _ReviewAction { approve, reject }
 
 class _AdminReviewDialogState extends State<_AdminReviewDialog> {
   bool _isActing = false;
+  final _reasonController = TextEditingController();
+
+  @override
+  void dispose() {
+    _reasonController.dispose();
+    super.dispose();
+  }
 
   /// Shows an "Are you sure?" confirmation before actually calling
   /// [onApprove]/[onReject] — approving/rejecting someone's identity
@@ -88,20 +103,45 @@ class _AdminReviewDialogState extends State<_AdminReviewDialog> {
     _ReviewAction kind,
     Future<void> Function()? action,
   ) async {
-    if (action == null || _isActing) return;
+    final withReason =
+        kind == _ReviewAction.reject && widget.onRejectWithReason != null;
+    if ((action == null && !withReason) || _isActing) return;
 
     final isApprove = kind == _ReviewAction.approve;
+    _reasonController.clear();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(
           isApprove ? 'Approve verification?' : 'Reject verification?',
         ),
-        content: Text(
-          isApprove
-              ? "Are you sure you want to approve this user's identity verification?"
-              : "Are you sure you want to reject this user's identity verification?",
-        ),
+        content: withReason
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Are you sure you want to reject this user's identity verification?",
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _reasonController,
+                    maxLength: 300,
+                    maxLines: 3,
+                    minLines: 2,
+                    decoration: const InputDecoration(
+                      labelText: 'Reason (optional)',
+                      hintText: 'Saved in the review log and the admin reports',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              )
+            : Text(
+                isApprove
+                    ? "Are you sure you want to approve this user's identity verification?"
+                    : "Are you sure you want to reject this user's identity verification?",
+              ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -120,7 +160,14 @@ class _AdminReviewDialogState extends State<_AdminReviewDialog> {
       ),
     );
     if (confirmed != true) return;
-    await _act(action);
+    if (withReason) {
+      final reason = _reasonController.text.trim();
+      await _act(
+        () => widget.onRejectWithReason!(reason.isEmpty ? null : reason),
+      );
+      return;
+    }
+    await _act(action!);
   }
 
   Future<void> _act(Future<void> Function() action) async {

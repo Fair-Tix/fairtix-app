@@ -74,15 +74,19 @@ begin
       and t.ticket_status <> 'canceled'
       and t.owner_id <> v_uid
   loop
-    perform public.notify_user(
-      v_holder.owner_id,
-      v_subject,
-      v_message,
-      'promo',
-      true,
-      true
-    );
-    v_count := v_count + 1;
+    -- Someone who turned promotions off gets nothing on any channel and is
+    -- not counted (notify_user would drop it anyway).
+    if public.notification_type_allowed(v_holder.owner_id, 'promo') then
+      perform public.notify_user(
+        v_holder.owner_id,
+        v_subject,
+        v_message,
+        'promo',
+        true,
+        true
+      );
+      v_count := v_count + 1;
+    end if;
   end loop;
 
   return v_count;

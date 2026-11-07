@@ -206,7 +206,7 @@ class _OrganizerCancelEventScreenState
                 const SizedBox(height: 10),
                 Text(
                   'This action cannot be undone. All ticket holders will be '
-                  'notified and refunds will be processed automatically.',
+                  'notified. FairTix will record any refund due; the refund must still be confirmed through PayMongo.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: p.textSecondary,

@@ -24,9 +24,30 @@ String formatShortDate(DateTime dt) => '${_shortMonths[dt.month - 1]} ${dt.day}'
 /// Formats a DateTime like "Oct 14, 2026".
 String formatMediumDate(DateTime dt) => '${formatShortDate(dt)}, ${dt.year}';
 
+/// Shown as the payment method when none was recorded for a transaction.
+const String kPaymentNotRecorded = 'Not recorded';
+
+String? _clean(String? value) {
+  final trimmed = value?.trim();
+  return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+}
+
+/// PayMongo's method code as a person would say it; an unknown code is
+/// shown as stored rather than guessed.
+String _paymentMethodLabel(String? code) {
+  final value = _clean(code)?.toLowerCase();
+  if (value == null) return kPaymentNotRecorded;
+  return switch (value) {
+    'gcash' => 'GCash',
+    'paymaya' || 'maya' => 'Maya',
+    'card' => 'Card',
+    _ => value,
+  };
+}
+
 enum TransactionCategory { ticketPurchase, resalePurchase, resaleSale, refund }
 
-enum TransactionStatus { completed, pending, failed, refunded }
+enum TransactionStatus { completed, pending, refundPending, failed, refunded }
 
 /// A payment transaction (ticket purchase, resale purchase, resale sale,
 /// or refund), built from the rows returned by the `get_my_transactions()`
@@ -45,6 +66,8 @@ class AppTransaction {
     this.subtotal,
     this.platformFee,
     this.ticketId,
+    this.paymentReference,
+    this.providerPaymentId,
   });
 
   final String id;
@@ -55,7 +78,21 @@ class AppTransaction {
   /// Total amount paid (ticket/resale purchases) or received (resale sale).
   final double amount;
   final DateTime dateTime;
+
+  /// How the buyer paid, as recorded from PayMongo ('GCash', 'Maya', 'Card'),
+  /// or [kPaymentNotRecorded] when nothing was stored (purchases made before
+  /// payment details were recorded, resale sales and refunds).
   final String paymentMethod;
+
+  /// The payment reference stored with the purchase (PayMongo session or
+  /// payment-intent based), or null when none was recorded. Never derived
+  /// from the ticket's QR token.
+  final String? paymentReference;
+
+  /// PayMongo's own payment id, when it was recorded.
+  final String? providerPaymentId;
+
+  bool get hasPaymentMethod => paymentMethod != kPaymentNotRecorded;
   final TransactionStatus status;
 
   /// Ticket/resale price before the platform fee, when applicable.
@@ -67,6 +104,8 @@ class AppTransaction {
   /// Lets a ticket-sold notification deep-link straight to its receipt.
   final String? ticketId;
 
+  /// FairTix's own record id for this transaction (built from the database
+  /// id). It is NOT a payment-provider reference: see [paymentReference].
   String get referenceNumber => 'FTX-${id.toUpperCase()}';
 
   /// True for money the user received (a resale sale or a refund); false
@@ -91,6 +130,7 @@ class AppTransaction {
   String get statusLabel => switch (status) {
         TransactionStatus.completed => 'Completed',
         TransactionStatus.pending => 'Pending',
+        TransactionStatus.refundPending => 'Awaiting provider confirmation',
         TransactionStatus.failed => 'Failed',
         TransactionStatus.refunded => 'Refunded',
       };
@@ -124,7 +164,9 @@ class AppTransaction {
     final rawStatus = row['status'] as String;
     final status = switch (rawStatus) {
       'completed' => TransactionStatus.completed,
-      'pending' => TransactionStatus.pending,
+      'pending' => category == TransactionCategory.refund
+          ? TransactionStatus.refundPending
+          : TransactionStatus.pending,
       'refunded' => TransactionStatus.refunded,
       _ => TransactionStatus.failed,
     };
@@ -138,7 +180,9 @@ class AppTransaction {
       subtotal: paid,
       platformFee: category == TransactionCategory.resaleSale ? fee : null,
       dateTime: DateTime.parse(row['created_at'] as String),
-      paymentMethod: 'PayMongo Sandbox',
+      paymentMethod: _paymentMethodLabel(row['payment_method'] as String?),
+      paymentReference: _clean(row['payment_ref'] as String?),
+      providerPaymentId: _clean(row['provider_payment_id'] as String?),
       status: status,
       ticketId: row['ticket_id'] as String?,
     );

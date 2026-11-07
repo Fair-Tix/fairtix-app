@@ -10,7 +10,88 @@ import '../../theme/fairtix_palette.dart';
 import '../../services/pdf_export.dart';
 import '../../widgets/admin_shell.dart';
 import '../../widgets/admin_widgets.dart';
+import '../../widgets/ft_skeleton.dart';
 import '../../widgets/organizer_ui.dart';
+
+/// Placeholder bars for a chart panel while its data loads.
+class _SkeletonBars extends StatelessWidget {
+  const _SkeletonBars();
+
+  static const _heights = [
+    0.35, 0.5, 0.3, 0.65, 0.45, 0.8, 0.55, 0.4,
+    0.7, 0.5, 0.9, 0.6, 0.35, 0.75, 0.5, 0.65,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final h in _heights)
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: FractionallySizedBox(
+                  heightFactor: h,
+                  widthFactor: 1,
+                  child: const FtSkeletonBox(radius: 3),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Placeholder for the "Revenue Breakdown by Plan" rows (label + percent, bar,
+/// caption), three of them.
+class _SkeletonBreakdown extends StatelessWidget {
+  const _SkeletonBreakdown();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(20, 12, 20, 18),
+      child: Column(
+        children: [
+          _SkeletonBreakdownRow(),
+          _SkeletonBreakdownRow(),
+          _SkeletonBreakdownRow(),
+        ],
+      ),
+    );
+  }
+}
+
+class _SkeletonBreakdownRow extends StatelessWidget {
+  const _SkeletonBreakdownRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 9),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              FtSkeletonBox(width: 150, height: 13),
+              Spacer(),
+              FtSkeletonBox(width: 30, height: 13),
+            ],
+          ),
+          SizedBox(height: 6),
+          FtSkeletonBox(height: 8, radius: 4),
+          SizedBox(height: 5),
+          FtSkeletonBox(width: 130, height: 12),
+        ],
+      ),
+    );
+  }
+}
 
 /// Platform earnings, the refund log and CSV report exports.
 ///
@@ -64,6 +145,9 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
   String? _chartsError;
 
   bool _isExporting = false;
+
+  /// 'Approved only' option of the User Accounts export (off = all accounts).
+  bool _approvedOnly = false;
 
   @override
   void initState() {
@@ -194,33 +278,38 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
   // ── refunds ──────────────────────────────────────────────────────────
 
   Future<void> _processRefund(RefundEntry refund) async {
-    final confirmed = await showDialog<bool>(
+    final referenceController = TextEditingController();
+    final providerRefundId = await showDialog<String>(
       context: context,
-      builder: (context) => AdminDialog(
-        title: 'Mark refund as processed?',
-        content: AdminDialogText(
-          'Record that ${formatPeso(refund.amount)} was refunded to '
-          '${refund.buyerName}. This does not send money by itself \u2014 '
-          'issue the refund in PayMongo first.',
-        ),
-        actions: [
-          AdminDialogButton(
-            label: 'Cancel',
-            onPressed: () => Navigator.pop(context, false),
+      builder: (context) => AlertDialog(
+        title: const Text('Record confirmed PayMongo refund'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Issue ${formatPeso(refund.amount)} to ${refund.buyerName} in PayMongo first, then enter its refund ID.'),
+          const SizedBox(height: 16),
+          TextField(
+            controller: referenceController,
+            autofocus: true,
+            decoration: const InputDecoration(labelText: 'PayMongo refund ID', hintText: 're_…'),
           ),
-          AdminDialogButton(
-            label: 'Mark Processed',
-            color: FairTixPalette.of(context).accentLabel,
-            onPressed: () => Navigator.pop(context, true),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              final value = referenceController.text.trim();
+              if (value.isNotEmpty) Navigator.pop(context, value);
+            },
+            child: const Text('Record confirmation'),
           ),
         ],
       ),
     );
-    if (!mounted || confirmed != true) return;
+    referenceController.dispose();
+    if (!mounted || providerRefundId == null) return;
     try {
-      await AdminRefundService.instance.markProcessed(refund.id);
+      await AdminRefundService.instance.markProcessed(refund.id, providerRefundId);
       if (!mounted) return;
-      _showMessage('Refund marked as processed.');
+      _showMessage('PayMongo refund confirmation recorded.');
       await _refreshAll();
     } on AdminRefundException catch (e) {
       if (!mounted) return;
@@ -306,15 +395,76 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
   Future<void> _exportResale({required bool pdf}) => _exportReport(
     'resale_activity',
     'Resale Activity Report',
-    (from, to) async {
-      final listings = await AdminResaleService.instance.fetchListings();
-      final inRange = listings.where((l) {
-        if (from != null && l.listedAt.isBefore(from)) return false;
-        if (to != null && !l.listedAt.isBefore(to)) return false;
-        return true;
-      }).toList();
-      return resaleListingsToRows(inRange);
-    },
+    (from, to) =>
+        AdminReportService.instance.resaleActivityReportRows(from: from, to: to),
+    pdf: pdf,
+  );
+
+  Future<void> _exportOrganizerSubscriptions({required bool pdf}) =>
+      _exportReport(
+        'organizer_subscriptions',
+        'Organizer Subscription Report',
+        (from, to) => AdminReportService.instance
+            .organizerSubscriptionReportRows(from: from, to: to),
+        pdf: pdf,
+      );
+
+  Future<void> _exportEventsTickets({required bool pdf}) => _exportReport(
+    'events_tickets',
+    'Events and Tickets Report',
+    (from, to) => AdminReportService.instance.eventsAndTicketsReportRows(
+      from: from,
+      to: to,
+    ),
+    pdf: pdf,
+  );
+
+  Future<void> _exportScannerActivity({required bool pdf}) => _exportReport(
+    'scanner_checkin',
+    'Scanner and Check-in Report',
+    (from, to) => AdminReportService.instance.scannerActivityReportRows(
+      from: from,
+      to: to,
+    ),
+    pdf: pdf,
+  );
+
+  Future<void> _exportUserAccounts({required bool pdf}) => _exportReport(
+    _approvedOnly ? 'user_accounts_approved' : 'user_accounts',
+    _approvedOnly
+        ? 'User Accounts Report (approved only)'
+        : 'User Accounts Report',
+    (from, to) => AdminReportService.instance.userAccountsReportRows(
+      from: from,
+      to: to,
+      approvedOnly: _approvedOnly,
+    ),
+    pdf: pdf,
+  );
+
+  Future<void> _exportFraudAlerts({required bool pdf}) => _exportReport(
+    'fraud_alerts',
+    'Fraud Alerts Report',
+    (from, to) =>
+        AdminReportService.instance.fraudAlertsReportRows(from: from, to: to),
+    pdf: pdf,
+  );
+
+  Future<void> _exportApplicationReviews({required bool pdf}) => _exportReport(
+    'application_reviews',
+    'Application Reviews Report',
+    (from, to) => AdminReportService.instance.applicationReviewsReportRows(
+      from: from,
+      to: to,
+    ),
+    pdf: pdf,
+  );
+
+  Future<void> _exportAdminAuditLog({required bool pdf}) => _exportReport(
+    'admin_audit_log',
+    'Admin Audit Log Report',
+    (from, to) =>
+        AdminReportService.instance.adminAuditLogReportRows(from: from, to: to),
     pdf: pdf,
   );
 
@@ -372,6 +522,9 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
           _buildErrorBanner(),
           const SizedBox(height: 16),
         ],
+        if (_isLoading)
+          const FtShimmer(child: AdminSkeletonSummaryRow(count: 3))
+        else
         AdminSummaryRow(
           cards: [
             AdminSummaryCard(
@@ -557,6 +710,15 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
               ],
               flex: flex,
             ),
+            if (_isLoading)
+              FtShimmer(
+                child: AdminSkeletonTableBody(
+                  flex: flex,
+                  rows: 3,
+                  showHeader: false,
+                ),
+              )
+            else
             for (final plan in _plans)
               AdminTableRow(
                 children: [
@@ -588,12 +750,12 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
     );
   }
 
-  Widget _chartSpinner() => SizedBox(
-    height: 220,
-    child: Center(
-      child: CircularProgressIndicator(
-        strokeWidth: 2.4,
-        color: FairTixPalette.of(context).accentLabel,
+  Widget _chartSpinner() => const FtShimmer(
+    child: SizedBox(
+      height: 220,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(20, 20, 20, 16),
+        child: _SkeletonBars(),
       ),
     ),
   );
@@ -698,7 +860,7 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
       title: 'Revenue Breakdown by Plan',
       trailing: _isLoading ? null : formatPeso(revenue),
       child: _isLoading
-          ? _chartSpinner()
+          ? const FtShimmer(child: _SkeletonBreakdown())
           : revenue <= 0
           ? const SizedBox(
               height: 220,
@@ -792,7 +954,7 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
 
     final Widget body;
     if (_isLoadingCharts) {
-      body = _chartSpinner();
+      body = FtShimmer(child: AdminSkeletonTableBody(flex: flex, rows: 4));
     } else if (_chartsError != null) {
       body = AdminErrorBox(message: _chartsError!, onRetry: _loadCharts);
     } else if (!hasSales) {
@@ -859,15 +1021,7 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
     if (_refundError != null) {
       body = AdminErrorBox(message: _refundError!, onRetry: _loadRefunds);
     } else if (_isLoadingRefunds) {
-      body = Padding(
-        padding: const EdgeInsets.all(32),
-        child: Center(
-          child: CircularProgressIndicator(
-            strokeWidth: 2.4,
-            color: FairTixPalette.of(context).accentLabel,
-          ),
-        ),
-      );
+      body = FtShimmer(child: AdminSkeletonTableBody(flex: flex, rows: 3));
     } else if (_refunds.isEmpty) {
       body = const AdminEmptyState(
         icon: Icons.assignment_return_outlined,
@@ -912,7 +1066,7 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
                       child: refund.isProcessed
                           ? const SizedBox.shrink()
                           : AdminRowAction(
-                              label: 'Mark Processed',
+                              label: 'Record Provider Refund',
                               onPressed: () => _processRefund(refund),
                             ),
                     ),
@@ -967,16 +1121,90 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
           (
             Icons.sync_outlined,
             'Resale Activity Report',
-            'Every resale listing with seller, event, price versus original, and status.',
+            'Every resale listing with seller, buyer, event, price versus original, and status.',
             _exportResale,
           ),
           (
-            Icons.check_circle_outline,
-            'Attendance Report',
-            'QR scan logs and attendance rates by event and gate.',
-            null,
+            Icons.workspace_premium_outlined,
+            'Organizer Subscription Report',
+            'Each organizer with their plan, platform fee rate, status and dates.',
+            _exportOrganizerSubscriptions,
+          ),
+          (
+            Icons.manage_accounts_outlined,
+            'User Accounts Report',
+            'Every account with email, registration and approval date, status, plus summary counts.',
+            _exportUserAccounts,
+          ),
+          (
+            Icons.event_note_outlined,
+            'Events and Tickets Report',
+            'Each event and ticket tier: organizer, status, capacity, sold, canceled, used.',
+            _exportEventsTickets,
+          ),
+          (
+            Icons.qr_code_scanner_outlined,
+            'Scanner and Check-in Report',
+            'Every QR scan: event, session, time, accepted or rejected, ticket tier.',
+            _exportScannerActivity,
+          ),
+          (
+            Icons.report_problem_outlined,
+            'Fraud Alerts Report',
+            'Every price flag and alert: severity, status, flagged user, reviewer and resolution note.',
+            _exportFraudAlerts,
+          ),
+          (
+            Icons.fact_check_outlined,
+            'Application Reviews Report',
+            'Each application step: submitted, approved, rejected, resubmitted, with reason and admin.',
+            _exportApplicationReviews,
+          ),
+          (
+            Icons.history_outlined,
+            'Admin Audit Log Report',
+            'What admins did: approvals, suspensions, alert reviews, removals, cancellations.',
+            _exportAdminAuditLog,
           ),
         ];
+    // Cards are grouped under small headings by title. A card that is not
+    // listed here still shows up, under 'Other'.
+    const layout = <(String, List<String>)>[
+      (
+        'Accounts',
+        [
+          'User Accounts Report',
+          'Organizer Subscription Report',
+          'Application Reviews Report',
+        ],
+      ),
+      (
+        'Events & Sales',
+        [
+          'Transaction Report',
+          'Revenue Report',
+          'Refund Report',
+          'Events and Tickets Report',
+          'Resale Activity Report',
+        ],
+      ),
+      (
+        'Security & Operations',
+        [
+          'Scanner and Check-in Report',
+          'Fraud Alerts Report',
+          'Admin Audit Log Report',
+        ],
+      ),
+    ];
+    final groups = [
+      for (final g in layout)
+        (g.$1, reports.where((r) => g.$2.contains(r.$2)).toList()),
+    ];
+    final known = {for (final g in layout) ...g.$2};
+    final other = reports.where((r) => !known.contains(r.$2)).toList();
+    if (other.isNotEmpty) groups.add(('Other', other));
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -989,7 +1217,18 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
           'Exports cover: ${_rangeLabel()} (change it with the range selector above)',
           style: orgText(p, size: 13, color: p.textSecondary),
         ),
-        const SizedBox(height: 16),
+        for (final group in groups) ...[
+        const SizedBox(height: 20),
+        Text(
+          group.$1,
+          style: orgText(
+            p,
+            size: 15,
+            weight: FontWeight.w700,
+            color: p.accentLabel,
+          ),
+        ),
+        const SizedBox(height: 12),
         LayoutBuilder(
           builder: (context, constraints) {
             final columns = constraints.maxWidth >= 1000
@@ -1002,13 +1241,13 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
               spacing: 16,
               runSpacing: 16,
               children: [
-                for (final report in reports)
+                for (final report in group.$2)
                   SizedBox(
                     width: cardWidth,
                     child: AdminCard(
                       padding: const EdgeInsets.all(20),
                       child: SizedBox(
-                        height: 168,
+                        height: report.$2 == 'User Accounts Report' ? 206 : 168,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -1049,6 +1288,43 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
                                 height: 1.35,
                               ),
                             ),
+                            if (report.$2 == 'User Accounts Report') ...[
+                              const SizedBox(height: 8),
+                              InkWell(
+                                borderRadius: BorderRadius.circular(8),
+                                onTap: _isExporting
+                                    ? null
+                                    : () => setState(
+                                        () => _approvedOnly = !_approvedOnly,
+                                      ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: Checkbox(
+                                        value: _approvedOnly,
+                                        onChanged: _isExporting
+                                            ? null
+                                            : (v) => setState(
+                                                () => _approvedOnly = v ?? false,
+                                              ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Approved only',
+                                      style: orgText(
+                                        p,
+                                        size: 12,
+                                        weight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                             const Spacer(),
                             Wrap(
                               spacing: 8,
@@ -1079,6 +1355,7 @@ class _AdminRevenueReportsScreenState extends State<AdminRevenueReportsScreen> {
             );
           },
         ),
+        ],
       ],
     );
   }

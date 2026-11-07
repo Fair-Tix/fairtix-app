@@ -33,15 +33,15 @@ class TransactionDetailScreen extends StatelessWidget {
     }
   }
 
-  Future<void> _copyReference(BuildContext context) async {
-    await Clipboard.setData(ClipboardData(text: transaction.referenceNumber));
+  Future<void> _copyText(BuildContext context, String text, String message) async {
+    await Clipboard.setData(ClipboardData(text: text));
     if (!context.mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        const SnackBar(
-          content: Text('Reference copied'),
-          duration: Duration(seconds: 2),
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(seconds: 2),
         ),
       );
   }
@@ -63,12 +63,31 @@ class TransactionDetailScreen extends StatelessWidget {
               value: '${transaction.eventTitle} · ${transaction.tierName}',
             ),
             _DetailRow(label: 'Date', value: formatMediumDate(transaction.dateTime)),
-            _DetailRow(label: 'Paid with', value: transaction.paymentMethod),
+            // Only purchases are paid by the user; a sale or refund has no
+            // "paid with". A purchase made before payment details were
+            // recorded says so instead of guessing.
+            if (transaction.category == TransactionCategory.ticketPurchase ||
+                transaction.category == TransactionCategory.resalePurchase)
+              _DetailRow(label: 'Paid with', value: transaction.paymentMethod),
             if (fee != null) _DetailRow(label: fee.label, value: fee.value),
+            if (transaction.paymentReference != null)
+              _DetailRow(
+                label: 'Payment ref',
+                value: transaction.paymentReference!,
+                onCopy: () => _copyText(
+                  context,
+                  transaction.paymentReference!,
+                  'Payment reference copied',
+                ),
+              ),
             _DetailRow(
-              label: 'Reference',
+              label: 'Transaction ID',
               value: transaction.referenceNumber,
-              onCopy: () => _copyReference(context),
+              onCopy: () => _copyText(
+                context,
+                transaction.referenceNumber,
+                'Transaction ID copied',
+              ),
             ),
           ],
         ),
@@ -197,7 +216,7 @@ class _DetailRow extends StatelessWidget {
               child: Icon(
                 Icons.copy_rounded,
                 size: 19,
-                semanticLabel: 'Copy reference',
+                semanticLabel: 'Copy',
                 color: t.activeAccent,
               ),
             ),

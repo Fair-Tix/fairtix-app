@@ -93,11 +93,19 @@ String resaleListingsToCsv(List<ResaleListingEntry> rows) {
 
 /// The same report as raw rows (first row = header), shared by the CSV and
 /// PDF exports.
-List<List<Object?>> resaleListingsToRows(List<ResaleListingEntry> rows) {
+///
+/// When [buyers] is given (listing id -> buyer), two more columns, Buyer and
+/// Buyer Email, are added at the end (blank for listings with no known buyer).
+/// Resale Monitoring leaves it out, so its export is unchanged.
+List<List<Object?>> resaleListingsToRows(
+  List<ResaleListingEntry> rows, {
+  Map<String, ({String name, String email})>? buyers,
+}) {
   return [
     [
       'Listing ID', 'Seller', 'Seller Email', 'Event', 'Tier', 'Original Price (PHP)',
       'Resale Price (PHP)', '% of Original', 'Status', 'Listed At', 'Sold At',
+      if (buyers != null) ...['Buyer', 'Buyer Email'],
     ],
     for (final l in rows)
       [
@@ -112,6 +120,10 @@ List<List<Object?>> resaleListingsToRows(List<ResaleListingEntry> rows) {
         l.statusLabel,
         l.listedAt.toIso8601String(),
         l.soldAt?.toIso8601String() ?? '',
+        if (buyers != null) ...[
+          buyers[l.id]?.name ?? '',
+          buyers[l.id]?.email ?? '',
+        ],
       ],
   ];
 }

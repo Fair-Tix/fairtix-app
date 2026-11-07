@@ -126,20 +126,20 @@ class _ResaleListingScreenState extends State<ResaleListingScreen> {
           const SizedBox(height: 16),
         ],
         FtSurfaceCard(
-          padding: const EdgeInsets.all(20),
-          radius: 26,
+          padding: const EdgeInsets.all(16),
+          radius: 22,
           child: Row(
             children: [
               Container(
-                width: 74,
-                height: 74,
+                width: 56,
+                height: 56,
                 decoration: const BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: FairTixPalette.buttonGradient,
                 ),
-                child: const Icon(Icons.confirmation_number_outlined, color: Colors.white, size: 32),
+                child: const Icon(Icons.confirmation_number_outlined, color: Colors.white, size: 26),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -149,7 +149,7 @@ class _ResaleListingScreenState extends State<ResaleListingScreen> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 24,
+                        fontSize: 18,
                         height: 1.15,
                         fontWeight: FontWeight.w800,
                         color: t.titleColor,
@@ -161,7 +161,7 @@ class _ResaleListingScreenState extends State<ResaleListingScreen> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 16.5,
+                        fontSize: 14,
                         color: t.subtitleColor,
                       ),
                     ),
@@ -174,13 +174,13 @@ class _ResaleListingScreenState extends State<ResaleListingScreen> {
                 children: [
                   Text(
                     'Face value',
-                    style: GoogleFonts.plusJakartaSans(fontSize: 14, color: t.subtitleColor),
+                    style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: t.subtitleColor),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     formatPesoShort(ticket.originalPrice),
                     style: GoogleFonts.plusJakartaSans(
-                      fontSize: 24,
+                      fontSize: 18,
                       fontWeight: FontWeight.w800,
                       color: t.titleColor,
                     ),
@@ -190,11 +190,11 @@ class _ResaleListingScreenState extends State<ResaleListingScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 26),
+        const SizedBox(height: 22),
         Center(
           child: Text(
             'Your asking price',
-            style: GoogleFonts.plusJakartaSans(fontSize: 18, color: t.subtitleColor),
+            style: GoogleFonts.plusJakartaSans(fontSize: 15, color: t.subtitleColor),
           ),
         ),
         const SizedBox(height: 4),
@@ -204,10 +204,10 @@ class _ResaleListingScreenState extends State<ResaleListingScreen> {
             child: Text(
               formatPesoShort(_price),
               style: GoogleFonts.plusJakartaSans(
-                fontSize: 62,
+                fontSize: 46,
                 height: 1.1,
                 fontWeight: FontWeight.w800,
-                letterSpacing: -1.5,
+                letterSpacing: -1.2,
                 color: t.titleColor,
               ),
             ),
@@ -217,7 +217,7 @@ class _ResaleListingScreenState extends State<ResaleListingScreen> {
         if (_hasRange) ...[
           SliderTheme(
             data: SliderThemeData(
-              trackHeight: 10,
+              trackHeight: 8,
               activeTrackColor: FtColors.fieldBorderFocused,
               inactiveTrackColor: t.progressTrack,
               disabledActiveTrackColor: FtColors.fieldBorderFocused.withValues(alpha: 0.5),
@@ -240,11 +240,11 @@ class _ResaleListingScreenState extends State<ResaleListingScreen> {
               children: [
                 Text(
                   '${formatPesoShort(_minPrice)} min',
-                  style: GoogleFonts.plusJakartaSans(fontSize: 16, color: t.subtitleColor),
+                  style: GoogleFonts.plusJakartaSans(fontSize: 13.5, color: t.subtitleColor),
                 ),
                 Text(
                   '${formatPesoShort(_maxPrice)} max',
-                  style: GoogleFonts.plusJakartaSans(fontSize: 16, color: t.subtitleColor),
+                  style: GoogleFonts.plusJakartaSans(fontSize: 13.5, color: t.subtitleColor),
                 ),
               ],
             ),
@@ -268,8 +268,8 @@ class _ResaleListingScreenState extends State<ResaleListingScreen> {
           const FtBanner(message: 'Free tickets can’t be listed for resale.'),
         const SizedBox(height: 22),
         FtSurfaceCard(
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 22),
-          radius: 26,
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+          radius: 22,
           child: Column(
             children: [
               FtSummaryRow(label: 'Listing price', value: formatPesoShort(_price)),
@@ -332,7 +332,7 @@ class _QuickPriceChip extends StatelessWidget {
             borderRadius: radius,
             onTap: onTap,
             child: Container(
-              height: 54,
+              height: 46,
               alignment: Alignment.center,
               padding: const EdgeInsets.symmetric(horizontal: 6),
               child: FittedBox(
@@ -340,7 +340,7 @@ class _QuickPriceChip extends StatelessWidget {
                 child: Text(
                   formatPesoShort(amount),
                   style: GoogleFonts.plusJakartaSans(
-                    fontSize: 17,
+                    fontSize: 15,
                     fontWeight: FontWeight.w800,
                     color: selected ? Colors.white : t.secondaryText,
                   ),
@@ -360,8 +360,8 @@ class _RingThumbShape extends SliderComponentShape {
 
   final Color ring;
 
-  static const double _outer = 16;
-  static const double _inner = 12;
+  static const double _outer = 14;
+  static const double _inner = 10;
 
   @override
   Size getPreferredSize(bool isEnabled, bool isDiscrete) => const Size.fromRadius(_outer);

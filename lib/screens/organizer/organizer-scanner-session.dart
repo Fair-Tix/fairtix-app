@@ -10,6 +10,7 @@ import '../../services/access_control.dart';
 import '../../services/event_repository.dart';
 import '../../services/scanner_repository.dart';
 import '../../theme/fairtix_palette.dart';
+import '../../widgets/ft_skeleton.dart';
 import '../../widgets/organizer_ui.dart';
 import 'organizer-scaffold.dart';
 
@@ -32,6 +33,237 @@ class OrganizerScannerSessionScreen extends StatefulWidget {
       _OrganizerScannerSessionScreenState();
 }
 
+/// Loading placeholder with the page's two-column layout (switches at 1000px
+/// like the real page): the "New session" card on the left, the share card and
+/// the active sessions table on the right.
+class _ScannerSkeleton extends StatelessWidget {
+  const _ScannerSkeleton({required this.wide});
+
+  final bool wide;
+
+  @override
+  Widget build(BuildContext context) {
+    const left = _SkeletonNewSession();
+    const right = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SkeletonShare(),
+        SizedBox(height: 24),
+        _SkeletonSessions(),
+      ],
+    );
+
+    return FtShimmer(
+      child: wide
+          ? const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 4, child: left),
+                SizedBox(width: 24),
+                Expanded(flex: 6, child: right),
+              ],
+            )
+          : const Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [left, SizedBox(height: 24), right],
+            ),
+    );
+  }
+}
+
+/// Two grey text lines (full width and 70%).
+class _SkeletonTextLines extends StatelessWidget {
+  const _SkeletonTextLines();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FtSkeletonBox(height: 14),
+        SizedBox(height: 8),
+        FractionallySizedBox(
+          widthFactor: 0.7,
+          alignment: Alignment.centerLeft,
+          child: FtSkeletonBox(height: 14),
+        ),
+      ],
+    );
+  }
+}
+
+class _SkeletonNewSession extends StatelessWidget {
+  const _SkeletonNewSession();
+
+  @override
+  Widget build(BuildContext context) {
+    return const FtSkeletonPanel(
+      radius: 28,
+      padding: EdgeInsets.all(28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FtSkeletonBox(width: 140, height: 22),
+          ),
+          SizedBox(height: 22),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FtSkeletonBox(width: 50, height: 12),
+          ),
+          SizedBox(height: 8),
+          FtSkeletonBox(height: 54, radius: 14),
+          SizedBox(height: 16),
+          _SkeletonTextLines(),
+          SizedBox(height: 22),
+          FtSkeletonBox(height: 52, radius: 14),
+        ],
+      ),
+    );
+  }
+}
+
+class _SkeletonShare extends StatelessWidget {
+  const _SkeletonShare();
+
+  @override
+  Widget build(BuildContext context) {
+    return const FtSkeletonPanel(
+      radius: 28,
+      padding: EdgeInsets.all(28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FtSkeletonBox(width: 220, height: 22),
+          ),
+          SizedBox(height: 22),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FtSkeletonBox(width: 90, height: 12),
+          ),
+          SizedBox(height: 10),
+          Row(
+            children: [
+              FtSkeletonBox(width: 56, height: 62, radius: 14),
+              SizedBox(width: 12),
+              FtSkeletonBox(width: 56, height: 62, radius: 14),
+              SizedBox(width: 12),
+              FtSkeletonBox(width: 56, height: 62, radius: 14),
+              SizedBox(width: 12),
+              FtSkeletonBox(width: 56, height: 62, radius: 14),
+            ],
+          ),
+          SizedBox(height: 14),
+          _SkeletonTextLines(),
+          SizedBox(height: 22),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FtSkeletonBox(width: 90, height: 12),
+          ),
+          SizedBox(height: 8),
+          FtSkeletonBox(height: 50, radius: 14),
+        ],
+      ),
+    );
+  }
+}
+
+class _SkeletonSessions extends StatelessWidget {
+  const _SkeletonSessions();
+
+  @override
+  Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
+
+    Widget row({bool top = false}) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 18),
+        decoration: BoxDecoration(
+          border: top ? Border(top: BorderSide(color: p.border)) : null,
+        ),
+        child: const Row(
+          children: [
+            Expanded(
+              flex: 3,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: FtSkeletonBox(width: 120, height: 15),
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: FtSkeletonBox(width: 80, height: 14),
+              ),
+            ),
+            Expanded(
+              flex: 3,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: FtSkeletonBox(width: 130, height: 14),
+              ),
+            ),
+            SizedBox(width: 72, child: FtSkeletonBox(height: 14)),
+          ],
+        ),
+      );
+    }
+
+    return FtSkeletonPanel(
+      radius: 28,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(28, 26, 28, 20),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: FtSkeletonBox(width: 150, height: 22),
+            ),
+          ),
+          Container(
+            color: p.background.withValues(alpha: p.isDark ? 0.55 : 0.6),
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+            child: const Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: FtSkeletonBox(width: 44, height: 12),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: FtSkeletonBox(width: 56, height: 12),
+                  ),
+                ),
+                Expanded(
+                  flex: 3,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: FtSkeletonBox(width: 52, height: 12),
+                  ),
+                ),
+                SizedBox(width: 72),
+              ],
+            ),
+          ),
+          row(),
+          row(top: true),
+        ],
+      ),
+    );
+  }
+}
+
 class _SessionEntry {
   _SessionEntry({
     required this.session,
@@ -48,6 +280,11 @@ class _OrganizerScannerSessionScreenState
     extends State<OrganizerScannerSessionScreen> {
   List<OrganizerEvent> _events = [];
   String? _selectedEventId;
+
+  /// True until the access check, the event list and the live sessions have
+  /// been read once, so the cards don't flash "No published events" /
+  /// "No active sessions yet." before the real data arrives.
+  bool _loading = true;
 
   bool _generating = false;
   String? _errorMessage;
@@ -130,6 +367,7 @@ class _OrganizerScannerSessionScreenState
     final live = all.where((e) => e.status == EventStatus.published).toList();
     setState(() {
       _events = live;
+      _loading = false;
       final wanted = live.any((e) => e.id == widget.eventId)
           ? widget.eventId
           : (live.isEmpty ? null : live.first.id);
@@ -307,7 +545,9 @@ class _OrganizerScannerSessionScreenState
             ),
           ),
           const SizedBox(height: 24),
-          if (wide)
+          if (_loading)
+            _ScannerSkeleton(wide: wide)
+          else if (wide)
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

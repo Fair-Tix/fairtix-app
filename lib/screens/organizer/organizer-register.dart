@@ -3,10 +3,12 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../../models/legal_terms.dart';
 import '../../services/organizer_auth_service.dart';
 import '../../theme/fairtix_palette.dart';
 import '../../widgets/fairtix_mark.dart';
 import '../../widgets/organizer_ui.dart';
+import '../user/terms_privacy_screen.dart';
 import 'organizer-login.dart';
 import 'organizer-otp-verification.dart';
 
@@ -35,6 +37,7 @@ class _OrganizerRegisterScreenState extends State<OrganizerRegisterScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   bool _isSubmitting = false;
+  bool _acceptedTerms = false;
   String? _errorText;
 
   // Slot 1: government / school ID (stored as `venue_proof`).
@@ -105,6 +108,10 @@ class _OrganizerRegisterScreenState extends State<OrganizerRegisterScreen> {
       );
       return;
     }
+    if (!_acceptedTerms) {
+      setState(() => _errorText = 'Accept the Terms & Privacy Policy to continue.');
+      return;
+    }
 
     setState(() {
       _isSubmitting = true;
@@ -117,6 +124,7 @@ class _OrganizerRegisterScreenState extends State<OrganizerRegisterScreen> {
         organizationName: _organizationNameController.text,
         email: _emailController.text,
         password: _passwordController.text,
+        termsVersion: kTermsVersion,
       );
     } on OrganizerAuthException catch (e) {
       if (!mounted) return;
@@ -151,6 +159,15 @@ class _OrganizerRegisterScreenState extends State<OrganizerRegisterScreen> {
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (_) => const OrganizerLoginScreen()),
+    );
+  }
+
+  void _openLegal({required bool privacy}) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TermsPrivacyScreen(initialTab: privacy ? 1 : 0),
+      ),
     );
   }
 
@@ -230,6 +247,32 @@ class _OrganizerRegisterScreenState extends State<OrganizerRegisterScreen> {
                           ? 'Full name is required'
                           : null,
                     ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Checkbox(
+                        value: _acceptedTerms,
+                        onChanged: _isSubmitting
+                            ? null
+                            : (value) => setState(() {
+                                  _acceptedTerms = value ?? false;
+                                  _errorText = null;
+                                }),
+                      ),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Wrap(children: [
+                            Text('I have read and accept the ', style: orgText(p, size: 13, color: p.textSecondary)),
+                            OrganizerTextLink(label: 'Terms', onTap: () => _openLegal(privacy: false)),
+                            Text(' and ', style: orgText(p, size: 13, color: p.textSecondary)),
+                            OrganizerTextLink(label: 'Privacy Policy', onTap: () => _openLegal(privacy: true)),
+                          ]),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
                   pair(

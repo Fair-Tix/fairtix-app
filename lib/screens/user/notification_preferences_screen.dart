@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../models/notification_settings.dart';
+import '../../services/notification_preferences_service.dart';
 import '../../widgets/ft_dark_ui.dart';
 import '../../widgets/ft_resale_ui.dart';
 import '../../widgets/ft_subpage_ui.dart';
@@ -18,6 +19,57 @@ class NotificationPreferencesScreen extends StatefulWidget {
 }
 
 class _NotificationPreferencesScreenState extends State<NotificationPreferencesScreen> {
+  bool _loading = true;
+  bool _saving = false;
+
+  bool get _busy => _loading || _saving;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  /// Reads this user's saved choices from the server so the switches show
+  /// what is really applied. Switches stay disabled until it finishes.
+  Future<void> _load() async {
+    try {
+      await NotificationPreferencesService.instance.load();
+    } on NotificationPreferencesException catch (e) {
+      _showMessage(e.message);
+    } catch (_) {
+      _showMessage('Could not load your notification settings. Check your connection.');
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  /// Applies one switch change, saves it, and puts the switch back if the
+  /// save fails, so the screen never shows a choice the server did not keep.
+  Future<void> _change(VoidCallback apply) async {
+    final before = notificationSettings.copy();
+    setState(() {
+      apply();
+      _saving = true;
+    });
+    try {
+      await NotificationPreferencesService.instance.save(notificationSettings);
+    } on NotificationPreferencesException catch (e) {
+      notificationSettings.copyFrom(before);
+      _showMessage(e.message);
+    } catch (_) {
+      notificationSettings.copyFrom(before);
+      _showMessage('Could not save your change. Check your connection and try again.');
+    }
+    if (mounted) setState(() => _saving = false);
+  }
+
+  void _showMessage(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(text)));
+  }
+
   void _explainLocked() {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -53,13 +105,13 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
                 title: 'Email',
                 subtitle: 'To your verified email',
                 value: settings.emailEnabled,
-                onChanged: (v) => setState(() => settings.emailEnabled = v),
+                onChanged: _busy ? null : (v) => _change(() => settings.emailEnabled = v),
               ),
               _ToggleRow(
                 title: 'Push',
                 subtitle: 'On this device',
                 value: settings.pushEnabled,
-                onChanged: (v) => setState(() => settings.pushEnabled = v),
+                onChanged: _busy ? null : (v) => _change(() => settings.pushEnabled = v),
               ),
             ],
           ),
@@ -82,7 +134,7 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
                 title: 'Resale',
                 subtitle: 'Listings, sales, expiries',
                 value: settings.resaleActivityEnabled,
-                onChanged: (v) => setState(() => settings.resaleActivityEnabled = v),
+                onChanged: _busy ? null : (v) => _change(() => settings.resaleActivityEnabled = v),
               ),
               _ToggleRow(
                 title: 'Account',
@@ -95,7 +147,7 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
                 title: 'Promotions',
                 subtitle: 'New events from organizers you bought from',
                 value: settings.promoEnabled,
-                onChanged: (v) => setState(() => settings.promoEnabled = v),
+                onChanged: _busy ? null : (v) => _change(() => settings.promoEnabled = v),
               ),
             ],
           ),
@@ -103,7 +155,8 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
         const SizedBox(height: 20),
         const FtNote(
           icon: Icons.lock_outline_rounded,
-          text: 'Ticket, refund and account alerts can’t be turned off, so you never miss one.',
+          text: 'Ticket, refund and account alerts can’t be turned off, so you never miss one. '
+              'Turning off Resale or Promotions stops those alerts on every channel.',
         ),
       ],
     );

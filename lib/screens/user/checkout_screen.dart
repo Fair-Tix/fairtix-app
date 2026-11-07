@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:app_links/app_links.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -14,9 +15,11 @@ import '../../services/public_event_repository.dart';
 import '../../services/ticket_repository.dart';
 import '../../services/transaction_repository.dart';
 import '../../services/user_session.dart';
+import '../../theme/fairtix_palette.dart';
 import '../../widgets/ft_dark_ui.dart';
 import '../../widgets/ft_dashboard_ui.dart' show FtBackButton, FtPressScale;
 import '../../widgets/ft_pending_ui.dart' show FtReveal;
+import '../../widgets/ft_payment_failed_dialog.dart';
 import 'checkout_confirmation_screen.dart';
 
 /// Real checkout flow (fully automatic, no "I've paid" button):
@@ -57,11 +60,20 @@ class _CheckoutScreenState extends State<CheckoutScreen>
   static const int _entranceMs = 750;
 
   _CheckoutStage _stage = _CheckoutStage.review;
+  /// Payment method the buyer picked (a PayMongo method type). GCash / Maya
+  /// use the Payment Intent flow (the browser returns to the app even after
+  /// "Fail Test Payment"); card uses the hosted PayMongo page.
+  String _method = 'gcash';
   String? _checkoutUrl;
   String? _sessionId;
   String? _errorMessage;
   bool _verifying = false;
   StreamSubscription<Uri>? _linkSub;
+
+  /// Asks the server every few seconds whether the payment finished while the
+  /// PayMongo page is open, so a failed or paid payment is noticed without any
+  /// redirect from PayMongo's page.
+  Timer? _pollTimer;
 
   /// The tier being bought. Starts as the one chosen on Event Details and
   /// can be changed here until a payment is started.
@@ -98,6 +110,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _linkSub?.cancel();
+    _pollTimer?.cancel();
     _entrance.dispose();
     super.dispose();
   }
@@ -114,17 +127,41 @@ class _CheckoutScreenState extends State<CheckoutScreen>
   void _handleDeepLink(Uri uri) {
     if (uri.scheme != 'fairtix' || uri.host != 'payment') return;
     if (_stage != _CheckoutStage.awaitingPayment) return;
+    unawaited(_closePaymentPage());
     final result = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : '';
-    if (result == 'cancel') {
+    if (result == 'cancel' || result == 'failed' || result == 'failure') {
+      _pollTimer?.cancel();
       setState(() {
         _stage = _CheckoutStage.review;
-        _errorMessage = 'Payment was canceled. You have not been charged.';
+        _errorMessage = null;
       });
+      showPaymentFailedDialog(context, canceled: result == 'cancel');
       return;
     }
     // success: confirm with the server. Retry a few times because PayMongo can
     // take a moment to mark the payment as paid after the redirect.
     _verifyPayment(attempts: 6, silent: false);
+  }
+
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 3), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      if (_stage != _CheckoutStage.awaitingPayment) return;
+      _verifyPayment(attempts: 1, silent: true);
+    });
+  }
+
+  /// Closes the in-app PayMongo page (opened with LaunchMode.inAppWebView) so
+  /// the buyer is back on this screen. Harmless if no page is open.
+  Future<void> _closePaymentPage() async {
+    if (kIsWeb) return;
+    try {
+      await closeInAppWebView();
+    } catch (_) {}
   }
 
   Future<void> _handleStartPayment() async {
@@ -142,6 +179,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
         body: {
           'description': '${_tier.name} \u2013 ${widget.event.title}',
           'tierId': _tier.id,
+          'paymentMethod': _method,
         },
       );
 
@@ -173,7 +211,8 @@ class _CheckoutScreenState extends State<CheckoutScreen>
         _stage = _CheckoutStage.awaitingPayment;
       });
 
-      final launched = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      final launched = await launchUrl(Uri.parse(url), mode: LaunchMode.inAppWebView);
+      _startPolling();
       if (!launched && mounted) {
         setState(() => _errorMessage = 'Could not open the payment page automatically. Use the link below.');
       }
@@ -226,6 +265,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
     }
 
     String? lastMessage;
+    var paymentFailed = false;
     try {
       for (var i = 0; i < attempts; i++) {
         try {
@@ -253,6 +293,11 @@ class _CheckoutScreenState extends State<CheckoutScreen>
           lastMessage = (details is Map ? details['error'] as String? : null) ??
               'Could not confirm your payment.';
           // 402 = PayMongo doesn't show it as paid (yet): worth retrying.
+          // Unless PayMongo says the payment itself failed: stop and tell the buyer.
+          if (details is Map && details['payment_failed'] == true) {
+            paymentFailed = true;
+            break;
+          }
           // Anything else (403 wrong account, 400, 5xx) won't fix itself.
           if (e.status != 402) break;
         }
@@ -268,6 +313,16 @@ class _CheckoutScreenState extends State<CheckoutScreen>
     }
 
     if (!mounted) return;
+    if (paymentFailed) {
+      _pollTimer?.cancel();
+      unawaited(_closePaymentPage());
+      setState(() {
+        _stage = _CheckoutStage.review;
+        _errorMessage = null;
+      });
+      showPaymentFailedDialog(context);
+      return;
+    }
     setState(() {
       _stage = _CheckoutStage.awaitingPayment;
       _errorMessage = silent ? null : lastMessage;
@@ -278,6 +333,8 @@ class _CheckoutScreenState extends State<CheckoutScreen>
   /// payment, or immediately for a free (price 0) tier: builds the local
   /// [Ticket], refreshes the caches, and shows the confirmation screen.
   void _finishPurchase({required String ticketId, required String qrToken, String? paymentMethod}) {
+    _pollTimer?.cancel();
+    unawaited(_closePaymentPage());
     final newTicket = Ticket(
       id: ticketId,
       event: widget.event,
@@ -489,22 +546,27 @@ class _CheckoutScreenState extends State<CheckoutScreen>
                           const SizedBox(height: 10),
                           Semantics(header: true, child: Text('PAY WITH', style: label())),
                           const SizedBox(height: 12),
-                          // Information only: PayMongo's own page is where the
-                          // buyer picks GCash, Maya or card.
-                          ExcludeSemantics(
-                            child: Wrap(
-                              spacing: 10,
-                              runSpacing: 10,
-                              children: const [
-                                _MethodChip('GCash'),
-                                _MethodChip('Maya'),
-                                _MethodChip('Card'),
-                              ],
-                            ),
+                          // The chosen method is sent to the server: GCash / Maya
+                          // return to the app on success AND failure; card pays
+                          // on PayMongo's own page.
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: [
+                              for (final m in const [
+                                (label: 'GCash', type: 'gcash'),
+                                (label: 'Maya', type: 'paymaya'),
+                                (label: 'Card', type: 'card'),
+                              ])
+                                _MethodPill(
+                                  label: m.label,
+                                  selected: _method == m.type,
+                                  onTap: canChangeTier ? () => setState(() => _method = m.type) : null,
+                                ),
+                            ],
                           ),
                           const SizedBox(height: 10),
                           Text(
-                            'You\u2019ll pick GCash, Maya or card on PayMongo\u2019s page. '
                             'Test mode \u2014 no real money is processed.',
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 12.5,
@@ -581,7 +643,7 @@ class _CheckoutScreenState extends State<CheckoutScreen>
                                 ? null
                                 : () => launchUrl(
                                       Uri.parse(_checkoutUrl!),
-                                      mode: LaunchMode.externalApplication,
+                                      mode: LaunchMode.inAppWebView,
                                     ),
                           ),
                         ],
@@ -778,28 +840,51 @@ class _TierOption extends StatelessWidget {
   }
 }
 
-class _MethodChip extends StatelessWidget {
-  const _MethodChip(this.label);
+class _MethodPill extends StatelessWidget {
+  const _MethodPill({required this.label, required this.selected, required this.onTap});
 
   final String label;
+  final bool selected;
+
+  /// Null once a payment has started (the choice is locked).
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final t = FtAuthTheme.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(999),
-        color: t.isDark ? t.surfaceFill.withValues(alpha: 0.75) : t.surfaceFill,
-        border: Border.all(color: t.surfaceBorder),
-      ),
-      child: Text(
-        label,
-        style: GoogleFonts.plusJakartaSans(
-          fontSize: 15,
-          height: 1.2,
-          fontWeight: FontWeight.w700,
-          color: t.secondaryText,
+    final radius = BorderRadius.circular(999);
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: 'Pay with $label',
+      excludeSemantics: true,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: radius,
+          gradient: selected ? FairTixPalette.buttonGradient : null,
+          color: selected
+              ? null
+              : (t.isDark ? t.surfaceFill.withValues(alpha: 0.75) : t.surfaceFill),
+          border: selected ? null : Border.all(color: t.surfaceBorder),
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            borderRadius: radius,
+            onTap: onTap,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+              child: Text(
+                label,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 15,
+                  height: 1.2,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
+                  color: selected ? Colors.white : t.secondaryText,
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );

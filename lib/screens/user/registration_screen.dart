@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/registration_draft.dart';
+import '../../models/legal_terms.dart';
 import '../../services/user_auth_service.dart';
 import '../../theme/page_transitions.dart';
 import '../../widgets/ft_dark_ui.dart';
@@ -37,6 +38,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final _passwordController = TextEditingController();
 
   bool _isSubmitting = false;
+  bool _acceptedTerms = false;
   bool _showFieldErrors = false;
   String? _error;
 
@@ -119,6 +121,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       _error = null;
     });
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (!_acceptedTerms) {
+      setState(() => _error = 'Accept the Terms & Privacy Policy to continue.');
+      return;
+    }
 
     final fullName = _normalizeName(_nameController.text);
     final email = _emailController.text.trim().toLowerCase();
@@ -137,6 +143,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           fullName: fullName,
           email: email,
           password: password,
+          termsVersion: kTermsVersion,
         );
         _createdEmail = email;
         _createdPassword = password;
@@ -228,6 +235,30 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               ],
             ),
           ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Checkbox(
+              value: _acceptedTerms,
+              onChanged: _isSubmitting ? null : (value) => setState(() {
+                _acceptedTerms = value ?? false;
+                _error = null;
+              }),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Wrap(children: [
+                  const Text('I have read and accept the '),
+                  TextButton(onPressed: () => _openLegal(privacy: false), child: const Text('Terms')),
+                  const Text(' and '),
+                  TextButton(onPressed: () => _openLegal(privacy: true), child: const Text('Privacy Policy')),
+                ]),
+              ),
+            ),
+          ],
         ),
         if (_error != null) ...[
           const SizedBox(height: 18),

@@ -30,6 +30,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 const PAYMONGO_WEBHOOK_SECRET = Deno.env.get('PAYMONGO_WEBHOOK_SECRET') ?? '';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+const PAYMONGO_SECRET_KEY = Deno.env.get('PAYMONGO_SECRET_KEY') ?? '';
 
 
 /// Verifies PayMongo's `Paymongo-Signature` header, shaped like:
@@ -90,6 +91,73 @@ serve(async (req) => {
   try {
     const event = JSON.parse(rawBody);
     const eventType = event?.data?.attributes?.type;
+
+    // GCash / Maya payments use the Payment Intent flow (see paymongo-checkout)
+    // and arrive as "payment.paid". The event does not carry our metadata, so we
+    // re-read the intent from PayMongo and act only if it SUCCEEDED and carries
+    // the `flow: 'intent'` marker that only paymongo-checkout writes. The marker
+    // keeps this from double-issuing for hosted Checkout Session payments, which
+    // are handled below via checkout_session.payment.paid.
+    if (eventType === 'payment.paid') {
+      const intentId = event.data.attributes.data?.attributes?.payment_intent_id as string | undefined;
+      if (!intentId || !PAYMONGO_SECRET_KEY) {
+        return new Response(JSON.stringify({ received: true, ignored: 'no payment intent' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      const piResponse = await fetch(
+        `https://api.paymongo.com/v1/payment_intents/${encodeURIComponent(intentId)}`,
+        { headers: { Authorization: `Basic ${btoa(`${PAYMONGO_SECRET_KEY}:`)}` } },
+      );
+      const piPayload = await piResponse.json();
+      // Non-2xx makes PayMongo retry, which is right for a transient lookup error.
+      if (!piResponse.ok) throw new Error(piPayload?.errors?.[0]?.detail ?? 'Could not read the payment intent.');
+      const piAttrs = piPayload.data.attributes;
+      const piMeta = (piAttrs.metadata ?? {}) as {
+        flow?: string;
+        tier_id?: string;
+        listing_id?: string;
+        buyer_id?: string;
+      };
+      if (piAttrs.status !== 'succeeded' || piMeta.flow !== 'intent' || !piMeta.buyer_id) {
+        return new Response(JSON.stringify({ received: true, ignored: 'not a FairTix intent payment' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      const intentClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      // Same references paymongo-verify uses, so only one of the two ever issues.
+      if (piMeta.listing_id) {
+        const { error: intentResaleError } = await intentClient.rpc('fulfill_resale_purchase', {
+          p_listing_id: piMeta.listing_id,
+          p_buyer_id: piMeta.buyer_id,
+          p_payment_ref: `FTX-RS-${intentId}`,
+        });
+        if (intentResaleError) throw new Error(intentResaleError.message);
+      } else if (piMeta.tier_id) {
+        // For a payment.paid event, event.data.attributes.data IS the payment.
+        const intentPayment = event.data.attributes.data;
+        const { error: intentTicketError } = await intentClient.rpc('fulfill_ticket_purchase', {
+          p_tier_id: piMeta.tier_id,
+          p_buyer_id: piMeta.buyer_id,
+          p_qr_code_token: `FTX-${intentId}`,
+          p_payment_ref: `FTX-TK-${intentId}`,
+          p_provider_payment_id: (intentPayment?.id as string | undefined) ?? null,
+          p_payment_method: (intentPayment?.attributes?.source?.type as string | undefined) ?? null,
+        });
+        if (intentTicketError) throw new Error(intentTicketError.message);
+      } else {
+        return new Response(JSON.stringify({ received: true, ignored: 'no FairTix metadata' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ received: true, fulfilled: true, intent: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
     // Only "checkout_session.payment.paid" actually confirms money moved;
     // ignore everything else with a 200 so PayMongo doesn't keep retrying a
@@ -179,10 +247,23 @@ serve(async (req) => {
     const qrCodeToken = `FTX-${sessionId}`;
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    // Payment details recorded with the purchase (supabase/payment_references.sql;
+    // run it BEFORE deploying this version). Null when PayMongo does not say.
+    const sessionPayments = (sessionData.attributes?.payments ?? []) as Array<{
+      id?: string;
+      attributes?: { status?: string; source?: { type?: string } };
+    }>;
+    const paidSessionPayment = sessionPayments.find((p) => p?.attributes?.status === 'paid');
     const { error } = await supabase.rpc('fulfill_ticket_purchase', {
       p_tier_id: tierId,
       p_buyer_id: buyerId,
       p_qr_code_token: qrCodeToken,
+      p_payment_ref: `FTX-TK-${sessionId}`,
+      p_provider_payment_id: paidSessionPayment?.id ?? null,
+      p_payment_method:
+        (sessionData.attributes?.payment_method_used as string | undefined) ??
+        paidSessionPayment?.attributes?.source?.type ??
+        null,
     });
 
     if (error) throw new Error(error.message);

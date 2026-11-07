@@ -11,6 +11,7 @@ import '../../widgets/organizer_top_menus.dart';
 import '../../widgets/organizer_ui.dart';
 import '../../widgets/theme_mode_switch.dart';
 import '../../widgets/top_glow_background.dart';
+import '../../widgets/terms_acceptance_gate.dart';
 import 'organizer-analytics-sales.dart';
 import 'organizer-dashboard.dart';
 import 'organizer-escrow.dart';
@@ -87,7 +88,7 @@ class OrganizerScaffold extends StatelessWidget {
       data: media.copyWith(
         textScaler: TextScaler.linear(userScale * organizerTextShrink),
       ),
-      child: Scaffold(
+      child: TermsAcceptanceGate(child: Scaffold(
       backgroundColor: p.background,
       body: Stack(
         children: [
@@ -151,7 +152,7 @@ class OrganizerScaffold extends StatelessWidget {
             ),
           ),
         ],
-      ),
+      )),
       ),
     );
   }

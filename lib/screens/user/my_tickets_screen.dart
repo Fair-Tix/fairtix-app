@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../models/event.dart';
 import '../../models/ticket.dart';
 import '../../navigation/tab_index_notifier.dart';
 import '../../services/ticket_repository.dart';
@@ -10,6 +11,8 @@ import '../../services/user_session.dart';
 import '../../widgets/ft_dark_ui.dart';
 import '../../widgets/ft_dashboard_ui.dart' show FtPressScale, FtProfileAvatar;
 import '../../widgets/ft_pending_ui.dart' show FtReveal;
+import '../../widgets/ft_skeleton.dart';
+import '../../widgets/ft_ticket_card.dart';
 import '../../widgets/offline_copy_banner.dart';
 import 'ticket_detail_screen.dart';
 
@@ -23,7 +26,7 @@ class MyTicketsScreen extends StatefulWidget {
   State<MyTicketsScreen> createState() => _MyTicketsScreenState();
 }
 
-/// Filter chips. "Active" means a valid ticket that can be used or listed.
+/// Filter tabs. "Active" means a valid ticket that can be used or listed.
 enum _TicketFilter {
   all('All'),
   active('Active'),
@@ -50,10 +53,6 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
     vsync: this,
     duration: const Duration(milliseconds: _revealMs),
   );
-  late final AnimationController _pulse = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1100),
-  );
   bool _motionSet = false;
   bool _revealPlayed = false;
 
@@ -76,9 +75,6 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
     if (MediaQuery.disableAnimationsOf(context)) {
       _reveal.value = 1;
       _revealPlayed = true;
-      _pulse.value = 1;
-    } else {
-      _pulse.repeat(reverse: true);
     }
   }
 
@@ -86,7 +82,6 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
   void dispose() {
     mainShellTabIndex.removeListener(_onTabChanged);
     _reveal.dispose();
-    _pulse.dispose();
     super.dispose();
   }
 
@@ -143,6 +138,16 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
   Widget build(BuildContext context) {
     final all = TicketRepository.instance.tickets;
     final tickets = all.where(_filter.matches).toList();
+    // Live tickets (valid / listed) first, soonest event on top; used and
+    // canceled ones go to a quieter list below.
+    final upcoming = tickets
+        .where((x) => x.status == TicketStatus.valid || x.status == TicketStatus.listed)
+        .toList()
+      ..sort((a, b) => a.event.eventDateTime.compareTo(b.event.eventDateTime));
+    final past = tickets
+        .where((x) => x.status == TicketStatus.used || x.status == TicketStatus.canceled)
+        .toList();
+
     final account = UserSession.instance.account;
     final firstName = (account?.fullName ?? '').trim().split(RegExp(r'\s+')).first;
     final initial = firstName.isEmpty ? 'E' : firstName.substring(0, 1).toUpperCase();
@@ -170,7 +175,7 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
               onRefresh: _loadTickets,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(22, 18, 22, 28),
+                padding: const EdgeInsets.fromLTRB(19, 18, 19, 28),
                 children: [
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -184,7 +189,7 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
                               child: Text(
                                 'My Tickets',
                                 style: FtText.title().copyWith(
-                                  fontSize: 33,
+                                  fontSize: 30,
                                   letterSpacing: -0.6,
                                   color: t.titleColor,
                                 ),
@@ -194,7 +199,7 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
                             Text(
                               'Tickets you\u2019ve purchased or received',
                               style: GoogleFonts.plusJakartaSans(
-                                fontSize: 15,
+                                fontSize: 14,
                                 height: 1.3,
                                 color: t.secondaryText,
                               ),
@@ -211,23 +216,22 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
                     ],
                   ),
                   const SizedBox(height: 20),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    clipBehavior: Clip.none,
+                  Container(
+                    decoration: BoxDecoration(
+                      border: Border(bottom: BorderSide(color: t.surfaceBorder)),
+                    ),
                     child: Row(
                       children: [
-                        for (final f in _TicketFilter.values) ...[
-                          _FilterChip(
+                        for (final f in _TicketFilter.values)
+                          _FilterTab(
                             label: f.label,
                             selected: f == _filter,
                             onTap: () => setState(() => _filter = f),
                           ),
-                          const SizedBox(width: 10),
-                        ],
                       ],
                     ),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 20),
                   if (showOffline) ...[
                     OfflineCopyBanner(
                       dark: t.isDark,
@@ -236,10 +240,18 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
                     const SizedBox(height: 16),
                   ],
                   if (_isLoading && all.isEmpty)
-                    for (var i = 0; i < 3; i++) ...[
-                      _SkeletonCard(pulse: _pulse),
-                      const SizedBox(height: 14),
-                    ]
+                    const FtShimmer(
+                      semanticLabel: 'Loading your tickets',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          FtSkeletonTicketCard(),
+                          SizedBox(height: 16),
+                          FtSkeletonTicketCard(),
+                          SizedBox(height: 16),
+                        ],
+                      ),
+                    )
                   else if (_errorMessage != null)
                     _Message(
                       text: _errorMessage!,
@@ -258,17 +270,40 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
                       title: 'No ${_filter.label.toLowerCase()} tickets',
                       text: 'Try another filter to see the rest.',
                     )
-                  else
-                    for (var i = 0; i < tickets.length; i++) ...[
+                  else ...[
+                    for (var i = 0; i < upcoming.length; i++) ...[
                       _wrapReveal(
                         i,
                         _TicketCard(
-                          ticket: tickets[i],
-                          onTap: () => _openTicket(context, tickets[i]),
+                          ticket: upcoming[i],
+                          onTap: () => _openTicket(context, upcoming[i]),
                         ),
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 16),
                     ],
+                    if (past.isNotEmpty) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4, bottom: 10),
+                        child: Text(
+                          'PAST AND CANCELED',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            height: 1.2,
+                            letterSpacing: 1.0,
+                            fontWeight: FontWeight.w800,
+                            color: t.secondaryText,
+                          ),
+                        ),
+                      ),
+                      _wrapReveal(
+                        upcoming.length,
+                        _PastTicketList(
+                          tickets: past,
+                          onOpen: (ticket) => _openTicket(context, ticket),
+                        ),
+                      ),
+                    ],
+                  ],
                 ],
               ),
             ),
@@ -292,8 +327,9 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
   }
 }
 
-class _FilterChip extends StatelessWidget {
-  const _FilterChip({required this.label, required this.selected, required this.onTap});
+/// Underlined tab for the All / Active / Used / Listed filter.
+class _FilterTab extends StatelessWidget {
+  const _FilterTab({required this.label, required this.selected, required this.onTap});
 
   final String label;
   final bool selected;
@@ -302,7 +338,6 @@ class _FilterChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = FtAuthTheme.of(context);
-    final reduce = MediaQuery.disableAnimationsOf(context);
     return Semantics(
       button: true,
       selected: selected,
@@ -310,24 +345,14 @@ class _FilterChip extends StatelessWidget {
       excludeSemantics: true,
       child: FtPressScale(
         onTap: onTap,
-        child: AnimatedContainer(
-          duration: reduce ? Duration.zero : const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
-            gradient: selected
-                ? const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [FtColors.progressStart, FtColors.otpButtonEnd],
-                  )
-                : null,
-            color: selected
-                ? null
-                : (t.isDark ? t.surfaceFill.withValues(alpha: 0.75) : t.surfaceFill),
-            border: Border.all(
-              color: selected ? Colors.transparent : t.surfaceBorder,
+            border: Border(
+              bottom: BorderSide(
+                color: selected ? t.activeAccent : Colors.transparent,
+                width: 2,
+              ),
             ),
           ),
           child: Text(
@@ -335,8 +360,8 @@ class _FilterChip extends StatelessWidget {
             style: GoogleFonts.plusJakartaSans(
               fontSize: 15,
               height: 1.2,
-              fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
-              color: selected ? Colors.white : t.secondaryText,
+              fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+              color: selected ? t.titleColor : t.secondaryText,
             ),
           ),
         ),
@@ -345,57 +370,37 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
-/// Fixed card geometry: a 100px top part, a perforation line with a notch at
-/// each edge, and a 58px bottom part.
-const double _kTopHeight = 100;
-const double _kBottomHeight = 58;
-const double _kNotchRadius = 11;
+// Card pieces live in widgets/ft_ticket_card.dart (shared with the Resale
+// Market); these aliases keep the names used below.
+typedef _EventArt = FtEventArt;
 
-/// Draws the ticket-shaped card: rounded rectangle with a half-circle bite
-/// out of each side at the perforation, a border around that shape, and the
-/// dashed line between the notches.
-class _TicketShapePainter extends CustomPainter {
-  _TicketShapePainter({required this.fill, required this.border});
+({String label, Color color}) _statusOf(Ticket ticket, FtAuthTheme t) => switch (ticket.status) {
+      TicketStatus.valid => (label: 'Valid', color: t.success),
+      TicketStatus.listed => (label: 'Listed', color: t.activeAccent),
+      TicketStatus.used => (label: 'Used', color: t.secondaryText),
+      TicketStatus.canceled => (label: 'Canceled', color: t.danger),
+    };
 
-  final Color fill;
-  final Color border;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final card = Path()
-      ..addRRect(RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(26)));
-    final bites = Path()
-      ..addOval(Rect.fromCircle(center: Offset(0, _kTopHeight), radius: _kNotchRadius))
-      ..addOval(Rect.fromCircle(center: Offset(size.width, _kTopHeight), radius: _kNotchRadius));
-    final shape = Path.combine(PathOperation.difference, card, bites);
-
-    canvas.drawPath(shape, Paint()..color = fill);
-    canvas.drawPath(
-      shape,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1
-        ..color = border,
-    );
-
-    final dash = Paint()
-      ..color = border
-      ..strokeWidth = 1.5
-      ..strokeCap = StrokeCap.round;
-    var x = _kNotchRadius + 14;
-    final end = size.width - _kNotchRadius - 14;
-    while (x < end) {
-      canvas.drawLine(
-        Offset(x, _kTopHeight),
-        Offset((x + 5).clamp(0, end).toDouble(), _kTopHeight),
-        dash,
-      );
-      x += 9;
-    }
+/// "Starts in 30 days" style line for the card footer.
+String _startsLabel(EventSummary e) {
+  final now = DateTime.now();
+  if (e.timeLabel == null) {
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(e.eventDateTime.year, e.eventDateTime.month, e.eventDateTime.day);
+    final d = day.difference(today).inDays;
+    if (d < 0) return 'Event started';
+    if (d == 0) return 'Happening today';
+    if (d == 1) return 'Starts tomorrow';
+    return 'Starts in $d days';
   }
-
-  @override
-  bool shouldRepaint(_TicketShapePainter old) => old.fill != fill || old.border != border;
+  final diff = e.eventDateTime.difference(now);
+  if (diff.isNegative) return 'Event started';
+  if (diff.inDays >= 1) {
+    final d = diff.inDays;
+    return 'Starts in $d ${d == 1 ? 'day' : 'days'}';
+  }
+  if (diff.inHours >= 1) return 'Starts in ${diff.inHours} h';
+  return 'Starts soon';
 }
 
 class _TicketCard extends StatelessWidget {
@@ -404,251 +409,158 @@ class _TicketCard extends StatelessWidget {
   final Ticket ticket;
   final VoidCallback onTap;
 
-  ({String label, Color color}) _status(FtAuthTheme t) => switch (ticket.status) {
-        TicketStatus.valid => (label: 'Valid', color: t.success),
-        TicketStatus.listed => (label: 'Listed', color: t.activeAccent),
-        TicketStatus.used => (label: 'Used', color: t.secondaryText),
-        TicketStatus.canceled => (label: 'Canceled', color: t.danger),
-      };
+  @override
+  Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
+    final status = _statusOf(ticket, t);
+    final event = ticket.event;
+    final isListed = ticket.status == TicketStatus.listed;
+    final footerText = isListed
+        ? (ticket.resalePrice != null
+            ? 'Listed for ${formatPeso(ticket.resalePrice!)}'
+            : 'Listed for resale')
+        : _startsLabel(event);
+
+    return FtTicketCard(
+      event: event,
+      tierName: ticket.tier.name,
+      seatingLabel: ticket.tier.seatingLabel,
+      chipLabel: status.label,
+      chipColor: status.color,
+      semanticLabel: '${event.title}, ${ticket.tier.name}, ${event.dateLabel}, '
+          '${status.label}. View details',
+      onTap: onTap,
+      footer: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          footerText,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 13,
+            height: 1.2,
+            fontWeight: FontWeight.w600,
+            color: t.secondaryText,
+          ),
+        ),
+      ),
+      action: FtTicketButton(
+        label: isListed ? 'View details' : 'View ticket',
+        icon: isListed ? null : Icons.qr_code_2_rounded,
+      ),
+    );
+  }
+}
+
+/// Used and canceled tickets: one bordered list of compact, muted rows.
+class _PastTicketList extends StatelessWidget {
+  const _PastTicketList({required this.tickets, required this.onOpen});
+
+  final List<Ticket> tickets;
+  final void Function(Ticket) onOpen;
 
   @override
   Widget build(BuildContext context) {
     final t = FtAuthTheme.of(context);
-    final status = _status(t);
-    final accent = ticket.event.accentColor;
-    final hsl = HSLColor.fromColor(accent);
-    final deeper = hsl.withLightness((hsl.lightness - 0.12).clamp(0.0, 1.0)).toColor();
+    return Container(
+      decoration: BoxDecoration(
+        color: t.isDark ? t.surfaceFill.withValues(alpha: 0.5) : t.surfaceFill,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: t.surfaceBorder),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          for (var i = 0; i < tickets.length; i++) ...[
+            if (i > 0) Divider(height: 1, thickness: 1, color: t.surfaceBorder),
+            _PastTicketRow(ticket: tickets[i], onTap: () => onOpen(tickets[i])),
+          ],
+        ],
+      ),
+    );
+  }
+}
 
+class _PastTicketRow extends StatelessWidget {
+  const _PastTicketRow({required this.ticket, required this.onTap});
+
+  final Ticket ticket;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = FtAuthTheme.of(context);
+    final status = _statusOf(ticket, t);
+    final event = ticket.event;
     return Semantics(
       button: true,
-      label: '${ticket.event.title}, ${ticket.tier.name}, ${ticket.event.dateLabel}, '
+      label: '${event.title}, ${ticket.tier.name}, ${event.dayLabel}, '
           '${status.label}. View details',
       excludeSemantics: true,
       child: FtPressScale(
         onTap: onTap,
-        child: CustomPaint(
-          painter: _TicketShapePainter(
-            fill: t.isDark ? t.surfaceFill.withValues(alpha: 0.8) : t.surfaceFill,
-            border: t.surfaceBorder,
-          ),
-          child: Column(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
             children: [
-              SizedBox(
-                height: _kTopHeight,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 22),
-                  child: Row(
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: Stack(
+                    fit: StackFit.expand,
                     children: [
-                      Container(
-                        width: 64,
-                        height: 64,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(18),
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [accent, deeper],
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.confirmation_number_outlined,
-                          color: Colors.white,
-                          size: 30,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              ticket.event.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 19,
-                                height: 1.2,
-                                fontWeight: FontWeight.w800,
-                                color: t.titleColor,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 5),
-                                  constraints: const BoxConstraints(maxWidth: 96),
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(999),
-                                    gradient: const LinearGradient(
-                                      colors: [FtColors.progressStart, FtColors.otpButtonEnd],
-                                    ),
-                                  ),
-                                  child: Text(
-                                    ticket.tier.name.toUpperCase(),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 13,
-                                      height: 1.2,
-                                      fontWeight: FontWeight.w800,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Icon(
-                                  Icons.calendar_today_outlined,
-                                  size: 15,
-                                  color: t.secondaryText,
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    ticket.event.dateLabel,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 14,
-                                      height: 1.2,
-                                      color: t.secondaryText,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
+                      _EventArt(event: event, initialsSize: 18),
+                      ColoredBox(color: Colors.black.withValues(alpha: 0.45)),
                     ],
                   ),
                 ),
               ),
-              SizedBox(
-                height: _kBottomHeight,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 22),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
-                        decoration: BoxDecoration(
-                          color: status.color.withValues(alpha: 0.16),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 7,
-                              height: 7,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: status.color,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              status.label,
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 13.5,
-                                height: 1.2,
-                                fontWeight: FontWeight.w700,
-                                color: status.color,
-                              ),
-                            ),
-                          ],
-                        ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      event.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 15,
+                        height: 1.2,
+                        fontWeight: FontWeight.w700,
+                        color: t.titleColor,
                       ),
-                      const Spacer(),
-                      Text(
-                        'View details',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 15,
-                          height: 1.2,
-                          fontWeight: FontWeight.w800,
-                          color: t.accent,
-                        ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${ticket.tier.name} \u00b7 ${event.dayLabel}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13,
+                        height: 1.2,
+                        color: t.secondaryText,
                       ),
-                      const SizedBox(width: 4),
-                      Icon(Icons.chevron_right_rounded, size: 20, color: t.accent),
-                    ],
-                  ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                status.label,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13,
+                  height: 1.2,
+                  fontWeight: FontWeight.w700,
+                  color: status.color,
                 ),
               ),
             ],
           ),
         ),
       ),
-    );
-  }
-}
-
-/// Placeholder shown on the first load, in the same ticket shape, gently
-/// pulsing so the layout doesn't jump when the real cards arrive.
-class _SkeletonCard extends StatelessWidget {
-  const _SkeletonCard({required this.pulse});
-
-  final Animation<double> pulse;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = FtAuthTheme.of(context);
-    return AnimatedBuilder(
-      animation: pulse,
-      builder: (context, _) {
-        final wave = Curves.easeInOut.transform(pulse.value);
-        final block = t.surfaceBorder.withValues(alpha: 0.35 + 0.3 * wave);
-        Widget bar(double w, double h) => Container(
-              width: w,
-              height: h,
-              decoration: BoxDecoration(
-                color: block,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            );
-        return CustomPaint(
-          painter: _TicketShapePainter(fill: t.cardFill, border: t.surfaceBorder),
-          child: SizedBox(
-            height: _kTopHeight + _kBottomHeight,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 22),
-              child: Column(
-                children: [
-                  SizedBox(
-                    height: _kTopHeight,
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 64,
-                          height: 64,
-                          decoration: BoxDecoration(
-                            color: block,
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [bar(150, 16), const SizedBox(height: 12), bar(110, 12)],
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(
-                    height: _kBottomHeight,
-                    child: Row(
-                      children: [bar(72, 26), const Spacer(), bar(96, 14)],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
     );
   }
 }

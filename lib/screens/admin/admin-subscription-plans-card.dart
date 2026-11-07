@@ -4,6 +4,7 @@ import '../../models/subscription_plan.dart';
 import '../../services/subscription_plan_service.dart';
 import '../../theme/fairtix_palette.dart';
 import '../../widgets/admin_widgets.dart';
+import '../../widgets/ft_skeleton.dart';
 import '../../widgets/organizer_ui.dart';
 
 /// Admin > Platform Settings > Subscription Plans.
@@ -313,22 +314,7 @@ class _AdminSubscriptionPlansCardState
   }
 
   Widget _buildBody() {
-    final p = FairTixPalette.of(context);
-    if (_loading) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 24),
-        child: Center(
-          child: SizedBox(
-            width: 24,
-            height: 24,
-            child: CircularProgressIndicator(
-              strokeWidth: 2.4,
-              color: p.accentLabel,
-            ),
-          ),
-        ),
-      );
-    }
+    if (_loading) return const _PlansSkeleton();
     if (_loadError != null) {
       return AdminErrorBox(message: _loadError!, onRetry: _load);
     }
@@ -715,6 +701,103 @@ class _AdminSubscriptionPlansCardState
       border: border(p.border),
       enabledBorder: border(p.border),
       focusedBorder: border(p.accentLabel),
+    );
+  }
+}
+
+/// Loading placeholder for the plan editor grid: one row of plan cards with
+/// the same 3 / 2 / 1 column switch (1080px / 640px) as the loaded grid.
+class _PlansSkeleton extends StatelessWidget {
+  const _PlansSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, box) {
+        final columns = box.maxWidth >= 1080
+            ? 3
+            : (box.maxWidth >= 640 ? 2 : 1);
+        return FtShimmer(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var j = 0; j < columns; j++) ...[
+                if (j > 0) const SizedBox(width: 20),
+                const Expanded(child: _SkeletonPlanCard()),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SkeletonPlanCard extends StatelessWidget {
+  const _SkeletonPlanCard();
+
+  @override
+  Widget build(BuildContext context) {
+    Widget limitRow() => const Padding(
+      padding: EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          FtSkeletonBox(width: 110, height: 14),
+          Spacer(),
+          FtSkeletonBox(width: 120, height: 40, radius: 14),
+        ],
+      ),
+    );
+
+    return FtSkeletonPanel(
+      radius: 20,
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Row(
+            children: [
+              FtSkeletonBox(width: 56, height: 22, radius: 11),
+              Spacer(),
+              FtSkeletonBox(width: 44, height: 24, radius: 12),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const FtSkeletonBox(height: 48, radius: 14),
+          const SizedBox(height: 12),
+          const FtSkeletonBox(height: 48, radius: 14),
+          const SizedBox(height: 18),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: FtSkeletonBox(width: 60, height: 11),
+          ),
+          const SizedBox(height: 10),
+          const Row(
+            children: [
+              Expanded(
+                flex: 3,
+                child: FtSkeletonBox(height: 48, radius: 14),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: FtSkeletonBox(height: 48, radius: 14),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: FtSkeletonBox(width: 60, height: 11),
+          ),
+          const SizedBox(height: 10),
+          limitRow(),
+          limitRow(),
+          limitRow(),
+          const SizedBox(height: 14),
+          const FtSkeletonBox(height: 100, radius: 14),
+        ],
+      ),
     );
   }
 }

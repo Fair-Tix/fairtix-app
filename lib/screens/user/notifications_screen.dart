@@ -10,6 +10,7 @@ import '../../services/notification_repository.dart';
 import '../../theme/fairtix_palette.dart';
 import '../../theme/page_transitions.dart';
 import '../../widgets/ft_dark_ui.dart';
+import '../../widgets/ft_skeleton.dart';
 import '../../widgets/ft_subpage_ui.dart';
 import 'account_activated_screen.dart';
 import 'ticket_sold_screen.dart';
@@ -193,10 +194,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   List<Widget> _content(FtAuthTheme t, List<AppNotification> all) {
     if (_isLoading) {
-      return [
-        Padding(
-          padding: const EdgeInsets.only(top: 80),
-          child: Center(child: CircularProgressIndicator(color: t.activeAccent)),
+      return const [
+        FtShimmer(
+          semanticLabel: 'Loading notifications',
+          child: FtSkeletonListCard(
+            rows: 5,
+            showLeading: false,
+            showTrailing: false,
+            radius: 28,
+            rowPadding: EdgeInsets.symmetric(horizontal: 22, vertical: 20),
+            dividerIndent: 22,
+          ),
         ),
       ];
     }

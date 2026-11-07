@@ -13,9 +13,9 @@ import '../../services/user_session.dart';
 import '../../widgets/ft_dark_ui.dart';
 import '../../widgets/ft_dashboard_ui.dart' show FtProfileAvatar;
 import '../../widgets/ft_resale_ui.dart';
+import '../../widgets/ft_skeleton.dart';
 import '../../widgets/market_listing_card.dart';
 import '../../widgets/my_listing_card.dart';
-import '../../widgets/resale_filter_chip.dart';
 import 'resale_checkout_screen.dart';
 import 'ticket_detail_screen.dart';
 
@@ -30,8 +30,6 @@ class ResaleMarketScreen extends StatefulWidget {
 }
 
 class _ResaleMarketScreenState extends State<ResaleMarketScreen> {
-  static const _categories = ['All', 'Concerts', 'Sports', 'Theater'];
-  String _selectedCategory = 'All';
   String _searchQuery = '';
 
   /// Other users' active listings, from the `get_resale_market()` database
@@ -90,9 +88,6 @@ class _ResaleMarketScreenState extends State<ResaleMarketScreen> {
     }
   }
 
-  // Category chips are currently cosmetic only — events don't carry a
-  // category field yet.
-  //
   // Listings whose event has passed the 24-hour resale-closing window are
   // excluded here as well as on the server, mirroring the study's rule that
   // active listings automatically close 24 hours before the event and any
@@ -166,9 +161,16 @@ class _ResaleMarketScreenState extends State<ResaleMarketScreen> {
 
   Widget _marketSection(FtAuthTheme t, List<Ticket> marketListings) {
     if (_marketLoading) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 30),
-        child: Center(child: CircularProgressIndicator(color: t.activeAccent)),
+      return const FtShimmer(
+        semanticLabel: 'Loading resale listings',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            FtSkeletonTicketCard(),
+            SizedBox(height: 16),
+            FtSkeletonTicketCard(),
+          ],
+        ),
       );
     }
 
@@ -197,15 +199,15 @@ class _ResaleMarketScreenState extends State<ResaleMarketScreen> {
         child: Column(
           children: [
             Container(
-              width: 76,
-              height: 76,
+              width: 64,
+              height: 64,
               decoration: BoxDecoration(
                 color: t.uploadFill,
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(20),
               ),
               child: Icon(
                 searching ? Icons.search_off_rounded : Icons.swap_horiz_rounded,
-                size: 34,
+                size: 30,
                 color: t.activeAccent,
               ),
             ),
@@ -213,7 +215,7 @@ class _ResaleMarketScreenState extends State<ResaleMarketScreen> {
             Text(
               searching ? 'No matches' : 'No listings right now',
               style: GoogleFonts.plusJakartaSans(
-                fontSize: 21,
+                fontSize: 18,
                 fontWeight: FontWeight.w800,
                 color: t.titleColor,
               ),
@@ -225,7 +227,7 @@ class _ResaleMarketScreenState extends State<ResaleMarketScreen> {
                   : 'No tickets are listed for resale right now. Listings close 24 hours before an event and never exceed face value.',
               textAlign: TextAlign.center,
               style: GoogleFonts.plusJakartaSans(
-                fontSize: 16,
+                fontSize: 14.5,
                 height: 1.45,
                 color: t.subtitleColor,
               ),
@@ -238,10 +240,13 @@ class _ResaleMarketScreenState extends State<ResaleMarketScreen> {
     return Column(
       children: [
         for (final listing in marketListings)
-          MarketListingCard(
-            listing: listing,
-            isBlocked: isPurchaseLimitReached(listing.event.id),
-            onBuyNow: () => _buyListing(listing),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: MarketListingCard(
+              listing: listing,
+              isBlocked: isPurchaseLimitReached(listing.event.id),
+              onBuyNow: () => _buyListing(listing),
+            ),
           ),
       ],
     );
@@ -276,7 +281,7 @@ class _ResaleMarketScreenState extends State<ResaleMarketScreen> {
                 onRefresh: _refresh,
                 child: ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(22, 18, 22, 28),
+                  padding: const EdgeInsets.fromLTRB(19, 18, 19, 28),
                   children: [
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -290,7 +295,7 @@ class _ResaleMarketScreenState extends State<ResaleMarketScreen> {
                                 child: Text(
                                   'Resale Market',
                                   style: FtText.title().copyWith(
-                                    fontSize: 33,
+                                    fontSize: 30,
                                     letterSpacing: -0.6,
                                     color: t.titleColor,
                                   ),
@@ -300,7 +305,7 @@ class _ResaleMarketScreenState extends State<ResaleMarketScreen> {
                               Text(
                                 'Buy and sell tickets safely',
                                 style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 16,
+                                  fontSize: 14,
                                   height: 1.3,
                                   color: t.secondaryText,
                                 ),
@@ -312,14 +317,14 @@ class _ResaleMarketScreenState extends State<ResaleMarketScreen> {
                         // Decorative for now: there are no extra filters yet.
                         ExcludeSemantics(
                           child: Container(
-                            width: 56,
-                            height: 56,
+                            width: 44,
+                            height: 44,
                             decoration: BoxDecoration(
                               color: t.circleFill,
                               shape: BoxShape.circle,
                               border: Border.all(color: t.circleBorder),
                             ),
-                            child: Icon(Icons.tune_rounded, color: t.accent, size: 24),
+                            child: Icon(Icons.tune_rounded, color: t.accent, size: 20),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -330,27 +335,27 @@ class _ResaleMarketScreenState extends State<ResaleMarketScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 22),
+                    const SizedBox(height: 18),
                     Container(
-                      height: 62,
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      height: 52,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
                       decoration: BoxDecoration(
                         color: t.fieldFill,
-                        borderRadius: BorderRadius.circular(31),
+                        borderRadius: BorderRadius.circular(26),
                         border: Border.all(color: t.fieldBorder),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.search_rounded, color: t.iconColor, size: 24),
-                          const SizedBox(width: 12),
+                          Icon(Icons.search_rounded, color: t.iconColor, size: 22),
+                          const SizedBox(width: 10),
                           Expanded(
                             child: TextField(
                               onChanged: (value) => setState(() => _searchQuery = value.trim()),
-                              style: t.input().copyWith(fontSize: 17),
+                              style: t.input().copyWith(fontSize: 15),
                               cursorColor: t.accent,
                               decoration: InputDecoration(
                                 hintText: 'Search resale tickets...',
-                                hintStyle: t.hint().copyWith(fontSize: 17),
+                                hintStyle: t.hint().copyWith(fontSize: 15),
                                 // The app's global input theme draws its own box;
                                 // clear every state so only the pill shows.
                                 filled: false,
@@ -368,31 +373,13 @@ class _ResaleMarketScreenState extends State<ResaleMarketScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 18),
-                    SizedBox(
-                      height: 44,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        clipBehavior: Clip.none,
-                        itemCount: _categories.length,
-                        separatorBuilder: (_, _) => const SizedBox(width: 10),
-                        itemBuilder: (context, index) {
-                          final category = _categories[index];
-                          return ResaleFilterChip(
-                            label: category,
-                            isSelected: category == _selectedCategory,
-                            onTap: () => setState(() => _selectedCategory = category),
-                          );
-                        },
-                      ),
-                    ),
                     if (myListings.isNotEmpty) ...[
-                      const SizedBox(height: 26),
+                      const SizedBox(height: 22),
                       const FtSectionLabel('My listed tickets'),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 12),
                       for (final ticket in myListings)
                         Padding(
-                          padding: const EdgeInsets.only(bottom: 14),
+                          padding: const EdgeInsets.only(bottom: 16),
                           child: MyListingCard(
                             ticket: ticket,
                             onTap: () => _openMyTicket(ticket),
@@ -400,9 +387,9 @@ class _ResaleMarketScreenState extends State<ResaleMarketScreen> {
                           ),
                         ),
                     ],
-                    const SizedBox(height: 14),
+                    SizedBox(height: myListings.isEmpty ? 22 : 6),
                     const FtSectionLabel('Market listings'),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 12),
                     _marketSection(t, marketListings),
                   ],
                 ),

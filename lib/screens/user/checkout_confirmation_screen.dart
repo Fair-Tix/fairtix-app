@@ -7,8 +7,8 @@ import '../../models/ticket.dart';
 import '../../navigation/app_nav.dart';
 import '../../theme/fairtix_palette.dart';
 import '../../widgets/ft_dark_ui.dart';
-import '../../widgets/ft_dashboard_ui.dart' show FtPerforation;
 import '../../widgets/ft_pending_ui.dart' show FtReveal;
+import '../../widgets/ft_ticket_card.dart';
 import '../../widgets/ft_verified_ui.dart' show FtVerifiedCircle;
 import 'ticket_detail_screen.dart';
 
@@ -115,7 +115,7 @@ class _CheckoutConfirmationScreenState extends State<CheckoutConfirmationScreen>
               children: [
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(22, 56, 22, 24),
+                    padding: const EdgeInsets.fromLTRB(19, 48, 19, 24),
                     child: Column(
                       children: [
                         FtReveal(
@@ -144,7 +144,7 @@ class _CheckoutConfirmationScreenState extends State<CheckoutConfirmationScreen>
                               'Ticket purchased',
                               textAlign: TextAlign.center,
                               style: FtText.title().copyWith(
-                                fontSize: 32,
+                                fontSize: 28,
                                 letterSpacing: -0.5,
                                 color: t.titleColor,
                               ),
@@ -164,7 +164,7 @@ class _CheckoutConfirmationScreenState extends State<CheckoutConfirmationScreen>
                               'Your QR code is in My Tickets, tied to your verified account.',
                               textAlign: TextAlign.center,
                               style: GoogleFonts.plusJakartaSans(
-                                fontSize: 16,
+                                fontSize: 14.5,
                                 height: 1.45,
                                 color: t.secondaryText,
                               ),
@@ -202,7 +202,7 @@ class _CheckoutConfirmationScreenState extends State<CheckoutConfirmationScreen>
                       border: Border(top: BorderSide(color: t.surfaceBorder)),
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(22, 16, 22, 8),
+                      padding: const EdgeInsets.fromLTRB(19, 14, 19, 8),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -220,7 +220,7 @@ class _CheckoutConfirmationScreenState extends State<CheckoutConfirmationScreen>
                             child: Text(
                               'Back to Home',
                               style: GoogleFonts.plusJakartaSans(
-                                fontSize: 15,
+                                fontSize: 14,
                                 fontWeight: FontWeight.w700,
                                 color: t.secondaryText,
                               ),
@@ -273,113 +273,39 @@ class _ReceiptCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = FtAuthTheme.of(context);
-    return Semantics(
-      container: true,
-      label: '${event.title}, ${tier.name}, ${event.dateLabel}, ${event.venue}. '
+    return FtTicketCard(
+      event: event,
+      tierName: tier.name,
+      seatingLabel: tier.seatingLabel,
+      chipLabel: 'Purchased',
+      chipColor: t.success,
+      semanticLabel: '${event.title}, ${tier.name}, ${event.dateLabel}, ${event.venue}. '
           '${isFree ? 'Free ticket' : '$_paidLabel, $price'}',
-      excludeSemantics: true,
-      child: Container(
-        decoration: BoxDecoration(
-          color: t.isDark ? t.surfaceFill.withValues(alpha: 0.8) : t.surfaceFill,
-          borderRadius: BorderRadius.circular(26),
-          border: Border.all(color: t.surfaceBorder),
-        ),
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(22, 22, 22, 22),
-              child: Row(
-                children: [
-                  Container(
-                    width: 66,
-                    height: 66,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(18),
-                      gradient: const LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [FtColors.progressStart, FtColors.bgTop],
-                      ),
-                    ),
-                    child: const Icon(
-                      Icons.confirmation_number_outlined,
-                      color: Colors.white,
-                      size: 30,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          event.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 20,
-                            height: 1.2,
-                            fontWeight: FontWeight.w800,
-                            color: t.titleColor,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          tier.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 15,
-                            height: 1.3,
-                            color: t.secondaryText,
-                          ),
-                        ),
-                        Text(
-                          '${event.dateLabel} \u2022 ${event.venue}',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 15,
-                            height: 1.3,
-                            color: t.secondaryText,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+      footer: Row(
+        children: [
+          Expanded(
+            child: Text(
+              isFree ? 'Free ticket' : _paidLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 13,
+                height: 1.2,
+                color: t.secondaryText,
               ),
             ),
-            const FtPerforation(),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(22, 10, 22, 20),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      isFree ? 'Free ticket' : _paidLabel,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 15,
-                        height: 1.2,
-                        color: t.secondaryText,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    price,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 22,
-                      height: 1.1,
-                      fontWeight: FontWeight.w800,
-                      color: t.titleColor,
-                    ),
-                  ),
-                ],
-              ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            price,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 20,
+              height: 1.1,
+              fontWeight: FontWeight.w800,
+              color: t.titleColor,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

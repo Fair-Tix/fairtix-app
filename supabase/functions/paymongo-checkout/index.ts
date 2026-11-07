@@ -54,6 +54,14 @@ const PAYMONGO_API = 'https://api.paymongo.com/v1/checkout_sessions';
 // forwards to the app:  supabase secrets set APP_RETURN_URL_BASE=https://your-domain/payment-return
 const APP_RETURN_URL_BASE = Deno.env.get('APP_RETURN_URL_BASE') ?? 'fairtix://payment';
 
+// GCash / Maya (Payment Intent flow) need an HTTPS return_url: PayMongo rejects
+// custom schemes ("return_url format is invalid"). Host payment-return/return/
+// index.html (it forwards to fairtix://payment/return) and set the full URL:
+//   supabase secrets set INTENT_RETURN_URL=https://<your-host>/return
+// Only the intent flow uses this; card and organizer plan checkouts still use
+// APP_RETURN_URL_BASE above.
+const INTENT_RETURN_URL = Deno.env.get('INTENT_RETURN_URL') ?? `${APP_RETURN_URL_BASE}/return`;
+
 // Organizer subscription plans live in the public.subscription_plans table
 // (edited by the admin in Platform Settings; see supabase/subscription_plans.sql).
 // The price is read from there HERE, never sent by the app.
@@ -264,6 +272,91 @@ serve(async (req) => {
       ? { listing_id: listingId, buyer_id: user.id }
       : { tier_id: tierId, buyer_id: user.id };
     const itemName = (description ?? 'FairTix ticket purchase').toString().slice(0, 250);
+
+    // GCash / Maya use the Payment Intent flow instead of a hosted Checkout
+    // Session. The reason: on PayMongo's test page, "Fail Test Payment" sends
+    // the browser back to the return_url (so the app can show a payment-failed
+    // modal), while a hosted Checkout Session has no failed-payment redirect and
+    // leaves the buyer on PayMongo's page. The intent id is returned as
+    // `session_id`, so the app keeps using the same field; paymongo-verify and
+    // paymongo-webhook tell the two apart by the id prefix (pi_ vs cs_) and the
+    // `flow: 'intent'` metadata marker. Card stays on Checkout Sessions.
+    if (paymentMethod === 'gcash' || paymentMethod === 'paymaya') {
+      const pmHeaders = {
+        'Content-Type': 'application/json',
+        Authorization: `Basic ${btoa(`${PAYMONGO_SECRET_KEY}:`)}`,
+      };
+      const pmPost = async (path: string, body: unknown) => {
+        const r = await fetch(`https://api.paymongo.com/v1${path}`, {
+          method: 'POST',
+          headers: pmHeaders,
+          body: JSON.stringify(body),
+        });
+        const p = await r.json();
+        if (!r.ok) {
+          throw new Error(p?.errors?.[0]?.detail ?? 'PayMongo request failed.');
+        }
+        return p;
+      };
+
+      const intent = await pmPost('/payment_intents', {
+        data: {
+          attributes: {
+            amount: amountInCentavos,
+            currency: 'PHP',
+            payment_method_allowed: [paymentMethod],
+            description: itemName,
+            metadata: { ...metadata, flow: 'intent' },
+          },
+        },
+      });
+      const intentId = intent.data.id as string;
+
+      // PayMongo requires billing.name for GCash / Maya payment methods.
+      const { data: profileRow } = await admin
+        .from('users')
+        .select('full_name')
+        .eq('id', user.id)
+        .maybeSingle();
+      const billingName =
+        (profileRow?.full_name as string | undefined)?.trim() ||
+        (user.user_metadata?.full_name as string | undefined)?.trim() ||
+        (user.email ? user.email.split('@')[0] : '') ||
+        'FairTix User';
+
+      const method = await pmPost('/payment_methods', {
+        data: {
+          attributes: {
+            type: paymentMethod,
+            billing: { name: billingName, ...(user.email ? { email: user.email } : {}) },
+          },
+        },
+      });
+
+      // PayMongo sends the buyer here after Authorize OR Fail. The app then asks
+      // paymongo-verify what actually happened (never trust the redirect alone).
+      const attached = await pmPost(`/payment_intents/${intentId}/attach`, {
+        data: {
+          attributes: {
+            payment_method: method.data.id,
+            client_key: intent.data.attributes.client_key,
+            return_url: INTENT_RETURN_URL,
+          },
+        },
+      });
+      const redirectUrl = attached.data?.attributes?.next_action?.redirect?.url;
+      if (!redirectUrl) {
+        throw new Error('PayMongo did not return a payment page. Please try again.');
+      }
+      return new Response(
+        JSON.stringify({
+          checkout_url: redirectUrl,
+          reference_number: null,
+          session_id: intentId,
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
 
     const response = await fetch(PAYMONGO_API, {
       method: 'POST',

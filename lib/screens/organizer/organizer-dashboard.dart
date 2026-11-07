@@ -6,6 +6,7 @@ import '../../services/event_repository.dart';
 import '../../services/organizer_escrow_service.dart';
 import '../../services/organizer_session.dart';
 import '../../theme/fairtix_palette.dart';
+import '../../widgets/ft_skeleton.dart';
 import '../../widgets/organizer_ui.dart';
 import 'organizer-cancel-event.dart';
 import 'organizer-create-event.dart';
@@ -133,7 +134,6 @@ class _OrganizerDashboardScreenState extends State<OrganizerDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final p = FairTixPalette.of(context);
     final width = MediaQuery.of(context).size.width;
     final wide = width >= 1000;
 
@@ -161,15 +161,7 @@ class _OrganizerDashboardScreenState extends State<OrganizerDashboardScreen> {
       pageTitle: 'Organizer Dashboard',
       activeItem: OrganizerNavItem.dashboard,
       body: _isLoading
-          ? Padding(
-              padding: const EdgeInsets.all(64),
-              child: Center(
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.4,
-                  color: p.accentLabel,
-                ),
-              ),
-            )
+          ? _DashboardSkeleton(wide: wide)
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -234,6 +226,200 @@ class _Featured {
   const _Featured(this.event, this.label);
   final OrganizerEvent event;
   final String label;
+}
+
+/// Loading placeholder with the same structure as the dashboard: header,
+/// featured card + revenue/stat tiles, and a grid of event cards.
+class _DashboardSkeleton extends StatelessWidget {
+  const _DashboardSkeleton({required this.wide});
+
+  final bool wide;
+
+  @override
+  Widget build(BuildContext context) {
+    final bigCard = FtSkeletonPanel(
+      radius: 28,
+      padding: const EdgeInsets.all(24),
+      height: wide ? null : 220,
+      child: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          FtSkeletonBox(width: 110, height: 30, radius: 15),
+          Spacer(),
+          FtSkeletonBox(width: 320, height: 36),
+          SizedBox(height: 10),
+          FtSkeletonBox(width: 220, height: 16),
+          SizedBox(height: 24),
+          FtSkeletonBox(height: 6, radius: 6),
+        ],
+      ),
+    );
+
+    const revenueCard = FtSkeletonPanel(
+      radius: 28,
+      padding: EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              FtSkeletonBox(width: 100, height: 14),
+              Spacer(),
+              FtSkeletonBox(width: 130, height: 12),
+            ],
+          ),
+          Spacer(),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FtSkeletonBox(width: 220, height: 44),
+          ),
+        ],
+      ),
+    );
+
+    Widget tile() => const Expanded(
+          child: FtSkeletonPanel(
+            radius: 24,
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            child: Row(
+              children: [
+                FtSkeletonBox(width: 52, height: 52, radius: 16),
+                SizedBox(width: 14),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FtSkeletonBox(width: 80, height: 12),
+                    SizedBox(height: 8),
+                    FtSkeletonBox(width: 50, height: 26),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+    final stats = Row(children: [tile(), const SizedBox(width: 16), tile()]);
+
+    final hero = wide
+        ? SizedBox(
+            height: 300,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(flex: 3, child: bigCard),
+                const SizedBox(width: 24),
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Expanded(child: revenueCard),
+                      const SizedBox(height: 16),
+                      SizedBox(height: 104, child: stats),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          )
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              bigCard,
+              const SizedBox(height: 16),
+              const SizedBox(height: 170, child: revenueCard),
+              const SizedBox(height: 16),
+              SizedBox(height: 92, child: stats),
+            ],
+          );
+
+    Widget eventCard() => const FtSkeletonPanel(
+          radius: 24,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              FtSkeletonBox(height: 110, radius: 0),
+              Padding(
+                padding: EdgeInsets.fromLTRB(20, 16, 20, 18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FtSkeletonBox(width: 160, height: 19),
+                    SizedBox(height: 8),
+                    FtSkeletonBox(width: 120, height: 14),
+                    SizedBox(height: 8),
+                    FtSkeletonBox(width: 140, height: 14),
+                    SizedBox(height: 18),
+                    FtSkeletonBox(height: 5, radius: 5),
+                    SizedBox(height: 18),
+                    Row(
+                      children: [
+                        FtSkeletonBox(width: 90, height: 40, radius: 12),
+                        Spacer(),
+                        FtSkeletonBox(width: 50, height: 14),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+
+    return FtShimmer(
+      semanticLabel: 'Loading dashboard',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.end,
+            spacing: 16,
+            runSpacing: 16,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FtSkeletonBox(width: 120, height: 14),
+                  SizedBox(height: 8),
+                  FtSkeletonBox(width: 240, height: 34),
+                ],
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FtSkeletonBox(width: 190, height: 50, radius: 14),
+                  SizedBox(width: 12),
+                  FtSkeletonBox(width: 150, height: 50, radius: 14),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          hero,
+          const SizedBox(height: 36),
+          const FtSkeletonBox(width: 150, height: 24),
+          const SizedBox(height: 18),
+          LayoutBuilder(
+            builder: (context, c) {
+              final cols = c.maxWidth >= 1000 ? 4 : (c.maxWidth >= 640 ? 2 : 1);
+              const gap = 24.0;
+              final cardWidth = (c.maxWidth - gap * (cols - 1)) / cols;
+              return Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  for (var i = 0; i < cols; i++)
+                    SizedBox(width: cardWidth, child: eventCard()),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Parses an [OrganizerEvent.date] label ("M/D/YYYY" or "M/D/YYYY – M/D/YYYY").

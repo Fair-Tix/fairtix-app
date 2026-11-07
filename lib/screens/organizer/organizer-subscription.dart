@@ -6,6 +6,7 @@ import '../../services/organizer_auth_service.dart';
 import '../../services/organizer_session.dart';
 import '../../services/subscription_plan_service.dart';
 import '../../theme/fairtix_palette.dart';
+import '../../widgets/ft_skeleton.dart';
 import '../../widgets/organizer_account_ui.dart';
 import '../../widgets/organizer_ui.dart';
 import 'app_colors.dart' show formatFriendlyDate;
@@ -230,31 +231,22 @@ class _OrganizerSubscriptionScreenState
         'Plan limits appear here once you have an active plan.',
         style: orgText(p, size: 14.5, color: p.textSecondary, height: 1.5),
       );
+    } else if (plan == null && !_planFailed) {
+      // The plan row is still loading: rows shaped like the limits list.
+      body = const _LimitsSkeleton();
     } else if (plan == null) {
       final fee = account?.subscriptionFeeRate;
       body = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (fee != null) _LimitRow(label: 'Platform fee', value: '${_pct(fee)}%'),
-          if (_planFailed)
-            Padding(
-              padding: EdgeInsets.only(top: fee != null ? 12 : 0),
-              child: Text(
-                'Plan details couldn\u2019t be loaded right now.',
-                style: orgText(p, size: 14, color: p.textSecondary),
-              ),
-            )
-          else
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: Center(
-                child: SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2.2),
-                ),
-              ),
+          Padding(
+            padding: EdgeInsets.only(top: fee != null ? 12 : 0),
+            child: Text(
+              'Plan details couldn\u2019t be loaded right now.',
+              style: orgText(p, size: 14, color: p.textSecondary),
             ),
+          ),
         ],
       );
     } else {
@@ -337,6 +329,51 @@ class _OrganizerSubscriptionScreenState
   static String _pct(double fraction) {
     final v = fraction * 100;
     return v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(1);
+  }
+}
+
+/// Placeholder for the plan limits while the plan row loads: five rows in the
+/// shape of [_LimitRow] (label left, value right, divider between).
+class _LimitsSkeleton extends StatelessWidget {
+  const _LimitsSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
+
+    Widget row(double labelWidth, {bool first = false}) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 15.5),
+        decoration: BoxDecoration(
+          border: first ? null : Border(top: BorderSide(color: p.border)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: FtSkeletonBox(width: labelWidth, height: 15),
+              ),
+            ),
+            const FtSkeletonBox(width: 70, height: 15),
+          ],
+        ),
+      );
+    }
+
+    return FtShimmer(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          row(130, first: true),
+          row(110),
+          row(170),
+          row(100),
+          row(120),
+        ],
+      ),
+    );
   }
 }
 

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Returning to FairTix…</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+           font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+           background: #0e0a1f; color: #f2eeff; text-align: center; padding: 24px; box-sizing: border-box; }
+    .card { max-width: 340px; }
+    h1 { font-size: 20px; margin: 0 0 8px; }
+    p { margin: 0 0 16px; color: #b9b0d6; font-size: 15px; line-height: 1.45; }
+    a { color: #b9a2ff; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Returning to FairTix…</h1>
+    <p>FairTix is confirming your payment. You can close this page.</p>
+    <a href="fairtix://payment/return">Open the FairTix app</a>
+  </div>
+  <!--
+    PayMongo only accepts an https return_url for GCash / Maya payments, so it
+    sends the buyer here after the test/real payment page. This page does NOT
+    open the app by itself and carries no payment status: the app checks the
+    payment with the server and closes this page on its own. The link above is
+    only a manual fallback.
+  -->
+</body>
+</html>

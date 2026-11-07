@@ -66,7 +66,8 @@ returns table (
   event_start_date date,
   event_end_date  date,
   event_type      text,
-  event_start_time time
+  event_start_time time,
+  event_banner    text
 )
 language sql stable
 security definer set search_path = public
@@ -88,11 +89,15 @@ as $$
     e.event_start_date,
     e.event_end_date,
     e.event_type::text,
-    e.start_time
+    e.start_time,
+    -- Poster for the Resale Market card; a day of a multi-day event falls back
+    -- to its parent's banner.
+    coalesce(e.banner_image_url, pe.banner_image_url)
   from public.resale_listings rl
   join public.tickets t       on t.ticket_id = rl.ticket_id
   join public.ticket_tiers tt on tt.tier_id = t.tier_id
   join public.events e        on e.event_id = tt.event_id
+  left join public.events pe  on pe.event_id = e.parent_event_id
   join public.users u         on u.id = rl.seller_id
   where auth.uid() is not null
     and rl.listing_status = 'active'

@@ -74,7 +74,13 @@ serve(async (req) => {
     }
 
     // Ask PayMongo itself — this is the source of truth for payment status.
-    const pmResponse = await fetch(`${PAYMONGO_API}/${encodeURIComponent(sessionId)}`, {
+    // `pi_...` ids come from the Payment Intent flow (GCash / Maya, see
+    // paymongo-checkout); `cs_...` ids are hosted Checkout Sessions (card, plans).
+    const isIntent = sessionId.startsWith('pi_');
+    const pmUrl = isIntent
+      ? `https://api.paymongo.com/v1/payment_intents/${encodeURIComponent(sessionId)}`
+      : `${PAYMONGO_API}/${encodeURIComponent(sessionId)}`;
+    const pmResponse = await fetch(pmUrl, {
       method: 'GET',
       headers: { Authorization: `Basic ${btoa(`${PAYMONGO_SECRET_KEY}:`)}` },
     });
@@ -87,17 +93,29 @@ serve(async (req) => {
     const attrs = pmPayload.data.attributes;
     // A Checkout Session is paid once one of its payments has status "paid"
     // (or its payment intent has succeeded).
-    const payments: Array<{ attributes?: { status?: string; source?: { type?: string } } }> =
+    const payments: Array<{ id?: string; attributes?: { status?: string; source?: { type?: string } } }> =
       attrs.payments ?? [];
     const isPaid =
       payments.some((p) => p?.attributes?.status === 'paid') ||
-      attrs.payment_intent?.attributes?.status === 'succeeded';
+      attrs.payment_intent?.attributes?.status === 'succeeded' ||
+      (isIntent && attrs.status === 'succeeded');
     if (!isPaid) {
+      // PayMongo records a failed attempt (e.g. "Fail Test Payment") either as a
+      // failed payment or as an error on the payment intent. The app uses this
+      // flag to show a "Payment failed" modal instead of waiting silently.
+      const paymentFailed =
+        payments.some((p) => p?.attributes?.status === 'failed') ||
+        Boolean(attrs.payment_intent?.attributes?.last_payment_error) ||
+        // Payment Intent flow: after "Fail Test Payment" the intent goes back to
+        // awaiting_payment_method (we always attach a method right away, so this
+        // status means the attempt failed or was abandoned).
+        (isIntent && (Boolean(attrs.last_payment_error) || attrs.status === 'awaiting_payment_method'));
       return json(
         {
           error:
             'We have not received a successful payment for this checkout. If you canceled or the payment failed, no ticket was issued and you have not been charged. You can try again.',
           payment_status: attrs.status ?? 'unpaid',
+          payment_failed: paymentFailed,
         },
         402,
       );
@@ -108,6 +126,8 @@ serve(async (req) => {
     const paidPayment = payments.find((p) => p?.attributes?.status === 'paid');
     const paymentMethod: string | null =
       attrs.payment_method_used ?? paidPayment?.attributes?.source?.type ?? null;
+    // PayMongo's own payment id ('pay_...'), stored with the purchase when present.
+    const providerPaymentId: string | null = paidPayment?.id ?? null;
 
     // Payment is confirmed. Read tier/buyer from the server-written metadata.
     const remarks: {
@@ -192,10 +212,16 @@ serve(async (req) => {
     // runs first issues the ticket and the other is a harmless no-op.
     const qrCodeToken = `FTX-${sessionId}`;
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    // The 6-argument fulfill_ticket_purchase (supabase/payment_references.sql;
+    // run it BEFORE deploying this version) also records the payment reference,
+    // PayMongo's payment id and the method on the purchase transaction.
     const { data, error } = await admin.rpc('fulfill_ticket_purchase', {
       p_tier_id: remarks.tier_id,
       p_buyer_id: remarks.buyer_id,
       p_qr_code_token: qrCodeToken,
+      p_payment_ref: `FTX-TK-${sessionId}`,
+      p_provider_payment_id: providerPaymentId,
+      p_payment_method: paymentMethod,
     });
     if (error) {
       return json({ error: error.message }, 400);

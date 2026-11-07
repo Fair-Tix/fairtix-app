@@ -7,6 +7,7 @@ import '../../widgets/admin_document_viewer.dart'
     show AdminReviewDocument, showAdminReviewDialog;
 import '../../widgets/admin_shell.dart';
 import '../../widgets/admin_widgets.dart';
+import '../../widgets/ft_skeleton.dart';
 import '../../widgets/organizer_ui.dart';
 
 /// Organizer applications ("Proof of Venue Booking" + "Valid Event
@@ -115,14 +116,21 @@ class _AdminOrganizerApplicationsScreenState
         ),
       ],
       onApprove: () => _decide(applicant, 'verified'),
-      onReject: () => _decide(applicant, 'rejected'),
+      onReject: null,
+      onRejectWithReason: (reason) =>
+          _decide(applicant, 'rejected', reason: reason),
     );
   }
 
-  Future<void> _decide(AdminUserSummary applicant, String status) async {
+  Future<void> _decide(
+    AdminUserSummary applicant,
+    String status, {
+    String? reason,
+  }) async {
     await AdminUserService.instance.setIdVerificationStatus(
       userId: applicant.id,
       status: status,
+      reason: reason,
     );
     await _loadApplications();
     if (!mounted) return;
@@ -149,18 +157,11 @@ class _AdminOrganizerApplicationsScreenState
   }
 
   Widget _buildContent(bool isWide) {
-    final p = FairTixPalette.of(context);
     final filtered = _filtered;
     final Widget content;
     if (_isLoading) {
-      content = Padding(
-        padding: const EdgeInsets.all(48),
-        child: Center(
-          child: CircularProgressIndicator(
-            strokeWidth: 2.4,
-            color: p.accentLabel,
-          ),
-        ),
+      content = FtShimmer(
+        child: AdminSkeletonTableBody(flex: _flex, compact: !isWide),
       );
     } else if (_loadError != null) {
       content = AdminErrorBox(

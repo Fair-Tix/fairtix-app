@@ -5,6 +5,7 @@ import '../screens/user/my_tickets_screen.dart';
 import '../screens/user/profile_screen.dart';
 import '../screens/user/resale_market_screen.dart';
 import '../widgets/app_bottom_nav.dart';
+import '../widgets/terms_acceptance_gate.dart';
 import 'tab_index_notifier.dart';
 
 /// The persistent app shell for the four bottom-nav tabs (Home, My
@@ -83,7 +84,7 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return TermsAcceptanceGate(child: Scaffold(
       body: PageView(
         controller: _pageController,
         // Tabs switch only via the bottom nav (or navigateToTab), never
@@ -92,7 +93,7 @@ class _MainShellState extends State<MainShell> {
         children: [for (final tab in _tabs) _KeepAliveTab(child: tab)],
       ),
       bottomNavigationBar: AppBottomNav(currentIndex: _index, onTap: _onTabTapped),
-    );
+    ));
   }
 }
 

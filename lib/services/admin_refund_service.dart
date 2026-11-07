@@ -19,6 +19,7 @@ class RefundEntry {
     required this.isProcessed,
     required this.createdAt,
     this.processedAt,
+    this.providerRefundId,
   });
 
   final String id;
@@ -30,13 +31,15 @@ class RefundEntry {
   final bool isProcessed;
   final DateTime createdAt;
   final DateTime? processedAt;
+  final String? providerRefundId;
 
-  String get statusLabel => isProcessed ? 'Processed' : 'Pending';
+  String get statusLabel => isProcessed ? 'Provider refund recorded' : 'Awaiting provider confirmation';
 
   factory RefundEntry.fromRow(Map<String, dynamic> row) {
     final buyer = row['users'] as Map<String, dynamic>?;
     final event = row['events'] as Map<String, dynamic>?;
     final processedAt = row['processed_at'] as String?;
+    final providerRefundId = row['provider_refund_id'] as String?;
     return RefundEntry(
       id: row['refund_id'] as String,
       eventTitle: (event?['title'] as String?) ?? 'Unknown event',
@@ -49,6 +52,7 @@ class RefundEntry {
       processedAt: processedAt == null
           ? null
           : DateTime.parse(processedAt).toLocal(),
+      providerRefundId: providerRefundId,
     );
   }
 }
@@ -66,7 +70,7 @@ class AdminRefundService {
       final rows = await Supabase.instance.client
           .from('refunds')
           .select('''
-            refund_id, amount, reason, status, created_at, processed_at,
+            refund_id, amount, reason, status, created_at, processed_at, provider_refund_id,
             users(full_name, email),
             events(title)
           ''')
@@ -79,11 +83,14 @@ class AdminRefundService {
     }
   }
 
-  Future<void> markProcessed(String refundId) async {
+  Future<void> markProcessed(String refundId, String providerRefundId) async {
     try {
       await Supabase.instance.client.rpc(
         'admin_process_refund',
-        params: {'p_refund_id': refundId},
+        params: {
+          'p_refund_id': refundId,
+          'p_provider_refund_id': providerRefundId,
+        },
       );
     } on PostgrestException catch (e) {
       throw AdminRefundException('Could not process the refund: ${e.message}');

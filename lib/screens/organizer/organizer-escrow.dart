@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/organizer_escrow_service.dart';
 import '../../theme/fairtix_palette.dart';
+import '../../widgets/ft_skeleton.dart';
 import '../../widgets/organizer_ui.dart';
 import 'organizer-scaffold.dart';
 
@@ -100,14 +101,7 @@ class _OrganizerEscrowScreenState extends State<OrganizerEscrowScreen> {
   }
 
   Widget _content(FairTixPalette p) {
-    if (_loading) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 60),
-        child: Center(
-          child: CircularProgressIndicator(color: p.accentLabel),
-        ),
-      );
-    }
+    if (_loading) return const _EscrowSkeleton();
 
     final overview = _overview;
     if (_error != null || overview == null) {
@@ -152,16 +146,16 @@ class _OrganizerEscrowScreenState extends State<OrganizerEscrowScreen> {
             ),
             _StatCard(
               icon: Icons.account_balance_wallet_outlined,
-              label: 'Released to you',
+              label: 'Cleared for payout',
               value: _peso(overview.totalReleased),
-              note: 'Event over, ready for payout',
+              note: 'Ledger amount only; no money transfer is sent',
               valueColor: p.success,
             ),
             _StatCard(
               icon: Icons.undo_rounded,
-              label: 'Refunded to buyers',
+              label: 'Refunds recorded',
               value: _peso(overview.totalRefunded),
-              note: 'From canceled events',
+              note: 'A record does not confirm PayMongo payment',
             ),
           ],
         ),
@@ -182,6 +176,162 @@ class _OrganizerEscrowScreenState extends State<OrganizerEscrowScreen> {
           style: orgText(p, size: 13, color: p.textSecondary, height: 1.5),
         ),
       ],
+    );
+  }
+}
+
+/// Loading placeholder for everything under the "How escrow works" card: the
+/// three stat cards (row above 760px, stacked below), the "Escrow by Event"
+/// title and a table card with a header band and three rows.
+class _EscrowSkeleton extends StatelessWidget {
+  const _EscrowSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return const FtShimmer(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _SkeletonStatRow(),
+          SizedBox(height: 28),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FtSkeletonBox(width: 150, height: 18),
+          ),
+          SizedBox(height: 14),
+          _SkeletonEventsTable(),
+        ],
+      ),
+    );
+  }
+}
+
+class _SkeletonStatCard extends StatelessWidget {
+  const _SkeletonStatCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return const FtSkeletonPanel(
+      radius: 20,
+      padding: EdgeInsets.all(24),
+      child: Row(
+        children: [
+          FtSkeletonBox(width: 48, height: 48, radius: 14),
+          SizedBox(width: 18),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FtSkeletonBox(width: 100, height: 13),
+                SizedBox(height: 8),
+                FtSkeletonBox(width: 140, height: 30),
+                SizedBox(height: 8),
+                FtSkeletonBox(width: 150, height: 13),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SkeletonStatRow extends StatelessWidget {
+  const _SkeletonStatRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth <= 760) {
+          return const Column(
+            children: [
+              _SkeletonStatCard(),
+              SizedBox(height: 16),
+              _SkeletonStatCard(),
+              SizedBox(height: 16),
+              _SkeletonStatCard(),
+            ],
+          );
+        }
+        return const Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: _SkeletonStatCard()),
+            SizedBox(width: 20),
+            Expanded(child: _SkeletonStatCard()),
+            SizedBox(width: 20),
+            Expanded(child: _SkeletonStatCard()),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Same seven column proportions as [_EventsTable]; it squeezes instead of
+/// scrolling sideways below 980px.
+class _SkeletonEventsTable extends StatelessWidget {
+  const _SkeletonEventsTable();
+
+  @override
+  Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
+
+    Widget row(List<Widget> cells, {double vertical = 20, bool top = false}) {
+      return Container(
+        padding: EdgeInsets.symmetric(horizontal: 24, vertical: vertical),
+        decoration: BoxDecoration(
+          border: top ? Border(top: BorderSide(color: p.border)) : null,
+        ),
+        child: Row(
+          children: [
+            for (var i = 0; i < cells.length; i++)
+              Expanded(
+                flex: _EventsTable._flex[i],
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: cells[i],
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+
+    return FtSkeletonPanel(
+      radius: 20,
+      child: Column(
+        children: [
+          row(
+            const [
+              FtSkeletonBox(width: 40, height: 11),
+              FtSkeletonBox(width: 70, height: 11),
+              FtSkeletonBox(width: 44, height: 11),
+              FtSkeletonBox(width: 48, height: 11),
+              FtSkeletonBox(width: 64, height: 11),
+              FtSkeletonBox(width: 60, height: 11),
+              FtSkeletonBox(width: 76, height: 11),
+            ],
+            vertical: 18,
+          ),
+          for (var i = 0; i < 3; i++)
+            row(
+              const [
+                FtSkeletonBox(width: 120, height: 14),
+                FtSkeletonBox(width: 90, height: 14),
+                FtSkeletonBox(width: 76, height: 26, radius: 13),
+                FtSkeletonBox(width: 28, height: 14),
+                FtSkeletonBox(width: 70, height: 14),
+                FtSkeletonBox(width: 60, height: 14),
+                FtSkeletonBox(width: 80, height: 14),
+              ],
+              top: true,
+            ),
+        ],
+      ),
     );
   }
 }
@@ -258,10 +408,11 @@ class _HowItWorks extends StatelessWidget {
       ),
       _FlowStep(
         icon: Icons.event_available_outlined,
-        title: '3. Released to you',
+        title: '3. Cleared for payout',
         text:
-            'Once your event\u2019s schedule date is over, the held amount is '
-            'released for payout. If canceled, buyers are refunded instead.',
+            'Once your event\u2019s schedule date is over, the amount is marked '
+            'cleared for payout. FairTix does not transfer the money. If canceled, '
+            'a refund is recorded as due to the ticket holder; no PayMongo refund is sent automatically.',
       ),
     ];
 
@@ -693,7 +844,7 @@ class _StageChip extends StatelessWidget {
       EscrowStage.held => ('In escrow', _heldColor(p)),
       EscrowStage.partiallyReleased => ('Partly released', p.accentLabel),
       EscrowStage.released => ('Released', p.success),
-      EscrowStage.refunded => ('Refunded', p.danger),
+      EscrowStage.refunded => ('Refund pending', p.warning),
       EscrowStage.noSales => ('No sales', p.textSecondary),
     };
 

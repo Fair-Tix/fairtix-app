@@ -5,6 +5,7 @@ import '../../services/public_event_repository.dart';
 import '../../theme/fairtix_palette.dart';
 import '../../widgets/admin_shell.dart';
 import '../../widgets/admin_widgets.dart';
+import '../../widgets/ft_skeleton.dart';
 import '../../widgets/organizer_ui.dart';
 import '../user/event_details_screen.dart';
 
@@ -97,12 +98,11 @@ class _AdminBrowseEventsScreenState extends State<AdminBrowseEventsScreen> {
 
     final Widget content;
     if (_isLoading && all.isEmpty) {
-      content = Padding(
-        padding: const EdgeInsets.all(48),
-        child: Center(
-          child: CircularProgressIndicator(
-            strokeWidth: 2.4,
-            color: p.accentLabel,
+      content = LayoutBuilder(
+        builder: (context, constraints) => FtShimmer(
+          child: AdminSkeletonTableBody(
+            flex: _flex,
+            compact: constraints.maxWidth < 760,
           ),
         ),
       );

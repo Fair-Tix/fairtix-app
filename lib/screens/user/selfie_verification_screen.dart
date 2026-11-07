@@ -10,6 +10,7 @@ import '../../widgets/ft_otp_field.dart';
 import '../../widgets/ft_registration_ui.dart';
 import '../../widgets/ft_selfie_ui.dart';
 import 'registration_pending_screen.dart';
+import 'liveness_capture_screen.dart';
 
 /// Registration, Step 4 of 5: take a live selfie.
 ///
@@ -33,9 +34,33 @@ class _SelfieVerificationScreenState extends State<SelfieVerificationScreen> {
   bool _isSubmitting = false;
   String? _errorText;
 
-  /// Opens the front camera directly (no gallery option — this step is
-  /// meant to capture a live selfie, not let someone pick an old photo).
+  /// Phones: opens the in-app live face check (blink / smile / turn, then a
+  /// straight-on photo). Anything else (web) falls back to the plain camera.
   Future<void> _handleCapture() async {
+    if (!LivenessCaptureScreen.isSupported) {
+      await _captureWithPicker();
+      return;
+    }
+    setState(() {
+      _isCapturing = true;
+      _errorText = null;
+    });
+    final result = await Navigator.of(context).push<LivenessSelfie>(
+      MaterialPageRoute(builder: (_) => const LivenessCaptureScreen()),
+    );
+    if (!mounted) return;
+    setState(() {
+      _isCapturing = false;
+      if (result != null) {
+        _selfieBytes = result.bytes;
+        _selfieExtension = result.extension;
+      }
+    });
+  }
+
+  /// Opens the front camera directly (no gallery option). Only used where the
+  /// live face check is not available.
+  Future<void> _captureWithPicker() async {
     setState(() {
       _isCapturing = true;
       _errorText = null;

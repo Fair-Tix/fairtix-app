@@ -98,9 +98,9 @@ begin
        and (e.event_id = new.event_id or e.parent_event_id = new.event_id)
        and t.ticket_status::text <> 'used';
 
-    -- 4. Settle the pending refunds immediately.
+    -- 4. Keep funds unavailable and withhold fees while refunds are pending.
     update public.transactions tr
-       set status = 'refunded', escrow_status = 'refunded'
+       set escrow_status = 'refunded'
       from public.refunds r
      where r.transaction_id = tr.transaction_id
        and r.status = 'pending'
@@ -117,12 +117,6 @@ begin
          select e.event_id from public.events e
           where e.event_id = new.event_id or e.parent_event_id = new.event_id);
 
-    update public.refunds r
-       set status = 'processed', processed_at = now()
-     where r.status = 'pending'
-       and r.event_id in (
-         select e.event_id from public.events e
-          where e.event_id = new.event_id or e.parent_event_id = new.event_id);
   end if;
   return new;
 end;
@@ -204,7 +198,7 @@ begin
     '"' || v_event.title || '" was unpublished by an admin: ' || btrim(p_reason)
       || '. Upload valid supporting documents before '
       || to_char(v_deadline, 'Mon DD, YYYY')
-      || ' or the event will be canceled. Ticket holders have been refunded.',
+      || ' or the event will be canceled. Ticket holders will be updated if refunds become due.',
     'system'
   );
 

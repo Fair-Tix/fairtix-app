@@ -5,6 +5,7 @@ import '../../services/csv_export.dart';
 import '../../theme/fairtix_palette.dart';
 import '../../widgets/admin_shell.dart';
 import '../../widgets/admin_widgets.dart';
+import '../../widgets/ft_skeleton.dart';
 import '../../widgets/organizer_ui.dart';
 
 /// Every resale listing on the platform, with the price compared to what the
@@ -227,6 +228,9 @@ class _AdminResaleMonitoringScreenState
           ],
         ),
         const SizedBox(height: 24),
+        if (_isLoading)
+          const FtShimmer(child: AdminSkeletonSummaryRow(count: 4))
+        else
         AdminSummaryRow(
           cards: [
             AdminSummaryCard(
@@ -296,12 +300,11 @@ class _AdminResaleMonitoringScreenState
 
     final Widget table;
     if (_isLoading) {
-      table = Padding(
-        padding: const EdgeInsets.all(48),
-        child: Center(
-          child: CircularProgressIndicator(
-            strokeWidth: 2.4,
-            color: p.accentLabel,
+      table = LayoutBuilder(
+        builder: (context, constraints) => FtShimmer(
+          child: AdminSkeletonTableBody(
+            flex: _flex,
+            compact: constraints.maxWidth < 760,
           ),
         ),
       );
@@ -450,13 +453,15 @@ class _AdminResaleMonitoringScreenState
           ),
           Divider(height: 24, color: p.border),
           if (_isLoading)
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Center(
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.4,
-                  color: p.accentLabel,
-                ),
+            const FtShimmer(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _SkeletonActivityItem(),
+                  _SkeletonActivityItem(),
+                  _SkeletonActivityItem(),
+                  _SkeletonActivityItem(),
+                ],
               ),
             )
           else if (latest.isEmpty)
@@ -481,6 +486,26 @@ class _AdminResaleMonitoringScreenState
                   ],
                 ),
               ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Placeholder for one line of the Recent Listing Activity card.
+class _SkeletonActivityItem extends StatelessWidget {
+  const _SkeletonActivityItem();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 9),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          FtSkeletonBox(height: 13),
+          SizedBox(height: 6),
+          FtSkeletonBox(width: 120, height: 12),
         ],
       ),
     );

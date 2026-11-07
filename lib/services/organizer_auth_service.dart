@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/organizer.dart';
+import '../models/legal_terms.dart';
 import 'account_status.dart';
 import 'organizer_session.dart';
 import 'push_service.dart';
@@ -337,6 +338,7 @@ class OrganizerAuthService {
     required String organizationName,
     required String email,
     required String password,
+    required String termsVersion,
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
     try {
@@ -347,6 +349,7 @@ class OrganizerAuthService {
           'full_name': fullName.trim(),
           'organization_name': organizationName.trim(),
           'role': 'organizer',
+          'terms_version': termsVersion,
         },
       );
       final user = response.user;

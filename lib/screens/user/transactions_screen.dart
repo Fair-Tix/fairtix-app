@@ -6,6 +6,7 @@ import '../../models/transaction.dart';
 import '../../services/transaction_repository.dart';
 import '../../theme/fairtix_palette.dart';
 import '../../widgets/ft_dark_ui.dart';
+import '../../widgets/ft_skeleton.dart';
 import '../../widgets/ft_subpage_ui.dart';
 import '../../widgets/ft_transaction_ui.dart';
 import 'transaction_detail_screen.dart';
@@ -84,10 +85,16 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     bool noTransactionsAtAll,
   ) {
     if (_isLoading) {
-      return [
-        Padding(
-          padding: const EdgeInsets.only(top: 80),
-          child: Center(child: CircularProgressIndicator(color: t.activeAccent)),
+      return const [
+        FtShimmer(
+          semanticLabel: 'Loading transactions',
+          child: FtSkeletonListCard(
+            rows: 6,
+            showLeading: false,
+            radius: 28,
+            rowPadding: EdgeInsets.symmetric(horizontal: 22, vertical: 18),
+            dividerIndent: 22,
+          ),
         ),
       ];
     }

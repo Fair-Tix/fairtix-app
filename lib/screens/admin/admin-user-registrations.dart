@@ -7,6 +7,7 @@ import '../../widgets/admin_document_viewer.dart'
     show AdminReviewDocument, showAdminReviewDialog;
 import '../../widgets/admin_shell.dart';
 import '../../widgets/admin_widgets.dart';
+import '../../widgets/ft_skeleton.dart';
 import '../../widgets/organizer_ui.dart';
 
 /// Eventgoer (buyer) sign-ups waiting for, or already given, an admin
@@ -173,14 +174,8 @@ class _AdminUserRegistrationsScreenState
 
     final Widget content;
     if (_isLoading) {
-      content = Padding(
-        padding: const EdgeInsets.all(48),
-        child: Center(
-          child: CircularProgressIndicator(
-            strokeWidth: 2.4,
-            color: p.accentLabel,
-          ),
-        ),
+      content = FtShimmer(
+        child: AdminSkeletonTableBody(flex: _flex, compact: !isWide),
       );
     } else if (_loadError != null) {
       content = AdminErrorBox(message: _loadError!, onRetry: _load);

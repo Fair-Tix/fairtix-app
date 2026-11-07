@@ -58,12 +58,12 @@ class FtSubpageScaffold extends StatelessWidget {
                     child: FtEntrance(
                       child: SingleChildScrollView(
                         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                        padding: const EdgeInsets.fromLTRB(22, 14, 22, 24),
+                        padding: const EdgeInsets.fromLTRB(19, 12, 19, 24),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             FtPageHeader(title: title, onBack: onBack, titleAtEnd: titleAtEnd),
-                            const SizedBox(height: 22),
+                            const SizedBox(height: 18),
                             ...body,
                           ],
                         ),
@@ -76,7 +76,7 @@ class FtSubpageScaffold extends StatelessWidget {
                         border: Border(top: BorderSide(color: t.divider)),
                       ),
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(22, 16, 22, 14),
+                        padding: const EdgeInsets.fromLTRB(19, 14, 19, 12),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -134,7 +134,7 @@ class FtPageHeader extends StatelessWidget {
               child: Text(
                 title,
                 style: GoogleFonts.plusJakartaSans(
-                  fontSize: titleAtEnd ? 18 : 19,
+                  fontSize: titleAtEnd ? 16 : 17,
                   fontWeight: FontWeight.w800,
                   color: titleAtEnd ? t.secondaryText : t.titleColor,
                 ),

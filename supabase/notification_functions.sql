@@ -40,6 +40,49 @@ create index if not exists notifications_user_channel_read_idx
 -- with fewer arguments ambiguous.
 drop function if exists public.notify_user(uuid, text, text, notification_type, boolean);
 
+-- Per-user preferences (supabase/notification_preferences.sql). Resale and
+-- promo notifications are dropped for a user who turned that type off, on
+-- EVERY channel (in-app, email and push). Ticket, system and account
+-- notifications are transactional and are never suppressed by type. A user
+-- with no saved preferences, or a database where the table is not created
+-- yet, gets everything (the previous behaviour).
+create or replace function public.notification_type_allowed(
+  p_user_id uuid,
+  p_type notification_type
+)
+returns boolean
+language plpgsql
+stable
+security definer set search_path = public
+as $$
+declare
+  v_resale boolean;
+  v_promo boolean;
+begin
+  if to_regclass('public.notification_preferences') is null then
+    return true;
+  end if;
+
+  select p.resale_enabled, p.promo_enabled
+    into v_resale, v_promo
+    from public.notification_preferences p
+    where p.user_id = p_user_id;
+  if not found then
+    return true;
+  end if;
+
+  if p_type = 'resale' then
+    return coalesce(v_resale, true);
+  elsif p_type = 'promo' then
+    return coalesce(v_promo, true);
+  end if;
+  return true;
+end;
+$$;
+
+revoke all on function public.notification_type_allowed(uuid, notification_type)
+  from public, anon, authenticated;
+
 create or replace function public.notify_user(
   p_user_id uuid,
   p_title text,
@@ -52,20 +95,40 @@ returns void
 language plpgsql
 security definer set search_path = public
 as $$
+declare
+  v_email boolean := true;
+  v_push boolean := true;
 begin
   if p_user_id is null then
     return;
   end if;
 
+  -- Resale / promo turned off by the user: no row on any channel.
+  if not public.notification_type_allowed(p_user_id, p_type) then
+    return;
+  end if;
+
+  -- Channel switches (Settings > Notifications). In-app is always on.
+  if to_regclass('public.notification_preferences') is not null then
+    select p.email_enabled, p.push_enabled
+      into v_email, v_push
+      from public.notification_preferences p
+      where p.user_id = p_user_id;
+    if not found then
+      v_email := true;
+      v_push := true;
+    end if;
+  end if;
+
   insert into public.notifications (user_id, title, message, type, channel)
   values (p_user_id, p_title, p_message, p_type, 'in_app');
 
-  if p_send_email then
+  if p_send_email and coalesce(v_email, true) then
     insert into public.notifications (user_id, title, message, type, channel)
     values (p_user_id, p_title, p_message, p_type, 'email');
   end if;
 
-  if p_send_push then
+  if p_send_push and coalesce(v_push, true) then
     insert into public.notifications (user_id, title, message, type, channel)
     values (p_user_id, p_title, p_message, p_type, 'push');
   end if;

@@ -31,6 +31,7 @@ class FtTransactionStatusPill extends StatelessWidget {
   String get _label => switch (status) {
         TransactionStatus.completed => 'Completed',
         TransactionStatus.pending => 'Pending',
+        TransactionStatus.refundPending => 'Awaiting provider confirmation',
         TransactionStatus.failed => 'Failed',
         TransactionStatus.refunded => 'Refunded',
       };
@@ -42,6 +43,7 @@ class FtTransactionStatusPill extends StatelessWidget {
     final (fg, bg) = switch (status) {
       TransactionStatus.completed => (t.success, t.successSurface),
       TransactionStatus.pending => (t.secondaryText, t.isDark ? t.surfaceBorder : t.progressTrack),
+      TransactionStatus.refundPending => (p.warning, p.warningSurface),
       TransactionStatus.failed => (t.danger, t.dangerSurface),
       TransactionStatus.refunded => (p.warning, p.warningSurface),
     };

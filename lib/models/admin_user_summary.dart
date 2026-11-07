@@ -24,6 +24,11 @@ class AdminUserSummary {
   final String? eventPermitUrl;
   final DateTime? createdAt;
 
+  /// When an admin approved the account (`users.verified_at`, see
+  /// supabase/user_verified_at.sql). Null if not approved, or if the column
+  /// does not exist yet / no approval date could be backfilled.
+  final DateTime? verifiedAt;
+
   const AdminUserSummary({
     required this.id,
     required this.fullName,
@@ -39,6 +44,7 @@ class AdminUserSummary {
     this.venueProofUrl,
     this.eventPermitUrl,
     this.createdAt,
+    this.verifiedAt,
   });
 
   factory AdminUserSummary.fromRow(Map<String, dynamic> row) {
@@ -61,6 +67,9 @@ class AdminUserSummary {
       eventPermitUrl: row['event_permit_url'] as String?,
       createdAt: row['created_at'] != null
           ? DateTime.tryParse(row['created_at'] as String)
+          : null,
+      verifiedAt: row['verified_at'] != null
+          ? DateTime.tryParse(row['verified_at'] as String)
           : null,
     );
   }

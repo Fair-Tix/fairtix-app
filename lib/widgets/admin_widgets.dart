@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../screens/organizer/app_colors.dart';
 import '../theme/fairtix_palette.dart';
+import 'ft_skeleton.dart';
 import 'organizer_ui.dart';
 
 /// Small building blocks shared by the admin screens (Events & Tickets,
@@ -979,6 +980,218 @@ InputDecoration adminInputDecoration(
     errorBorder: border(p.danger),
     focusedErrorBorder: border(p.danger),
   );
+}
+
+// ── Skeleton loading ────────────────────────────────────────────────────────
+// Placeholders shaped like the loaded admin content. They don't animate by
+// themselves: wrap the whole placeholder layout in ONE [FtShimmer] so all
+// blocks sweep in sync.
+
+/// [count] summary-card placeholders laid out like [AdminSummaryRow] (one row
+/// above 900px, two per row above 520px, stacked below).
+class AdminSkeletonSummaryRow extends StatelessWidget {
+  const AdminSkeletonSummaryRow({super.key, this.count = 4});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final columns = constraints.maxWidth > 900
+          ? count
+          : (constraints.maxWidth > 520 ? 2 : 1);
+      final width = ((constraints.maxWidth - 16 * (columns - 1)) / columns)
+          .floorToDouble();
+      return Wrap(
+        spacing: 16,
+        runSpacing: 16,
+        children: [
+          for (var i = 0; i < count; i++)
+            SizedBox(width: width, child: const _AdminSkeletonSummaryCard()),
+        ],
+      );
+    },
+  );
+}
+
+class _AdminSkeletonSummaryCard extends StatelessWidget {
+  const _AdminSkeletonSummaryCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return const AdminCard(
+      padding: EdgeInsets.all(20),
+      child: SizedBox(
+        height: 104,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                FtSkeletonCircle(size: 34),
+                SizedBox(width: 10),
+                FtSkeletonBox(width: 90, height: 13),
+              ],
+            ),
+            Spacer(),
+            FtSkeletonBox(width: 110, height: 28),
+            SizedBox(height: 6),
+            FtSkeletonBox(width: 80, height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The inside of a table placeholder (header band + [rows] rows) for screens
+/// whose loaded table already sits in its own card. Column proportions
+/// ([flex]) match the real [AdminTableHeader] / [AdminTableRow]. With
+/// [compact] it draws stacked two-line rows with a pill instead (the layout
+/// the screens use below their table breakpoint). Cell blocks use a width
+/// factor of their column, so nothing can overflow.
+class AdminSkeletonTableBody extends StatelessWidget {
+  const AdminSkeletonTableBody({
+    super.key,
+    required this.flex,
+    this.rows = 5,
+    this.compact = false,
+    this.showHeader = true,
+  });
+
+  final List<int> flex;
+  final int rows;
+  final bool compact;
+
+  /// False when the real header is already on screen and only the rows are
+  /// still loading.
+  final bool showHeader;
+
+  static const _factors = [0.7, 0.55, 0.8, 0.45, 0.6, 0.75];
+
+  @override
+  Widget build(BuildContext context) {
+    final p = FairTixPalette.of(context);
+
+    if (compact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var r = 0; r < rows; r++)
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                border: Border(
+                  top: r == 0 ? BorderSide.none : BorderSide(color: p.border),
+                ),
+              ),
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            FtSkeletonBox(width: 150, height: 15),
+                            SizedBox(height: 8),
+                            FtSkeletonBox(width: 190, height: 13),
+                          ],
+                        ),
+                      ),
+                      SizedBox(width: 8),
+                      FtSkeletonBox(width: 64, height: 22, radius: 11),
+                    ],
+                  ),
+                  SizedBox(height: 12),
+                  FtSkeletonBox(width: 120, height: 13),
+                  SizedBox(height: 12),
+                  FtSkeletonBox(width: 110, height: 30, radius: 15),
+                ],
+              ),
+            ),
+        ],
+      );
+    }
+
+    Widget cells(double height, int rowIndex) => Row(
+      children: [
+        for (var i = 0; i < flex.length; i++)
+          Expanded(
+            flex: flex[i],
+            child: Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: FractionallySizedBox(
+                widthFactor: height < 14
+                    ? 0.5
+                    : _factors[(i + rowIndex) % _factors.length],
+                alignment: Alignment.centerLeft,
+                child: FtSkeletonBox(height: height),
+              ),
+            ),
+          ),
+      ],
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (showHeader)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            color: p.progressTrack,
+            child: cells(11, 0),
+          ),
+        for (var r = 0; r < rows; r++)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: p.border)),
+            ),
+            child: cells(16, r),
+          ),
+      ],
+    );
+  }
+}
+
+/// [AdminSkeletonTableBody] in its own card, for screens where the table is a
+/// standalone panel.
+class AdminSkeletonTable extends StatelessWidget {
+  const AdminSkeletonTable({super.key, required this.flex, this.rows = 5});
+
+  final List<int> flex;
+  final int rows;
+
+  @override
+  Widget build(BuildContext context) {
+    return AdminCard(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(23),
+        child: AdminSkeletonTableBody(flex: flex, rows: rows),
+      ),
+    );
+  }
+}
+
+/// Row of pill placeholders for the filter chips / search above a table.
+class AdminSkeletonToolbar extends StatelessWidget {
+  const AdminSkeletonToolbar({super.key, this.chips = 4});
+
+  final int chips;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (var i = 0; i < chips; i++)
+          FtSkeletonBox(width: 70.0 + (i % 3) * 22, height: 34, radius: 17),
+      ],
+    );
+  }
 }
 
 /// Column header style used by the admin tables.

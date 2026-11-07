@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'event.dart';
 import 'showtime.dart';
@@ -115,6 +116,7 @@ class Ticket {
       eventDateTime: combineDateAndTime(startDate, eventRow['start_time'] as String?),
       priceLabel: formatPeso(tier.price),
       accentColor: _colorForId(eventRow['event_id'] as String),
+      bannerUrl: _bannerUrl(eventRow['banner_image_url'] as String?),
     );
 
     // The database status is the source of truth. An active listing only
@@ -169,6 +171,7 @@ class Ticket {
       eventDateTime: combineDateAndTime(startDate, row['event_start_time'] as String?),
       priceLabel: formatPeso(tier.price),
       accentColor: _colorForId(row['event_id'] as String),
+      bannerUrl: _bannerUrl(row['event_banner'] as String?),
     );
 
     return Ticket(
@@ -190,6 +193,14 @@ class Ticket {
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
     return '${months[d.month - 1]} ${d.day}, ${d.year}';
+  }
+
+  /// Turns a stored `event_banners` path into a public URL, the same way
+  /// PublicEventRepository does. Null when the event has no banner.
+  static String? _bannerUrl(String? path) {
+    if (path == null || path.isEmpty) return null;
+    if (path.startsWith('http')) return path;
+    return Supabase.instance.client.storage.from('event_banners').getPublicUrl(path);
   }
 
   static const List<Color> _palette = [

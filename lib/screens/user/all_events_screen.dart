@@ -8,6 +8,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/ft_dark_ui.dart';
 import '../../widgets/ft_dashboard_ui.dart' show FtBackButton, FtSearchField;
 import '../../widgets/ft_pending_ui.dart' show FtReveal;
+import '../../widgets/ft_skeleton.dart';
 import '../../widgets/purple_header_bar.dart';
 import '../../widgets/upcoming_event_tile.dart';
 import 'event_details_screen.dart';
@@ -180,11 +181,17 @@ class _AllEventsScreenState extends State<AllEventsScreen>
                     child: showSpinner
                         ? ListView(
                             physics: const AlwaysScrollableScrollPhysics(),
-                            children: [
-                              const SizedBox(height: 80),
-                              Center(
-                                child: CircularProgressIndicator(
-                                  color: t.activeAccent,
+                            padding: const EdgeInsets.fromLTRB(22, 0, 22, 24),
+                            children: const [
+                              FtShimmer(
+                                semanticLabel: 'Loading events',
+                                child: FtSkeletonListCard(
+                                  rows: 6,
+                                  leadingSize: 58,
+                                  leadingCircle: false,
+                                  radius: 26,
+                                  rowPadding: EdgeInsets.fromLTRB(16, 16, 18, 16),
+                                  dividerIndent: 16,
                                 ),
                               ),
                             ],
@@ -317,7 +324,24 @@ class _AllEventsScreenState extends State<AllEventsScreen>
               child: RefreshIndicator(
                 onRefresh: _loadEvents,
                 child: _isLoading
-                    ? const Center(child: CircularProgressIndicator(color: AppColors.accentPurple))
+                    ? ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        children: [
+                          FtShimmer(
+                            semanticLabel: 'Loading events',
+                            child: Column(
+                              children: [
+                                for (var i = 0; i < 6; i++)
+                                  const FtSkeletonListRow(
+                                    leadingSize: 56,
+                                    leadingCircle: false,
+                                    padding: EdgeInsets.symmetric(vertical: 14),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      )
                     : _errorMessage != null
                         ? ListView(
                             children: [
